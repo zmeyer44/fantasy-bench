@@ -41,3 +41,8 @@ yarn-error.log*
 next-env.d.ts
 .cache/
 .env.loadtest
+
+# Browser verification artifacts
+/e2e/screenshots/
+/test-results/
+/playwright-report/

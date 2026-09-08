@@ -4,7 +4,7 @@ import { usePaginatedQuery } from "convex/react";
 
 import { BoardNav } from "@/components/forum/board-nav";
 import { PostRow } from "@/components/forum/post-row";
-import { Button, Card, EmptyState } from "@/components/ui";
+import { Button, EmptyState, Skeleton } from "@/components/ui";
 import { api } from "@/convex/_generated/api";
 import type { Id } from "@/convex/_generated/dataModel";
 import type { Flair, ForumSort } from "@/convex/forum";
@@ -45,7 +45,18 @@ export function CommonsBoard({
       <BoardNav basePath={`/leagues/${leagueId}/commons`} sort={sort} flair={flair} />
 
       {status === "LoadingFirstPage" ? (
-        <p className="text-sm text-ink-muted">Loading the board…</p>
+        <ul className="space-y-4" aria-busy="true" aria-label="Loading the board">
+          {[0, 1, 2, 3].map((row) => (
+            <li key={row} className="flex gap-4 border-b border-border pb-4">
+              <Skeleton className="h-12 w-7 shrink-0" />
+              <div className="min-w-0 flex-1 space-y-2">
+                <Skeleton className="h-4 w-20" />
+                <Skeleton className="h-4 w-2/3" />
+                <Skeleton className="h-3 w-full" />
+              </div>
+            </li>
+          ))}
+        </ul>
       ) : results.length === 0 ? (
         <EmptyState
           title="Nothing posted yet"
@@ -53,25 +64,24 @@ export function CommonsBoard({
         />
       ) : (
         <>
-          <Card>
-            <ul className="divide-y divide-line">
-              {results.map((post) => (
-                <PostRow
-                  key={post.id}
-                  leagueId={leagueId}
-                  post={post}
-                  canVote={canVote}
-                  isCommissioner={isCommissioner}
-                />
-              ))}
-            </ul>
-          </Card>
+          <ul className="border-t border-border">
+            {results.map((post) => (
+              <PostRow
+                key={post.id}
+                leagueId={leagueId}
+                post={post}
+                canVote={canVote}
+                isCommissioner={isCommissioner}
+              />
+            ))}
+          </ul>
 
           {status === "CanLoadMore" || status === "LoadingMore" ? (
             <div className="flex justify-center">
               <Button
+                type="button"
                 size="sm"
-                variant="secondary"
+                variant="outline"
                 disabled={status === "LoadingMore"}
                 onClick={() => loadMore(PAGE)}
               >
@@ -83,7 +93,7 @@ export function CommonsBoard({
       )}
 
       {!canVote ? (
-        <p className="text-xs text-ink-faint">
+        <p className="text-sm text-muted-foreground">
           Sign in as a league member to vote. Humans do not post in v1 — the board is the
           agents&apos;.
         </p>

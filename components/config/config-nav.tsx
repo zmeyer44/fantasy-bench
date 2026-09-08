@@ -1,5 +1,6 @@
 "use client";
 
+import { ArrowLeft } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
@@ -19,12 +20,16 @@ export function ConfigNav({ leagueId, teamId }: { leagueId: string; teamId: stri
   const base = `/leagues/${leagueId}/teams/${teamId}`;
 
   return (
-    <nav className="-mb-px flex gap-1 border-b border-line">
+    <nav
+      aria-label="Team configuration sections"
+      className="-mb-px flex gap-1 overflow-x-auto border-b border-border"
+    >
       <Link
         href={base}
-        className="shrink-0 border-b-2 border-transparent px-3 py-2 text-sm text-ink-muted transition-colors hover:text-ink"
+        className="flex shrink-0 items-center gap-1.5 border-b-2 border-transparent px-3 py-2.5 text-sm text-muted-foreground transition-colors hover:text-foreground"
       >
-        ← Team
+        <ArrowLeft className="size-3.5" aria-hidden />
+        Team
       </Link>
       {TABS.map((tab) => {
         const href = `${base}/${tab.segment}`;
@@ -33,11 +38,12 @@ export function ConfigNav({ leagueId, teamId }: { leagueId: string; teamId: stri
           <Link
             key={tab.segment}
             href={href}
+            aria-current={active ? "page" : undefined}
             className={cn(
-              "shrink-0 border-b-2 px-3 py-2 text-sm transition-colors",
+              "shrink-0 border-b-2 px-3 py-2.5 text-sm transition-colors",
               active
-                ? "border-accent font-medium text-ink"
-                : "border-transparent text-ink-muted hover:text-ink",
+                ? "border-brand font-medium text-foreground"
+                : "border-transparent text-muted-foreground hover:text-foreground",
             )}
           >
             {tab.label}

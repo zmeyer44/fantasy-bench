@@ -1,24 +1,31 @@
 "use client";
 
+import type { ReactNode } from "react";
 import Link from "next/link";
 import { usePreloadedQuery, type Preloaded } from "convex/react";
 
-import { BarChart, CapMeter, LineChart, StatTile } from "@/components/cost/charts";
+import { BarChart, CapMeter, LineChart } from "@/components/cost/charts";
 import { formatPct, formatTokens, formatUsd } from "@/components/cost/format";
 import {
   Badge,
   Card,
-  CardBody,
-  CardFooter,
+  CardAction,
+  CardContent,
+  CardDescription,
   CardHeader,
+  CardTitle,
   EmptyState,
   PageHeader,
-  TBody,
-  TD,
-  TH,
-  THead,
-  TR,
+  Section,
+  SectionHeader,
+  Stat,
+  StatStrip,
   Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
 } from "@/components/ui";
 import type { api } from "@/convex/_generated/api";
 import { formatET } from "@/lib/time";
@@ -29,6 +36,10 @@ import { formatET } from "@/lib/time";
  * Three live subscriptions: the league rollups, the model benchmark, and — when
  * the viewer owns a team here — that team's dashboard. Everything is read off
  * the rollup tables, so nothing here is recomputed per request.
+ *
+ * The page is a ledger, so it is laid out as one: a KPI strip over the totals,
+ * then sections separated by a rule rather than by boxes, with the tables
+ * spanning their section and every numeric column right-aligned.
  */
 export function CostDashboard({
   leagueId,
@@ -52,35 +63,43 @@ export function CostDashboard({
 
   const totals = dashboard.totals;
   const myTeamName = dashboard.byTeam.find((row) => row.teamId === myTeamId)?.teamName ?? null;
+  const overCap = usdCap !== null && totals.usd >= usdCap;
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-10">
       <PageHeader
         eyebrow="Ledger"
         title="Cost"
         description="Every model step writes a usage row. These are rollups over that ledger — nothing here is estimated."
-        actions={<Badge tone="outline">week {weekNo}</Badge>}
+        actions={<Badge variant="outline">week {weekNo}</Badge>}
       />
 
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        <StatTile
+      <StatStrip>
+        <Stat
           label="Season spend"
           value={formatUsd(totals.usd)}
-          hint={usdCap !== null ? `of a ${formatUsd(usdCap)} hard cap` : "no hard cap set"}
-          tone={usdCap !== null && totals.usd >= usdCap ? "danger" : "default"}
+          detail={
+            usdCap === null ? (
+              "no hard cap set"
+            ) : overCap ? (
+              <span className="text-destructive">over the {formatUsd(usdCap)} hard cap</span>
+            ) : (
+              `${formatPct(totals.usd / usdCap)} of a ${formatUsd(usdCap)} hard cap`
+            )
+          }
         />
-        <StatTile label="Tokens" value={formatTokens(totals.tokens)} hint="input + output" />
-        <StatTile
+        <Stat label="Tokens" value={formatTokens(totals.tokens)} detail="input + output" />
+        <Stat
           label="Runs"
           value={totals.runCount.toLocaleString()}
-          hint={`${totals.stepCount.toLocaleString()} steps`}
+          detail={`${totals.stepCount.toLocaleString()} steps`}
         />
-        <StatTile
+        <Stat
           label="Avg / run"
           value={formatUsd(totals.runCount > 0 ? totals.usd / totals.runCount : 0)}
-          hint="across every window type"
+          detail="across every window type"
         />
-      </div>
+      </StatStrip>
 
       {preloadedTeam && myTeamId ? (
         <MyTeamCard
@@ -92,185 +111,200 @@ export function CostDashboard({
         />
       ) : null}
 
-      <div className="grid gap-6 lg:grid-cols-2">
-        <Card>
-          <CardHeader title="Spend by team" description="Season to date." />
-          <CardBody>
-            <BarChart
-              data={dashboard.byTeam.map((row) => ({
-                key: row.teamId,
-                label: row.teamName,
-                value: row.usd,
-                display: formatUsd(row.usd),
-                hint: `${row.teamName}: ${formatUsd(row.usd)} across ${row.runCount} runs`,
-                emphasis: row.teamId === myTeamId,
-              }))}
-            />
-          </CardBody>
-          <CardFooter>Bars are proportional to the biggest spender, not to the cap.</CardFooter>
-        </Card>
+      <div className="grid gap-10 lg:grid-cols-2">
+        <Section>
+          <SectionHeader
+            title="Spend by team"
+            description="Season to date. Bars are proportional to the biggest spender, not to the cap."
+          />
+          <BarChart
+            data={dashboard.byTeam.map((row) => ({
+              key: row.teamId,
+              label: row.teamName,
+              value: row.usd,
+              display: formatUsd(row.usd),
+              hint: `${row.teamName}: ${formatUsd(row.usd)} across ${row.runCount} runs`,
+              emphasis: row.teamId === myTeamId,
+            }))}
+          />
+        </Section>
 
-        <Card>
-          <CardHeader title="Spend by model" description="Where the money actually goes." />
-          <CardBody>
-            <BarChart
-              data={dashboard.byModel.map((row) => ({
-                key: row.modelId,
-                label: row.displayName,
-                value: row.usd,
-                display: formatUsd(row.usd),
-                hint: `${row.modelId}: ${formatUsd(row.usd)}, ${formatTokens(row.tokens)} tokens`,
-              }))}
-              emptyLabel="No model has been billed yet."
-            />
-          </CardBody>
-        </Card>
+        <Section>
+          <SectionHeader title="Spend by model" description="Where the money actually goes." />
+          <BarChart
+            data={dashboard.byModel.map((row) => ({
+              key: row.modelId,
+              label: row.displayName,
+              value: row.usd,
+              display: formatUsd(row.usd),
+              hint: `${row.modelId}: ${formatUsd(row.usd)}, ${formatTokens(row.tokens)} tokens`,
+            }))}
+            emptyLabel="No model has been billed yet."
+          />
+        </Section>
       </div>
 
-      <Card>
-        <CardHeader
+      <Section>
+        <SectionHeader
           title="Cost trend by week"
           description="League-wide spend per week, attributed by the run's window."
         />
-        <CardBody>
-          <LineChart
-            points={dashboard.trend.map((t) => ({
-              x: t.weekNo,
-              y: t.usd,
-              label: `W${t.weekNo}`,
-              hint: `Week ${t.weekNo}: ${formatUsd(t.usd)} over ${t.runCount} runs`,
-            }))}
-            formatY={formatUsd}
-          />
-        </CardBody>
-      </Card>
+        <LineChart
+          points={dashboard.trend.map((t) => ({
+            x: t.weekNo,
+            y: t.usd,
+            label: `W${t.weekNo}`,
+            hint: `Week ${t.weekNo}: ${formatUsd(t.usd)} over ${t.runCount} runs`,
+          }))}
+          formatY={formatUsd}
+        />
+      </Section>
 
-      <Card>
-        <CardHeader
+      <Section>
+        <SectionHeader
           title="Most expensive runs"
           description="The runs worth reading. Every one links to its full trace."
         />
         {dashboard.expensive.length === 0 ? (
-          <CardBody>
-            <EmptyState title="No runs yet" />
-          </CardBody>
+          <EmptyState title="No runs yet" />
         ) : (
           <Table>
-            <THead>
-              <TR>
-                <TH>Team</TH>
-                <TH>Window</TH>
-                <TH numeric>Wk</TH>
-                <TH>Model</TH>
-                <TH>Status</TH>
-                <TH numeric>Steps</TH>
-                <TH numeric>Cost</TH>
-                <TH>When</TH>
-                <TH />
-              </TR>
-            </THead>
-            <TBody>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Team</TableHead>
+                <TableHead>Window</TableHead>
+                <TableHead numeric>Wk</TableHead>
+                <TableHead>Model</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead numeric>Steps</TableHead>
+                <TableHead numeric>Cost</TableHead>
+                <TableHead>When</TableHead>
+                <TableHead />
+              </TableRow>
+            </TableHeader>
+            <TableBody>
               {dashboard.expensive.map((run) => (
-                <TR key={run.runId}>
-                  <TD className="text-sm">{run.teamName ?? "commissioner"}</TD>
-                  <TD className="font-mono text-xs">{run.windowLabel}</TD>
-                  <TD numeric className="font-mono text-xs">
+                <TableRow key={run.runId}>
+                  <TableCell>{run.teamName ?? "commissioner"}</TableCell>
+                  <TableCell className="font-mono text-xs">{run.windowLabel}</TableCell>
+                  <TableCell numeric className="font-mono text-xs">
                     {run.weekNo ?? "—"}
-                  </TD>
-                  <TD className="font-mono text-xs text-ink-muted">{run.modelId}</TD>
-                  <TD>
-                    <Badge tone={run.status === "succeeded" ? "accent" : "warning"}>
+                  </TableCell>
+                  <TableCell className="font-mono text-xs text-muted-foreground">
+                    {run.modelId}
+                  </TableCell>
+                  <TableCell>
+                    <Badge variant={run.status === "succeeded" ? "success" : "warning"}>
                       {run.status}
                     </Badge>
-                  </TD>
-                  <TD numeric className="font-mono text-xs">
+                  </TableCell>
+                  <TableCell numeric className="font-mono text-xs">
                     {run.stepCount}
-                  </TD>
-                  <TD numeric className="font-mono text-xs">
+                  </TableCell>
+                  <TableCell numeric className="font-mono text-xs">
                     {formatUsd(run.costUsd)}
-                  </TD>
-                  <TD className="whitespace-nowrap font-mono text-xs text-ink-faint">
+                  </TableCell>
+                  <TableCell className="font-mono text-xs text-muted-foreground">
                     {formatET(run.createdAt, "MMM d HH:mm")}
-                  </TD>
-                  <TD>
-                    <Link
-                      href={`/leagues/${leagueId}/traces/${run.runId}`}
-                      className="text-xs text-accent-strong underline underline-offset-2"
-                    >
-                      Trace
-                    </Link>
-                  </TD>
-                </TR>
+                  </TableCell>
+                  <TableCell>
+                    <TraceLink href={`/leagues/${leagueId}/traces/${run.runId}`} />
+                  </TableCell>
+                </TableRow>
               ))}
-            </TBody>
+            </TableBody>
           </Table>
         )}
-      </Card>
+      </Section>
 
-      <Card>
-        <CardHeader
+      <Section>
+        <SectionHeader
           title="Benchmark · points per dollar"
           description="Cost-adjusted performance by model. One league is a tiny sample — read the team count."
         />
         {benchmark.length === 0 ? (
-          <CardBody>
-            <EmptyState title="No models attributed yet" />
-          </CardBody>
+          <EmptyState title="No models attributed yet" />
         ) : (
-          <Table>
-            <THead>
-              <TR>
-                <TH>Model</TH>
-                <TH numeric>Teams</TH>
-                <TH numeric>Spend</TH>
-                <TH numeric>Points</TH>
-                <TH numeric>Wins</TH>
-                <TH numeric>Pts / $</TH>
-                <TH numeric>$ / point</TH>
-              </TR>
-            </THead>
-            <TBody>
-              {benchmark.map((row) => (
-                <TR key={row.modelId}>
-                  <TD className="text-sm">
-                    {row.displayName}
-                    <span className="ml-2 font-mono text-[10px] text-ink-faint">{row.provider}</span>
-                  </TD>
-                  <TD numeric className="font-mono text-xs">
-                    {row.teamCount}
-                  </TD>
-                  <TD numeric className="font-mono text-xs">
-                    {formatUsd(row.usd)}
-                  </TD>
-                  <TD numeric className="font-mono text-xs">
-                    {row.points.toFixed(1)}
-                  </TD>
-                  <TD numeric className="font-mono text-xs">
-                    {row.wins}
-                  </TD>
-                  <TD numeric className="font-mono text-xs">
-                    {row.pointsPerUsd === null ? "—" : row.pointsPerUsd.toFixed(1)}
-                  </TD>
-                  <TD numeric className="font-mono text-xs">
-                    {row.costPerPoint === null ? "—" : formatUsd(row.costPerPoint)}
-                  </TD>
-                </TR>
-              ))}
-            </TBody>
-          </Table>
+          <div className="space-y-8">
+            {/* A second series, so it wears the informational token rather than lime:
+                this plots points per dollar, not the dollars themselves. */}
+            <BarChart
+              tone="blue"
+              data={benchmark
+                .filter((row) => row.pointsPerUsd !== null)
+                .map((row) => ({
+                  key: row.modelId,
+                  label: row.displayName,
+                  value: row.pointsPerUsd ?? 0,
+                  display: `${(row.pointsPerUsd ?? 0).toFixed(1)} pts/$`,
+                  hint: `${row.modelId}: ${(row.pointsPerUsd ?? 0).toFixed(1)} points per dollar over ${row.teamCount} team${row.teamCount === 1 ? "" : "s"}`,
+                }))}
+              emptyLabel="No model has scored against its spend yet."
+            />
+
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Model</TableHead>
+                  <TableHead numeric>Teams</TableHead>
+                  <TableHead numeric>Spend</TableHead>
+                  <TableHead numeric>Points</TableHead>
+                  <TableHead numeric>Wins</TableHead>
+                  <TableHead numeric>Pts / $</TableHead>
+                  <TableHead numeric>$ / point</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {benchmark.map((row) => (
+                  <TableRow key={row.modelId}>
+                    <TableCell>
+                      {row.displayName}
+                      <span className="ml-2 font-mono text-[10px] text-ink-faint">
+                        {row.provider}
+                      </span>
+                    </TableCell>
+                    <TableCell numeric className="font-mono text-xs">
+                      {row.teamCount}
+                    </TableCell>
+                    <TableCell numeric className="font-mono text-xs">
+                      {formatUsd(row.usd)}
+                    </TableCell>
+                    <TableCell numeric className="font-mono text-xs">
+                      {row.points.toFixed(1)}
+                    </TableCell>
+                    <TableCell numeric className="font-mono text-xs">
+                      {row.wins}
+                    </TableCell>
+                    <TableCell numeric className="font-mono text-xs">
+                      {row.pointsPerUsd === null ? "—" : row.pointsPerUsd.toFixed(1)}
+                    </TableCell>
+                    <TableCell numeric className="font-mono text-xs">
+                      {row.costPerPoint === null ? "—" : formatUsd(row.costPerPoint)}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+
+            <p className="text-sm text-muted-foreground">
+              A team is credited to the model on its current config version; spend comes from the
+              team-week rollups and the record from the standings rollup.
+            </p>
+          </div>
         )}
-        <CardFooter>
-          A team is credited to the model on its current config version; spend comes from the
-          team-week rollups and the record from the standings rollup.
-          {usdCap !== null ? (
-            <>
-              {" "}
-              League hard cap {formatUsd(usdCap)} — {formatPct(totals.usd / usdCap)} used.
-            </>
-          ) : null}
-        </CardFooter>
-      </Card>
+      </Section>
     </div>
+  );
+}
+
+function TraceLink({ href, children = "Trace" }: { href: string; children?: ReactNode }) {
+  return (
+    <Link
+      href={href}
+      className="font-mono text-xs text-muted-foreground underline decoration-border underline-offset-4 transition-colors hover:text-brand hover:decoration-brand"
+    >
+      {children}
+    </Link>
   );
 }
 
@@ -292,40 +326,41 @@ function MyTeamCard({
 
   return (
     <Card>
-      <CardHeader
-        title={`My team${teamName ? ` · ${teamName}` : ""}`}
-        description={`Week ${weekNo} against your caps, and season efficiency.`}
-        action={
-          <Link
-            href={`/leagues/${leagueId}/teams/${teamId}/film-room`}
-            className="text-xs text-accent-strong underline underline-offset-2"
-          >
-            Film room →
-          </Link>
-        }
-      />
-      <CardBody className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-        <div className="space-y-3">
-          <StatTile
-            label="This week"
-            value={formatUsd(mine.week.usd)}
-            hint={`${mine.week.runCount} runs`}
-          />
-          <StatTile label="Season total" value={formatUsd(mine.season.usd)} />
-        </div>
-        <div className="space-y-3">
-          <StatTile
+      <CardHeader className="border-b">
+        <CardTitle>My team{teamName ? ` · ${teamName}` : ""}</CardTitle>
+        <CardDescription>
+          Week {weekNo} against your caps, and season efficiency.
+        </CardDescription>
+        <CardAction>
+          <TraceLink href={`/leagues/${leagueId}/teams/${teamId}/film-room`}>Film room →</TraceLink>
+        </CardAction>
+      </CardHeader>
+      <CardContent className="grid gap-8 md:grid-cols-2">
+        <dl className="space-y-2">
+          <TeamFigure label="This week" value={formatUsd(mine.week.usd)} />
+          <TeamFigure label="Season to date" value={formatUsd(mine.season.usd)} />
+          <TeamFigure
             label="Cost per point"
-            value={mine.costPerPoint.costPerPoint === null ? "—" : formatUsd(mine.costPerPoint.costPerPoint)}
-            hint={`${mine.costPerPoint.points.toFixed(1)} points scored`}
+            value={
+              mine.costPerPoint.costPerPoint === null
+                ? "—"
+                : formatUsd(mine.costPerPoint.costPerPoint)
+            }
           />
-          <StatTile
+          <TeamFigure
             label="Cost per win"
             value={mine.costPerWin.costPerWin === null ? "—" : formatUsd(mine.costPerWin.costPerWin)}
-            hint={`${mine.costPerWin.wins}-${mine.costPerWin.losses}-${mine.costPerWin.ties}`}
           />
-        </div>
-        <div className="space-y-4 md:col-span-2">
+          <TeamFigure
+            label="Record"
+            value={`${mine.costPerWin.wins}-${mine.costPerWin.losses}-${mine.costPerWin.ties}`}
+          />
+          <TeamFigure
+            label={`Week ${weekNo} runs`}
+            value={mine.week.runCount.toLocaleString()}
+          />
+        </dl>
+        <div className="space-y-5">
           <CapMeter
             label={`Week ${weekNo} tokens`}
             used={mine.budget.tokensUsed}
@@ -338,12 +373,21 @@ function MyTeamCard({
             cap={mine.budget.leagueUsdCap}
             format={formatUsd}
           />
-          <p className="text-xs text-ink-muted">
+          <p className="text-sm text-muted-foreground">
             The weekly token cap is a safety mechanism, not a game mechanic (PRD open question 2).
             Unused budget does not roll over.
           </p>
         </div>
-      </CardBody>
+      </CardContent>
     </Card>
+  );
+}
+
+function TeamFigure({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex items-baseline justify-between gap-3 border-b border-border pb-2 last:border-0">
+      <dt className="eyebrow">{label}</dt>
+      <dd className="font-mono text-sm tabular-nums text-foreground">{value}</dd>
+    </div>
   );
 }

@@ -1,28 +1,56 @@
-import type { ComponentPropsWithoutRef } from "react";
+import { mergeProps } from "@base-ui/react/merge-props"
+import { useRender } from "@base-ui/react/use-render"
+import { cva, type VariantProps } from "class-variance-authority"
+import { cn } from "cn"
 
-import { cn } from "./utils";
+const badgeVariants = cva(
+  "group/badge inline-flex h-5 w-fit shrink-0 items-center justify-center gap-1 overflow-hidden rounded-sm border border-transparent px-1.5 py-0.5 font-mono text-[10px] font-medium tracking-wider whitespace-nowrap uppercase transition-all focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 has-data-[icon=inline-end]:pr-1.5 has-data-[icon=inline-start]:pl-1.5 aria-invalid:border-destructive aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 [&>svg]:pointer-events-none [&>svg]:size-3!",
+  {
+    variants: {
+      variant: {
+        default: "bg-primary text-primary-foreground [a]:hover:bg-primary/80",
+        secondary:
+          "bg-secondary text-secondary-foreground [a]:hover:bg-secondary/80",
+        destructive:
+          "bg-destructive/10 text-destructive focus-visible:ring-destructive/20 dark:bg-destructive/20 dark:focus-visible:ring-destructive/40 [a]:hover:bg-destructive/20",
+        outline:
+          "border-line-strong text-muted-foreground [a]:hover:bg-muted [a]:hover:text-foreground",
+        success: "border-brand/30 bg-brand-soft text-brand",
+        info: "border-blue/40 bg-blue-soft text-blue-strong",
+        warning: "border-warning/40 bg-warning/10 text-warning",
+        ghost:
+          "hover:bg-muted hover:text-muted-foreground dark:hover:bg-muted/50",
+        link: "text-primary underline-offset-4 hover:underline",
+      },
+    },
+    defaultVariants: {
+      variant: "default",
+    },
+  }
+)
 
-export type BadgeTone = "neutral" | "accent" | "warning" | "danger" | "outline";
-
-const TONES: Record<BadgeTone, string> = {
-  neutral: "border-line bg-surface-muted text-ink-muted",
-  accent: "border-accent/40 bg-accent-soft text-accent-strong",
-  warning: "border-warning/40 bg-warning/15 text-warning",
-  danger: "border-danger/40 bg-danger/15 text-danger",
-  outline: "border-line-strong bg-transparent text-ink-muted",
-};
-
-export type BadgeProps = ComponentPropsWithoutRef<"span"> & { tone?: BadgeTone };
-
-export function Badge({ tone = "neutral", className, ...props }: BadgeProps) {
-  return (
-    <span
-      className={cn(
-        "inline-flex items-center gap-1 rounded border px-1.5 py-0.5 font-mono text-[10px] uppercase tracking-wider",
-        TONES[tone],
-        className,
-      )}
-      {...props}
-    />
-  );
+function Badge({
+  className,
+  variant = "default",
+  render,
+  ...props
+}: useRender.ComponentProps<"span"> & VariantProps<typeof badgeVariants>) {
+  return useRender({
+    defaultTagName: "span",
+    props: mergeProps<"span">(
+      {
+        className: cn(badgeVariants({ variant }), className),
+      },
+      props
+    ),
+    render,
+    state: {
+      slot: "badge",
+      variant,
+    },
+  })
 }
+
+export { Badge, badgeVariants }
+
+export type BadgeVariant = NonNullable<VariantProps<typeof badgeVariants>["variant"]>

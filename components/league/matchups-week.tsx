@@ -4,7 +4,7 @@ import { usePreloadedQuery, type Preloaded } from "convex/react";
 
 import { MatchupCard } from "@/components/league/matchup-card";
 import { WeekPicker } from "@/components/league/week-picker";
-import { Card, CardBody, CardHeader, EmptyState } from "@/components/ui";
+import { EmptyState } from "@/components/ui";
 import type { api } from "@/convex/_generated/api";
 
 /** One week's matchup cards, live off `views.matchups` (snapshot live scores). */
@@ -22,19 +22,22 @@ export function MatchupsWeekView({
   const cards = usePreloadedQuery(preloaded);
 
   return (
-    <Card>
-      <CardHeader
-        title={`Week ${weekNo}`}
-        description="Click a matchup for both lineups and the agents' rationale."
-        action={
-          <WeekPicker
-            basePath={`/leagues/${leagueId}/matchups`}
-            weekNo={weekNo}
-            weeks={weeks}
-          />
-        }
-      />
-      <CardBody>
+    <section>
+      <div className="flex flex-wrap items-end justify-between gap-3 border-b border-border pb-3">
+        <div className="min-w-0">
+          <h2 className="text-lg font-medium tracking-tight text-foreground">Week {weekNo}</h2>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Open a matchup for both lineups and the agents&rsquo; rationale.
+          </p>
+        </div>
+        <WeekPicker
+          basePath={`/leagues/${leagueId}/matchups`}
+          weekNo={weekNo}
+          weeks={weeks}
+        />
+      </div>
+
+      <div className="mt-5">
         {cards.length === 0 ? (
           <EmptyState
             title={`No matchups for week ${weekNo}`}
@@ -47,7 +50,7 @@ export function MatchupsWeekView({
             ))}
           </div>
         )}
-      </CardBody>
-    </Card>
+      </div>
+    </section>
   );
 }

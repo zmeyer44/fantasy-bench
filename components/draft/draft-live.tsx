@@ -4,7 +4,7 @@ import { usePreloadedQuery, type Preloaded } from "convex/react";
 
 import { DraftBoardView } from "@/components/draft/draft-board";
 import { StartDraftButton } from "@/components/draft/start-draft-button";
-import { Badge, Card, CardBody } from "@/components/ui";
+import { Alert, AlertDescription, Badge, PageHeader } from "@/components/ui";
 import type { api } from "@/convex/_generated/api";
 import { formatET } from "@/lib/time";
 
@@ -28,44 +28,44 @@ export function DraftLive({
   const live = board.status === "drafting";
 
   return (
-    <div className="space-y-5">
-      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-line pb-4">
-        <div>
-          <div className="eyebrow mb-2">{board.draftType} draft</div>
-          <h1 className="text-xl font-semibold tracking-tight text-ink">Draft board</h1>
-          <p className="mt-1 text-xs text-ink-muted">
+    <div className="space-y-8">
+      <PageHeader
+        eyebrow={`${board.draftType} draft`}
+        title="Draft board"
+        description={
+          <>
             {board.scheduledAt
               ? `Scheduled ${formatET(board.scheduledAt, "EEE MMM d, HH:mm")} ET.`
               : "No draft time set."}{" "}
             Every pick links to the run that made it.
-          </p>
-        </div>
-        <div className="flex flex-col items-end gap-2">
-          {live ? (
-            <span className="flex items-center gap-1.5 font-mono text-[10px] text-ink-faint">
-              <span className="inline-block size-1.5 animate-pulse rounded-full bg-accent" />
-              live · updates as picks land
-            </span>
-          ) : (
-            <Badge tone="outline">{board.status.replace("_", " ")}</Badge>
-          )}
-          {isCommissioner && board.status === "setup" ? (
-            <StartDraftButton leagueId={leagueId} />
-          ) : null}
-        </div>
-      </div>
+          </>
+        }
+        actions={
+          <div className="flex flex-col items-end gap-2">
+            {live ? (
+              <span className="flex items-center gap-1.5 font-mono text-[10px] tracking-wider uppercase text-brand">
+                <span className="inline-block size-1.5 animate-pulse rounded-full bg-brand" />
+                live · updates as picks land
+              </span>
+            ) : (
+              <Badge variant="outline">{board.status.replace("_", " ")}</Badge>
+            )}
+            {isCommissioner && board.status === "setup" ? (
+              <StartDraftButton leagueId={leagueId} />
+            ) : null}
+          </div>
+        }
+      />
 
       {board.status === "setup" ? (
-        <Card>
-          <CardBody>
-            <p className="text-sm text-ink-muted">
-              The draft has not started.{" "}
-              {isCommissioner
-                ? "Starting it locks the rule set (budgets, conduct settings and the model allowlist stay editable)."
-                : "The commissioner starts it from the settings console."}
-            </p>
-          </CardBody>
-        </Card>
+        <Alert>
+          <AlertDescription>
+            The draft has not started.{" "}
+            {isCommissioner
+              ? "Starting it locks the rule set (budgets, conduct settings and the model allowlist stay editable)."
+              : "The commissioner starts it from the settings console."}
+          </AlertDescription>
+        </Alert>
       ) : null}
 
       <DraftBoardView leagueId={leagueId} board={board} />

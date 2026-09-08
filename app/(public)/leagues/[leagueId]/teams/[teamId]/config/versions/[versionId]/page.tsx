@@ -6,7 +6,7 @@ import { ConfigNav } from "@/components/config/config-nav";
 import { DiffView } from "@/components/config/diff-view";
 import { Markdown } from "@/components/config/markdown";
 import { readOrNull } from "@/components/league/convex-errors";
-import { Badge, Card, CardBody, CardHeader, PageHeader } from "@/components/ui";
+import { Badge, PageHeader, Stat, StatStrip } from "@/components/ui";
 import { api } from "@/convex/_generated/api";
 import type { Id } from "@/convex/_generated/dataModel";
 import { fetchAuthQuery } from "@/lib/convex/server";
@@ -66,10 +66,10 @@ export default async function VersionDiffPage({
   const base = `/leagues/${leagueId}/teams/${teamId}/config/versions`;
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-8">
       <PageHeader
         eyebrow={
-          <Link href={base} className="hover:text-ink">
+          <Link href={base} className="transition-colors hover:text-foreground">
             {view.team.name} · history
           </Link>
         }
@@ -82,70 +82,73 @@ export default async function VersionDiffPage({
         actions={
           <div className="flex items-center gap-2">
             {view.config?.currentVersionId === current._id ? (
-              <Badge tone="accent">applied</Badge>
+              <Badge variant="success">applied</Badge>
             ) : view.config?.pendingVersionId === current._id ? (
-              <Badge tone="warning">queued</Badge>
+              <Badge variant="warning">queued</Badge>
             ) : null}
-            <Badge tone="outline">{model?.displayName ?? current.modelId}</Badge>
+            <Badge variant="outline">{model?.displayName ?? current.modelId}</Badge>
           </div>
         }
       />
 
       <ConfigNav leagueId={leagueId} teamId={teamId} />
 
-      <Card>
-        <CardBody className="grid gap-3 text-sm sm:grid-cols-4">
-          <Stat
-            label="Saved"
-            value={`${formatET(current.createdAt ?? current._creationTime, "MMM d, HH:mm")} ET`}
-          />
-          <Stat
-            label="Applied"
-            value={
-              current.appliedAt ? `${formatET(current.appliedAt, "MMM d, HH:mm")} ET` : "never"
-            }
-          />
-          <Stat label="Skills" value={String(current.skills.length)} />
-          <Stat label="Summary" value={current.changeSummary ?? "—"} />
-        </CardBody>
-      </Card>
+      <StatStrip>
+        <Stat
+          label="Saved"
+          value={
+            <span className="text-base">
+              {formatET(current.createdAt ?? current._creationTime, "MMM d, HH:mm")} ET
+            </span>
+          }
+        />
+        <Stat
+          label="Applied"
+          value={
+            <span className="text-base">
+              {current.appliedAt ? `${formatET(current.appliedAt, "MMM d, HH:mm")} ET` : "never"}
+            </span>
+          }
+        />
+        <Stat label="Skills" value={current.skills.length} />
+        <Stat
+          label="Summary"
+          value={
+            <span className="line-clamp-2 text-base font-sans">
+              {current.changeSummary ?? "—"}
+            </span>
+          }
+        />
+      </StatStrip>
 
       {diff ? (
         <DiffView diff={diff} leagueId={leagueId} teamId={teamId} />
       ) : (
-        <Card>
-          <CardHeader title="Context" description="The initial configuration." />
-          <CardBody>
-            <Markdown>{current.contextMd}</Markdown>
-          </CardBody>
-        </Card>
+        <section className="space-y-4">
+          <div className="border-b border-border pb-3">
+            <h2 className="eyebrow text-foreground">Context</h2>
+            <p className="mt-2 text-sm text-muted-foreground">The initial configuration.</p>
+          </div>
+          <Markdown>{current.contextMd}</Markdown>
+        </section>
       )}
 
       {previous ? (
-        <div className="flex justify-between text-xs">
+        <div className="flex flex-wrap justify-between gap-3 border-t border-border pt-5">
           <Link
             href={`${base}/${previous._id}`}
-            className="text-accent-strong underline underline-offset-2"
+            className="text-sm text-muted-foreground underline decoration-border underline-offset-4 transition-colors hover:text-foreground hover:decoration-brand"
           >
             ← Version {previous.versionNo}
           </Link>
           <Link
             href={`${base}/compare?a=${previous._id}&b=${current._id}`}
-            className="text-accent-strong underline underline-offset-2"
+            className="text-sm text-muted-foreground underline decoration-border underline-offset-4 transition-colors hover:text-foreground hover:decoration-brand"
           >
             Open in the comparison view →
           </Link>
         </div>
       ) : null}
-    </div>
-  );
-}
-
-function Stat({ label, value }: { label: string; value: string }) {
-  return (
-    <div>
-      <div className="eyebrow">{label}</div>
-      <div className="mt-1 truncate font-mono text-xs text-ink">{value}</div>
     </div>
   );
 }

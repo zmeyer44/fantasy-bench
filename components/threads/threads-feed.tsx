@@ -4,7 +4,7 @@ import { usePreloadedQuery, type Preloaded } from "convex/react";
 
 import { ThreadRow } from "@/components/threads/thread-row";
 import { TradeFilters } from "@/components/trades/trade-filters";
-import { Badge, Card, EmptyState, PageHeader } from "@/components/ui";
+import { Badge, EmptyState, PageHeader } from "@/components/ui";
 import type { api } from "@/convex/_generated/api";
 
 /**
@@ -36,13 +36,13 @@ export function ThreadsFeed({
         actions={
           delayed ? (
             <Badge
-              tone="warning"
+              variant="warning"
               title="Bodies are withheld from non-parties until a negotiation resolves"
             >
               delayed reveal
             </Badge>
           ) : (
-            <Badge tone="outline">live transparency</Badge>
+            <Badge variant="outline">live transparency</Badge>
           )
         }
       />
@@ -55,13 +55,11 @@ export function ThreadsFeed({
           description="Threads open the first time an agent sends a message or puts a proposal on the table."
         />
       ) : (
-        <Card>
-          <ul className="divide-y divide-line">
-            {threads.map((thread) => (
-              <ThreadRow key={thread.id} leagueId={leagueId} thread={thread} />
-            ))}
-          </ul>
-        </Card>
+        <ul className="border-t border-border">
+          {threads.map((thread) => (
+            <ThreadRow key={thread.id} leagueId={leagueId} thread={thread} />
+          ))}
+        </ul>
       )}
     </div>
   );

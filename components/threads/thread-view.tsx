@@ -1,12 +1,21 @@
 "use client";
 
+import { ArrowRight } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
 import { useQuery } from "convex/react";
 
 import { ThreadMessage } from "@/components/threads/thread-message";
 import { TradeCard } from "@/components/trades/trade-card";
-import { Badge, Button, Card, CardBody, CardHeader, PageHeader } from "@/components/ui";
+import {
+  Alert,
+  AlertDescription,
+  AlertTitle,
+  Badge,
+  Button,
+  PageHeader,
+  Skeleton,
+} from "@/components/ui";
 import { api } from "@/convex/_generated/api";
 import type { Id } from "@/convex/_generated/dataModel";
 import type { ThreadMessageView } from "@/convex/messaging";
@@ -47,7 +56,13 @@ export function ThreadView({
   });
 
   if (thread === undefined) {
-    return <p className="py-10 text-center text-sm text-ink-faint">Loading the conversation…</p>;
+    return (
+      <div className="space-y-4 py-4" aria-busy="true" aria-label="Loading the conversation">
+        <Skeleton className="h-8 w-64" />
+        <Skeleton className="h-16 w-full" />
+        <Skeleton className="h-16 w-2/3" />
+      </div>
+    );
   }
 
   const entries: Entry[] = [
@@ -71,78 +86,86 @@ export function ThreadView({
         }`}
         actions={
           <div className="flex flex-wrap items-center gap-2">
-            <Badge tone={thread.status === "open" ? "accent" : "neutral"}>{thread.status}</Badge>
+            <Badge variant={thread.status === "open" ? "success" : "secondary"}>
+              {thread.status}
+            </Badge>
             {thread.flaggedCount > 0 ? (
-              <Badge tone="danger">{thread.flaggedCount} flagged</Badge>
+              <Badge variant="destructive">{thread.flaggedCount} flagged</Badge>
             ) : null}
-            <Link
-              href={`/leagues/${leagueId}/threads`}
-              className="text-xs text-ink-muted hover:text-accent-strong"
+            <Button
+              variant="ghost"
+              size="sm"
+              render={<Link href={`/leagues/${leagueId}/threads`} />}
             >
-              All threads →
-            </Link>
+              All threads
+              <ArrowRight data-icon="inline-end" />
+            </Button>
           </div>
         }
       />
 
       {thread.delayed ? (
-        <div className="rounded-md border border-warning/40 bg-warning/10 px-4 py-3">
-          <p className="text-sm font-medium text-ink">Delayed reveal</p>
-          <p className="mt-0.5 text-xs text-ink-muted">
+        <Alert className="border-warning/40 bg-warning/5">
+          <AlertTitle className="text-warning">Delayed reveal</AlertTitle>
+          <AlertDescription>
             This league hides negotiation bodies from non-parties until the negotiation resolves
             or its window closes
             {thread.revealAt ? `, at ${formatET(thread.revealAt, "MMM d HH:mm")} ET` : ""}. The
             proposals themselves stay public.
-          </p>
-        </div>
+          </AlertDescription>
+        </Alert>
       ) : null}
 
-      <Card>
-        <CardHeader
-          title="Conversation"
-          description={`${thread.teamB.name} on the left, ${thread.teamA.name} on the right`}
-        />
-        <CardBody>
-          {entries.length === 0 ? (
-            <p className="py-6 text-center text-sm text-ink-faint">Nothing said yet.</p>
-          ) : (
-            <>
-              <ul className="space-y-4">
-                {entries.map((entry) =>
-                  entry.kind === "message" ? (
-                    <ThreadMessage
-                      key={entry.message.id}
-                      leagueId={leagueId}
-                      message={entry.message}
-                      alignRight={entry.message.senderTeamId === thread.teamA.id}
-                    />
-                  ) : (
-                    <li key={entry.trade.id}>
-                      <TradeCard
-                        leagueId={leagueId}
-                        trade={entry.trade}
-                        fairnessFloor={fairnessFloor}
-                      />
-                    </li>
-                  ),
-                )}
-              </ul>
+      <section aria-labelledby="conversation-heading">
+        <div className="border-b border-border pb-2.5">
+          <h2 id="conversation-heading" className="eyebrow text-foreground">
+            Conversation
+          </h2>
+          <p className="mt-1.5 text-sm text-muted-foreground">
+            {thread.teamB.name} on the left, {thread.teamA.name} on the right.
+          </p>
+        </div>
 
-              {thread.messages.isDone ? null : (
-                <div className="mt-4 flex justify-center">
-                  <Button
-                    size="sm"
-                    variant="secondary"
-                    onClick={() => setNumItems((n) => n + PAGE)}
-                  >
-                    Load more messages
-                  </Button>
-                </div>
+        {entries.length === 0 ? (
+          <p className="py-8 text-center text-sm text-muted-foreground">Nothing said yet.</p>
+        ) : (
+          <>
+            <ul className="space-y-5 pt-5">
+              {entries.map((entry) =>
+                entry.kind === "message" ? (
+                  <ThreadMessage
+                    key={entry.message.id}
+                    leagueId={leagueId}
+                    message={entry.message}
+                    alignRight={entry.message.senderTeamId === thread.teamA.id}
+                  />
+                ) : (
+                  <li key={entry.trade.id}>
+                    <TradeCard
+                      leagueId={leagueId}
+                      trade={entry.trade}
+                      fairnessFloor={fairnessFloor}
+                    />
+                  </li>
+                ),
               )}
-            </>
-          )}
-        </CardBody>
-      </Card>
+            </ul>
+
+            {thread.messages.isDone ? null : (
+              <div className="mt-5 flex justify-center">
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  onClick={() => setNumItems((n) => n + PAGE)}
+                >
+                  Load more messages
+                </Button>
+              </div>
+            )}
+          </>
+        )}
+      </section>
     </div>
   );
 }

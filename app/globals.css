@@ -1,88 +1,197 @@
 @import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+
+@custom-variant dark (&:is(.dark *));
 
 /*
- * Fantasy Bench — "sports data terminal".
- * Dense, monospaced numerics, neutral zinc surfaces, one accent (emerald).
- * Dark mode follows the OS via `prefers-color-scheme`; every token is defined
- * in both modes so nothing borrows a colour it did not declare.
+ * Fantasy Bench design tokens.
+ *
+ * The product is dark by design: a near-black canvas, Geist greys for every
+ * surface and rule, and exactly two chromatic colours. Lime is the brand and
+ * the colour of *action* (primary buttons, the active state, positive deltas).
+ * Blue is the colour of *data* (informational marks, secondary chart series,
+ * the blueprint motif on the landing page). Everything else is monochrome.
+ *
+ * The `.dark` class is applied to <html> so shadcn's dark: variants resolve.
  */
-@theme {
-  --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
-  --font-mono: var(--font-geist-mono), ui-monospace, "SF Mono", monospace;
 
-  --color-canvas: oklch(98.4% 0.002 247);
-  --color-surface: oklch(100% 0 0);
-  --color-surface-muted: oklch(96.8% 0.003 247);
-  --color-line: oklch(91.5% 0.005 247);
-  --color-line-strong: oklch(85% 0.008 247);
-  --color-ink: oklch(21% 0.01 250);
-  --color-ink-muted: oklch(50% 0.012 250);
-  --color-ink-faint: oklch(64% 0.01 250);
-  --color-accent: oklch(62% 0.15 158);
-  --color-accent-strong: oklch(52% 0.14 158);
-  --color-accent-soft: oklch(94% 0.04 158);
-  --color-danger: oklch(58% 0.19 25);
-  --color-warning: oklch(72% 0.15 75);
+:root {
+  --radius: 0.25rem;
+
+  --background: #0a0a0b;
+  --foreground: #ededed;
+  --card: #0e0f11;
+  --card-foreground: #ededed;
+  --popover: #131416;
+  --popover-foreground: #ededed;
+
+  --primary: #c8ff00;
+  --primary-foreground: #0a0a0b;
+  --secondary: #1a1b1f;
+  --secondary-foreground: #ededed;
+  --muted: #141518;
+  --muted-foreground: #8b8f97;
+  --accent: #1c1d21;
+  --accent-foreground: #ededed;
+  --destructive: #ff6166;
+
+  --border: oklch(1 0 0 / 10%);
+  --input: oklch(1 0 0 / 16%);
+  --ring: #c8ff00;
+
+  --chart-1: #c8ff00;
+  --chart-2: #2b47ff;
+  --chart-3: #ededed;
+  --chart-4: #8b8f97;
+  --chart-5: #454545;
+
+  --sidebar: #0e0f11;
+  --sidebar-foreground: #ededed;
+  --sidebar-primary: #c8ff00;
+  --sidebar-primary-foreground: #0a0a0b;
+  --sidebar-accent: #1c1d21;
+  --sidebar-accent-foreground: #ededed;
+  --sidebar-border: oklch(1 0 0 / 10%);
+  --sidebar-ring: #c8ff00;
+
+  /* Brand + semantic extensions (not part of the shadcn contract). */
+  --brand: #c8ff00;
+  --brand-strong: #dcff66;
+  --brand-soft: oklch(0.93 0.24 122 / 12%);
+  --blue: #2b47ff;
+  --blue-strong: #5c72ff;
+  --blue-soft: oklch(0.5 0.27 268 / 16%);
+  --success: #c8ff00;
+  --warning: #f5a524;
+  --danger: #ff6166;
+  --ink-faint: #5f636b;
+  --line-strong: oklch(1 0 0 / 18%);
 }
 
-@layer theme {
-  @media (prefers-color-scheme: dark) {
-    :root {
-      --color-canvas: oklch(17% 0.008 260);
-      --color-surface: oklch(21% 0.009 260);
-      --color-surface-muted: oklch(25% 0.01 260);
-      --color-line: oklch(30% 0.012 260);
-      --color-line-strong: oklch(38% 0.014 260);
-      --color-ink: oklch(96% 0.004 260);
-      --color-ink-muted: oklch(72% 0.012 260);
-      --color-ink-faint: oklch(58% 0.012 260);
-      --color-accent: oklch(72% 0.16 158);
-      --color-accent-strong: oklch(80% 0.16 158);
-      --color-accent-soft: oklch(28% 0.05 158);
-      --color-danger: oklch(66% 0.18 25);
-      --color-warning: oklch(78% 0.14 75);
-    }
-  }
+@theme inline {
+  --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, "SF Mono", monospace;
+  --font-heading: var(--font-sans);
+  --font-display: var(--font-russo-one), var(--font-geist-sans), sans-serif;
+
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+
+  --color-brand: var(--brand);
+  --color-brand-strong: var(--brand-strong);
+  --color-brand-soft: var(--brand-soft);
+  --color-blue: var(--blue);
+  --color-blue-strong: var(--blue-strong);
+  --color-blue-soft: var(--blue-soft);
+  --color-success: var(--success);
+  --color-warning: var(--warning);
+  --color-danger: var(--danger);
+
+  /* Two extra greys the console relies on: a fainter text step and a stronger rule. */
+  --color-ink-faint: var(--ink-faint);
+  --color-line-strong: var(--line-strong);
+
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.4);
+  --radius-2xl: calc(var(--radius) * 1.8);
+  --radius-3xl: calc(var(--radius) * 2.2);
+  --radius-4xl: calc(var(--radius) * 2.6);
 }
 
 @layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+
   html {
-    color-scheme: light dark;
+    color-scheme: dark;
+    @apply font-sans;
   }
 
   body {
-    background-color: var(--color-canvas);
-    color: var(--color-ink);
-    font-family: var(--font-sans);
+    @apply bg-background text-foreground;
     font-feature-settings: "cv02", "cv03", "cv04";
     -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
   }
 
-  /* Numbers in this app are always compared column-to-column. */
+  /* Numbers in this product are always compared column-to-column. */
   table,
   .tnum {
     font-variant-numeric: tabular-nums;
   }
 
   ::selection {
-    background-color: var(--color-accent-soft);
-    color: var(--color-ink);
+    background-color: var(--brand);
+    color: var(--background);
   }
 
   :focus-visible {
-    outline: 2px solid var(--color-accent);
+    outline: 2px solid var(--ring);
     outline-offset: 2px;
   }
 }
 
 @layer components {
-  /* Small-caps section label used across the console. */
+  /*
+   * Tracked monospace label. A signature of the brand system (see the
+   * mockups), so it is used deliberately: section markers, table headers,
+   * blueprint annotations. Never for running copy.
+   */
   .eyebrow {
     font-family: var(--font-mono);
     font-size: 0.6875rem;
     line-height: 1;
-    letter-spacing: 0.12em;
+    letter-spacing: 0.14em;
     text-transform: uppercase;
-    color: var(--color-ink-faint);
+    color: var(--muted-foreground);
+  }
+
+  /* Display type: Russo One, tight, uppercase. Landing page only. */
+  .display {
+    font-family: var(--font-display);
+    text-transform: uppercase;
+    letter-spacing: -0.01em;
+    line-height: 0.92;
+  }
+
+  /* Blueprint grid used behind hero art and section backgrounds. */
+  .blueprint {
+    background-image:
+      linear-gradient(to right, oklch(1 0 0 / 5%) 1px, transparent 1px),
+      linear-gradient(to bottom, oklch(1 0 0 / 5%) 1px, transparent 1px);
+    background-size: 48px 48px;
   }
 }

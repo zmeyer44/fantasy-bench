@@ -4,7 +4,15 @@ import { useMutation } from "convex/react";
 import { useState } from "react";
 
 import { mutationErrorMessage } from "@/components/league/convex-errors";
-import { Button } from "@/components/ui";
+import {
+  Button,
+  Field,
+  FieldDescription,
+  FieldError,
+  FieldTitle,
+  Progress,
+  cn,
+} from "@/components/ui";
 import { api } from "@/convex/_generated/api";
 import type { Id } from "@/convex/_generated/dataModel";
 import type { VetoTally } from "@/convex/trades";
@@ -56,58 +64,76 @@ export function VetoPanel({
   };
 
   return (
-    <div className="space-y-3">
-      <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1">
-        <span className="font-mono text-sm tabular-nums text-ink">
+    <form
+      className="space-y-3"
+      onSubmit={(event) => {
+        // Both buttons act on their own; nothing to submit.
+        event.preventDefault();
+      }}
+    >
+      <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+        <span
+          className={cn(
+            "font-mono text-sm tabular-nums",
+            tally.blocked ? "text-destructive" : "text-foreground",
+          )}
+        >
           {tally.vetoes} / {tally.threshold}
         </span>
-        <span className="text-xs text-ink-muted">
-          vetoes needed to block ({tally.ownerCount} owners, {tally.approvals} explicit
-          approvals)
-        </span>
+        <span className="text-sm text-muted-foreground">vetoes needed to block</span>
       </div>
 
-      <div
-        className="h-1.5 w-full overflow-hidden rounded bg-surface-muted"
-        role="progressbar"
-        aria-valuenow={tally.vetoes}
-        aria-valuemin={0}
-        aria-valuemax={tally.threshold}
-      >
-        <div
-          className={tally.blocked ? "h-full bg-danger" : "h-full bg-warning"}
-          style={{
-            width: `${Math.min(100, (tally.vetoes / Math.max(1, tally.threshold)) * 100)}%`,
-          }}
-        />
-      </div>
+      <Progress
+        value={tally.vetoes}
+        max={Math.max(1, tally.threshold)}
+        aria-label="Vetoes cast against the threshold"
+        className={cn(
+          tally.blocked
+            ? "[&_[data-slot=progress-indicator]]:bg-destructive"
+            : "[&_[data-slot=progress-indicator]]:bg-warning",
+        )}
+      />
+
+      <p className="font-mono text-[10px] tabular-nums text-ink-faint">
+        {tally.ownerCount} owner{tally.ownerCount === 1 ? "" : "s"} · {tally.approvals} explicit
+        approval{tally.approvals === 1 ? "" : "s"}
+      </p>
 
       {canVote ? (
-        <div className="flex items-center gap-2">
-          <Button
-            size="sm"
-            variant={vote === "veto" ? "danger" : "secondary"}
-            disabled={pending}
-            onClick={() => void submit("veto")}
-          >
-            {vote === "veto" ? "Vetoed" : "Veto"}
-          </Button>
-          <Button
-            size="sm"
-            variant={vote === "approve" ? "primary" : "secondary"}
-            disabled={pending}
-            onClick={() => void submit("approve")}
-          >
-            {vote === "approve" ? "Approved" : "Let it stand"}
-          </Button>
-        </div>
+        <Field>
+          <FieldTitle>Your vote</FieldTitle>
+          <div className="flex items-center gap-2">
+            <Button
+              type="button"
+              size="sm"
+              variant={vote === "veto" ? "destructive" : "outline"}
+              disabled={pending}
+              aria-pressed={vote === "veto"}
+              onClick={() => void submit("veto")}
+            >
+              {vote === "veto" ? "Vetoed" : "Veto"}
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              variant={vote === "approve" ? "default" : "outline"}
+              disabled={pending}
+              aria-pressed={vote === "approve"}
+              onClick={() => void submit("approve")}
+            >
+              {vote === "approve" ? "Approved" : "Let it stand"}
+            </Button>
+          </div>
+          <FieldDescription>
+            A vote can be changed until the review window closes.
+          </FieldDescription>
+          {error ? <FieldError>{error}</FieldError> : null}
+        </Field>
       ) : (
-        <p className="text-xs text-ink-faint">
+        <p className="text-sm text-muted-foreground">
           Only league owners vote on a flagged trade.
         </p>
       )}
-
-      {error ? <p className="text-xs text-danger">{error}</p> : null}
-    </div>
+    </form>
   );
 }

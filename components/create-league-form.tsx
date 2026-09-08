@@ -5,7 +5,14 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 
 import { mutationErrorMessage } from "@/components/league/convex-errors";
-import { Button, Card, CardBody, CardHeader, Field, Input, Select } from "@/components/ui";
+import {
+  Button,
+  Field,
+  FieldLabel,
+  Input,
+  NativeSelect,
+  NativeSelectOption,
+} from "@/components/ui";
 import { api } from "@/convex/_generated/api";
 
 const TEAM_COUNTS = [8, 10, 12, 14];
@@ -45,86 +52,90 @@ export function CreateLeagueForm() {
   }
 
   return (
-    <Card>
-      <CardHeader
-        title="Create a league"
-        description="You become the commissioner. Teams start unowned; invite owners with the league link."
-      />
-      <CardBody>
-        <form
-          className="grid gap-4 sm:grid-cols-2"
-          onSubmit={(event) => {
-            event.preventDefault();
-            void submit();
-          }}
-        >
-          <div className="sm:col-span-2">
-            <Field label="League name" htmlFor="league-name">
-              <Input
-                id="league-name"
-                required
-                minLength={3}
-                maxLength={60}
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                placeholder="The Bench League"
-              />
-            </Field>
-          </div>
+    <section>
+      <div className="border-b border-border pb-3">
+        <h2 className="eyebrow text-foreground">Create a league</h2>
+        <p className="mt-2 text-sm text-muted-foreground">
+          You become the commissioner. Teams start unowned; invite owners with the league link.
+        </p>
+      </div>
 
-          <Field label="Teams" htmlFor="team-count">
-            <Select
-              id="team-count"
-              value={teamCount}
-              onChange={(e) => setTeamCount(Number(e.target.value))}
-            >
-              {TEAM_COUNTS.map((n) => (
-                <option key={n} value={n}>
-                  {n} teams
-                </option>
-              ))}
-            </Select>
-          </Field>
+      <form
+        className="mt-5 grid items-end gap-5 sm:grid-cols-2 lg:grid-cols-4"
+        onSubmit={(event) => {
+          event.preventDefault();
+          void submit();
+        }}
+      >
+        <Field className="sm:col-span-2 lg:col-span-4">
+          <FieldLabel htmlFor="league-name">League name</FieldLabel>
+          <Input
+            id="league-name"
+            required
+            minLength={3}
+            maxLength={60}
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            placeholder="The Bench League"
+          />
+        </Field>
 
-          <Field label="Scoring" htmlFor="scoring">
-            <Select
-              id="scoring"
-              value={scoringPreset}
-              onChange={(e) => setScoringPreset(e.target.value as typeof scoringPreset)}
-            >
-              <option value="ppr">PPR</option>
-              <option value="half_ppr">Half PPR</option>
-              <option value="standard">Standard</option>
-            </Select>
-          </Field>
+        <Field>
+          <FieldLabel htmlFor="team-count">Teams</FieldLabel>
+          <NativeSelect
+            id="team-count"
+            className="w-full"
+            value={teamCount}
+            onChange={(e) => setTeamCount(Number(e.target.value))}
+          >
+            {TEAM_COUNTS.map((n) => (
+              <NativeSelectOption key={n} value={n}>
+                {n} teams
+              </NativeSelectOption>
+            ))}
+          </NativeSelect>
+        </Field>
 
-          <Field label="Draft" htmlFor="draft-type">
-            <Select
-              id="draft-type"
-              value={draftType}
-              onChange={(e) => setDraftType(e.target.value as typeof draftType)}
-            >
-              <option value="snake">Snake</option>
-              <option value="auction">Auction</option>
-            </Select>
-          </Field>
+        <Field>
+          <FieldLabel htmlFor="scoring">Scoring</FieldLabel>
+          <NativeSelect
+            id="scoring"
+            className="w-full"
+            value={scoringPreset}
+            onChange={(e) => setScoringPreset(e.target.value as typeof scoringPreset)}
+          >
+            <NativeSelectOption value="ppr">PPR</NativeSelectOption>
+            <NativeSelectOption value="half_ppr">Half PPR</NativeSelectOption>
+            <NativeSelectOption value="standard">Standard</NativeSelectOption>
+          </NativeSelect>
+        </Field>
 
-          <div className="flex items-end">
-            <Button type="submit" disabled={pending} className="w-full">
-              {pending ? "Creating…" : "Create league"}
-            </Button>
-          </div>
+        <Field>
+          <FieldLabel htmlFor="draft-type">Draft</FieldLabel>
+          <NativeSelect
+            id="draft-type"
+            className="w-full"
+            value={draftType}
+            onChange={(e) => setDraftType(e.target.value as typeof draftType)}
+          >
+            <NativeSelectOption value="snake">Snake</NativeSelectOption>
+            <NativeSelectOption value="auction">Auction</NativeSelectOption>
+          </NativeSelect>
+        </Field>
 
-          {error ? (
-            <p
-              role="alert"
-              className="sm:col-span-2 rounded-md border border-danger/40 bg-danger/10 px-3 py-2 text-xs text-danger"
-            >
-              {error}
-            </p>
-          ) : null}
-        </form>
-      </CardBody>
-    </Card>
+        <Button type="submit" disabled={pending} className="w-full">
+          {pending ? "Creating…" : "Create league"}
+        </Button>
+
+        {error ? (
+          <p
+            role="alert"
+            className="rounded-lg border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive sm:col-span-2 lg:col-span-4"
+          >
+            {error}
+          </p>
+        ) : null}
+      </form>
+    </section>
   );
 }

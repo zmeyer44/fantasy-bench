@@ -1,8 +1,10 @@
 import { Badge } from "@/components/ui";
 
+type BadgeVariant = "outline" | "secondary" | "success" | "warning" | "destructive";
+
 /**
  * The fairness number is deterministic (`convex/lib/fairness_pure.ts`), so the
- * badge is purely a reading of it: green above the floor, amber approaching it,
+ * badge is purely a reading of it: lime above the floor, amber approaching it,
  * red below.
  */
 export function FairnessBadge({
@@ -15,12 +17,17 @@ export function FairnessBadge({
   floor?: number;
 }) {
   if (score === null || score === undefined) {
-    return <Badge tone="outline">unscored</Badge>;
+    return <Badge variant="outline">unscored</Badge>;
   }
   const limit = floor ?? 0.6;
-  const tone = flagged || score < limit ? "danger" : score < limit + 0.15 ? "warning" : "accent";
+  const variant: BadgeVariant =
+    flagged || score < limit ? "destructive" : score < limit + 0.15 ? "warning" : "success";
   return (
-    <Badge tone={tone} title={`Fairness ${score.toFixed(2)} (floor ${limit.toFixed(2)})`}>
+    <Badge
+      variant={variant}
+      className="tabular-nums"
+      title={`Fairness ${score.toFixed(2)} (floor ${limit.toFixed(2)})`}
+    >
       fairness {score.toFixed(2)}
     </Badge>
   );
@@ -29,24 +36,24 @@ export function FairnessBadge({
 export function FlaggedPill({ flagged }: { flagged: boolean }) {
   if (!flagged) return null;
   return (
-    <Badge tone="danger" title="Below the league's fairness floor — owners may veto">
+    <Badge variant="destructive" title="Below the league's fairness floor — owners may veto">
       flagged
     </Badge>
   );
 }
 
-const STATUS_TONE: Record<string, "neutral" | "accent" | "warning" | "danger" | "outline"> = {
-  proposed: "accent",
+const STATUS_VARIANT: Record<string, BadgeVariant> = {
+  proposed: "success",
   countered: "warning",
-  accepted: "accent",
+  accepted: "success",
   in_review: "warning",
-  completed: "accent",
-  rejected: "neutral",
-  expired: "neutral",
-  cancelled: "neutral",
-  vetoed: "danger",
+  completed: "success",
+  rejected: "secondary",
+  expired: "secondary",
+  cancelled: "secondary",
+  vetoed: "destructive",
 };
 
 export function StatusBadge({ status }: { status: string }) {
-  return <Badge tone={STATUS_TONE[status] ?? "outline"}>{status.replace("_", " ")}</Badge>;
+  return <Badge variant={STATUS_VARIANT[status] ?? "outline"}>{status.replace("_", " ")}</Badge>;
 }

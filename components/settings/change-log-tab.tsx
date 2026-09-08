@@ -1,61 +1,70 @@
-import { Card, CardHeader, EmptyState, TBody, TD, TH, THead, TR, Table } from "@/components/ui";
+import {
+  EmptyState,
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui";
 import { formatET } from "@/lib/time";
 
 import type { SettingsData } from "./types";
 
 /** The `league_rule_changes` audit trail — a server component; nothing here mutates. */
 export function ChangeLogTab({ data }: { data: SettingsData }) {
-  if (data.changes.length === 0) {
-    return (
-      <Card>
-        <CardHeader title="Change log" />
-        <div className="p-4">
-          <EmptyState
-            title="No changes yet"
-            description="Every rule, budget, allowlist, owner and team change lands here."
-          />
-        </div>
-      </Card>
-    );
-  }
-
   return (
-    <Card>
-      <CardHeader
-        title="Change log"
-        description={`${data.changes.length} change${data.changes.length === 1 ? "" : "s"}, newest first`}
-      />
-      <Table>
-        <THead>
-          <TR>
-            <TH>When</TH>
-            <TH>Who</TH>
-            <TH>Field</TH>
-            <TH>From</TH>
-            <TH>To</TH>
-            <TH>Note</TH>
-          </TR>
-        </THead>
-        <TBody>
-          {data.changes.map((change) => (
-            <TR key={change._id}>
-              <TD className="whitespace-nowrap font-mono text-[10px] text-ink-muted">
-                {formatET(change.createdAt ?? change._creationTime, "MMM d HH:mm")} ET
-              </TD>
-              <TD className="text-xs text-ink">{change.userName ?? "platform"}</TD>
-              <TD className="font-mono text-[10px] text-ink">{change.field}</TD>
-              <TD className="max-w-48 truncate font-mono text-[10px] text-ink-faint">
-                {render(change.fromValue)}
-              </TD>
-              <TD className="max-w-48 truncate font-mono text-[10px] text-ink">
-                {render(change.toValue)}
-              </TD>
-              <TD className="text-xs text-ink-muted">{change.note ?? "—"}</TD>
-            </TR>
-          ))}
-        </TBody>
-      </Table>
-    </Card>
+    <section className="space-y-5">
+      <header className="border-b border-border pb-3">
+        <h2 className="font-heading text-base leading-snug font-medium text-foreground">
+          Change log
+        </h2>
+        <p className="mt-1 max-w-3xl text-sm text-muted-foreground">
+          Every rule, budget, allowlist, owner and team change lands here
+          {data.changes.length === 0
+            ? "."
+            : ` — ${data.changes.length} change${data.changes.length === 1 ? "" : "s"}, newest first.`}
+        </p>
+      </header>
+
+      {data.changes.length === 0 ? (
+        <EmptyState
+          title="No changes yet"
+          description="Nothing has been changed since the league was created."
+        />
+      ) : (
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>When</TableHead>
+              <TableHead>Who</TableHead>
+              <TableHead>Field</TableHead>
+              <TableHead>From</TableHead>
+              <TableHead>To</TableHead>
+              <TableHead>Note</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {data.changes.map((change) => (
+              <TableRow key={change._id}>
+                <TableCell className="font-mono text-xs text-muted-foreground">
+                  {formatET(change.createdAt ?? change._creationTime, "MMM d HH:mm")} ET
+                </TableCell>
+                <TableCell>{change.userName ?? "platform"}</TableCell>
+                <TableCell className="font-mono text-xs text-foreground">{change.field}</TableCell>
+                <TableCell className="max-w-48 truncate font-mono text-xs text-ink-faint">
+                  {render(change.fromValue)}
+                </TableCell>
+                <TableCell className="max-w-48 truncate font-mono text-xs text-foreground">
+                  {render(change.toValue)}
+                </TableCell>
+                <TableCell className="text-muted-foreground">{change.note ?? "—"}</TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      )}
+    </section>
   );
 }
 

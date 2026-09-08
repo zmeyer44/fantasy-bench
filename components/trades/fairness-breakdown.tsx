@@ -1,4 +1,13 @@
-import { TBody, TD, TH, THead, TR, Table } from "@/components/ui";
+import {
+  Stat,
+  StatStrip,
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui";
 import type { FairnessDetailV1 } from "@/convex/lib/fairness_pure";
 
 /**
@@ -19,49 +28,53 @@ export function FairnessBreakdown({
 }) {
   const items = detail.items ?? [];
   return (
-    <div className="space-y-4">
-      <dl className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+    <div className="space-y-5">
+      <StatStrip>
         <Stat label={`${proposerTeamName} receives`} value={fmt(detail.proposerValue)} />
         <Stat label={`${recipientTeamName} receives`} value={fmt(detail.recipientValue)} />
-        <Stat label="Fairness" value={detail.score?.toFixed(2) ?? "—"} />
+        <Stat label="Fairness" value={detail.score?.toFixed(2) ?? "—"} tone="brand" />
         <Stat label="Floor" value={detail.floor?.toFixed(2) ?? "—"} />
-      </dl>
+      </StatStrip>
 
       {items.length > 0 ? (
         <Table>
-          <THead>
-            <TR>
-              <TH>Player</TH>
-              <TH>Pos</TH>
-              <TH>Goes to</TH>
-              <TH numeric>ROS proj</TH>
-              <TH numeric>Scarcity</TH>
-              <TH numeric>Roster fit</TH>
-              <TH numeric>Value</TH>
-            </TR>
-          </THead>
-          <TBody>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Player</TableHead>
+              <TableHead>Pos</TableHead>
+              <TableHead>Goes to</TableHead>
+              <TableHead numeric>ROS proj</TableHead>
+              <TableHead numeric>Scarcity</TableHead>
+              <TableHead numeric>Roster fit</TableHead>
+              <TableHead numeric>Value</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
             {items.map((item) => (
-              <TR key={`${item.playerId}-${item.toTeamId}`}>
-                <TD className="font-medium">{item.playerName}</TD>
-                <TD className="font-mono text-xs text-ink-muted">{item.position}</TD>
-                <TD className="text-ink-muted">
+              <TableRow key={`${item.playerId}-${item.toTeamId}`}>
+                <TableCell className="font-medium">{item.playerName}</TableCell>
+                <TableCell className="font-mono text-xs text-muted-foreground">
+                  {item.position}
+                </TableCell>
+                <TableCell className="text-muted-foreground">
                   {teamNameById[item.toTeamId] ?? "—"}
-                </TD>
-                <TD numeric>{fmt(item.baseRos)}</TD>
-                <TD numeric>×{item.scarcity.toFixed(2)}</TD>
-                <TD numeric>{item.rosterFit > 1 ? `×${item.rosterFit.toFixed(2)}` : "—"}</TD>
-                <TD numeric className="font-medium">
+                </TableCell>
+                <TableCell numeric>{fmt(item.baseRos)}</TableCell>
+                <TableCell numeric>×{item.scarcity.toFixed(2)}</TableCell>
+                <TableCell numeric>
+                  {item.rosterFit > 1 ? `×${item.rosterFit.toFixed(2)}` : "—"}
+                </TableCell>
+                <TableCell numeric className="font-medium">
                   {fmt(item.value)}
-                </TD>
-              </TR>
+                </TableCell>
+              </TableRow>
             ))}
-          </TBody>
+          </TableBody>
         </Table>
       ) : null}
 
       {detail.faab ? (
-        <p className="text-xs text-ink-muted">
+        <p className="text-sm text-muted-foreground">
           FAAB: ${Math.abs(detail.faab)} moves{" "}
           {detail.faab > 0
             ? `${proposerTeamName} → ${recipientTeamName}`
@@ -71,7 +84,7 @@ export function FairnessBreakdown({
       ) : null}
 
       {detail.notes?.length ? (
-        <ul className="space-y-1 text-xs text-ink-faint">
+        <ul className="space-y-1 text-sm text-muted-foreground">
           {detail.notes.map((note) => (
             <li key={note}>{note}</li>
           ))}
@@ -79,23 +92,14 @@ export function FairnessBreakdown({
       ) : null}
 
       {detail.narrative ? (
-        <div className="rounded-md border border-line bg-surface-muted px-3 py-2.5">
+        <div className="border-l-2 border-border pl-3">
           <p className="eyebrow mb-1.5">Commissioner&apos;s note</p>
-          <p className="text-sm text-ink">{detail.narrative}</p>
-          <p className="mt-2 text-[11px] text-ink-faint">
+          <p className="text-sm text-foreground">{detail.narrative}</p>
+          <p className="mt-2 text-xs text-ink-faint">
             Commentary only — the score above is computed deterministically.
           </p>
         </div>
       ) : null}
-    </div>
-  );
-}
-
-function Stat({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="rounded-md border border-line bg-surface-muted px-3 py-2">
-      <dt className="eyebrow">{label}</dt>
-      <dd className="mt-1 font-mono text-sm tabular-nums text-ink">{value}</dd>
     </div>
   );
 }

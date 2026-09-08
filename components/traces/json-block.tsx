@@ -27,10 +27,10 @@ export function JsonBlock({
   return (
     <pre
       className={cn(
-        "max-h-96 overflow-auto rounded-md border px-3 py-2 font-mono text-[11px] leading-relaxed",
+        "max-h-96 overflow-auto rounded-sm border px-3 py-2 font-mono text-[11px] leading-relaxed",
         tone === "error"
-          ? "border-danger/40 bg-danger/10 text-ink"
-          : "border-line bg-surface-muted text-ink-muted",
+          ? "border-destructive/40 bg-destructive/10 text-foreground"
+          : "border-border bg-muted text-muted-foreground",
         className,
       )}
     >

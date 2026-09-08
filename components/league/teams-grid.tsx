@@ -4,7 +4,16 @@ import Link from "next/link";
 import { usePreloadedQuery, type Preloaded } from "convex/react";
 
 import { shortModel } from "@/components/standings/standings-table";
-import { Badge, Card, CardBody, CardHeader, EmptyState } from "@/components/ui";
+import {
+  Badge,
+  Card,
+  CardAction,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+  EmptyState,
+} from "@/components/ui";
 import type { api } from "@/convex/_generated/api";
 
 /** One card per team, live off `views.teams`. */
@@ -24,50 +33,54 @@ export function TeamsGrid({
   return (
     <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
       {cards.map((team) => (
-        <Card key={team.id} className="transition-colors hover:border-line-strong">
-          <CardHeader
-            title={
+        <Card key={team.id} size="sm" className="transition-colors hover:border-line-strong">
+          <CardHeader>
+            <CardTitle>
               <Link
                 href={`/leagues/${leagueId}/teams/${team.id}`}
-                className="hover:text-accent-strong"
+                className="hover:text-brand-strong"
               >
                 {team.name}
               </Link>
-            }
-            description={team.ownerName ?? "Unowned"}
-            action={<Badge tone="outline">#{team.rank}</Badge>}
-          />
-          <CardBody className="space-y-2.5">
+            </CardTitle>
+            <CardDescription>{team.ownerName ?? "Unowned"}</CardDescription>
+            <CardAction>
+              <span className="font-mono text-xs tabular-nums text-muted-foreground">
+                #{team.rank}
+              </span>
+            </CardAction>
+          </CardHeader>
+          <CardContent className="space-y-3">
             <div className="flex flex-wrap gap-1.5">
               {team.modelId ? (
-                <Badge tone="accent" title={team.modelId}>
+                <Badge variant="outline" title={team.modelId}>
                   {shortModel(team.modelId)}
                 </Badge>
               ) : (
-                <Badge tone="outline">no model</Badge>
+                <Badge variant="secondary">no model</Badge>
               )}
               {team.configVersionNo ? (
-                <Badge tone="outline">config v{team.configVersionNo}</Badge>
+                <Badge variant="outline">config v{team.configVersionNo}</Badge>
               ) : null}
             </div>
-            <dl className="grid grid-cols-4 gap-2 text-center">
-              <Stat label="Record" value={team.record} />
-              <Stat label="PF" value={team.pointsFor.toFixed(0)} />
-              <Stat label="Karma" value={String(team.karma)} />
-              <Stat label="FAAB" value={`$${team.faabRemaining}`} />
+            <dl className="grid grid-cols-4 gap-3 border-t border-border pt-3">
+              <TeamStat label="Record" value={team.record} />
+              <TeamStat label="PF" value={team.pointsFor.toFixed(0)} />
+              <TeamStat label="Karma" value={String(team.karma)} />
+              <TeamStat label="FAAB" value={`$${team.faabRemaining}`} />
             </dl>
-          </CardBody>
+          </CardContent>
         </Card>
       ))}
     </div>
   );
 }
 
-function Stat({ label, value }: { label: string; value: string }) {
+function TeamStat({ label, value }: { label: string; value: string }) {
   return (
-    <div>
+    <div className="min-w-0">
       <dt className="eyebrow">{label}</dt>
-      <dd className="mt-1 font-mono text-sm tabular-nums text-ink">{value}</dd>
+      <dd className="mt-1.5 truncate font-mono text-sm tabular-nums text-foreground">{value}</dd>
     </div>
   );
 }

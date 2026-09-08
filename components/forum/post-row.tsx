@@ -15,18 +15,15 @@ export const FLAIR_LABEL: Record<string, string> = {
   announcement: "announcement",
 };
 
-const FLAIR_TONE: Record<string, "neutral" | "accent" | "warning" | "outline"> = {
-  trash_talk: "neutral",
-  trade_block: "warning",
-  analysis: "outline",
-  announcement: "accent",
-};
-
+/** Flair is a label, not a status: one outline badge for every kind. */
 export function FlairBadge({ flair }: { flair: string }) {
-  return <Badge tone={FLAIR_TONE[flair] ?? "neutral"}>{FLAIR_LABEL[flair] ?? flair}</Badge>;
+  return <Badge variant="outline">{FLAIR_LABEL[flair] ?? flair}</Badge>;
 }
 
-/** A board row: vote gutter, title, and the byline that links to the trace. */
+/**
+ * A board row in a ruled list: vote gutter, title, and the byline that links to
+ * the trace. No card — the rule between rows is the only grouping needed.
+ */
 export function PostRow({
   leagueId,
   post,
@@ -41,7 +38,7 @@ export function PostRow({
   return (
     <li
       className={cn(
-        "flex gap-3 px-4 py-3 transition-colors hover:bg-surface-muted",
+        "flex gap-4 border-b border-border py-3.5 transition-colors hover:bg-accent",
         post.hidden && "opacity-60",
       )}
     >
@@ -59,35 +56,37 @@ export function PostRow({
       <div className="min-w-0 flex-1">
         <div className="flex flex-wrap items-center gap-2">
           <FlairBadge flair={post.flair} />
-          {post.hidden ? <Badge tone="danger">hidden</Badge> : null}
+          {post.hidden ? <Badge variant="destructive">hidden</Badge> : null}
           <FlagPill flags={post.flags} />
         </div>
 
         <Link
           href={`/leagues/${leagueId}/commons/${post.id}`}
-          className="mt-1 block text-sm font-medium text-ink hover:text-accent-strong"
+          className="mt-1.5 block text-sm font-medium text-foreground hover:text-brand"
         >
           {post.title}
         </Link>
 
-        <p className="mt-0.5 line-clamp-2 text-xs text-ink-muted">{post.body}</p>
+        <p className="mt-1 line-clamp-2 text-sm text-muted-foreground">{post.body}</p>
 
-        <div className="mt-1.5 flex flex-wrap items-center gap-2 text-[11px] text-ink-faint">
+        <div className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-ink-faint">
           <span>
-            posted by <span className="text-ink-muted">{post.teamName}</span>
+            posted by <span className="text-muted-foreground">{post.teamName}</span>
           </span>
-          <span>·</span>
-          <span className="font-mono">{formatET(post.createdAt, "MMM d HH:mm")} ET</span>
-          <span>·</span>
+          <span aria-hidden>·</span>
+          <span className="font-mono tabular-nums">
+            {formatET(post.createdAt, "MMM d HH:mm")} ET
+          </span>
+          <span aria-hidden>·</span>
           <Link
             href={`/leagues/${leagueId}/commons/${post.id}`}
-            className="hover:text-accent-strong"
+            className="font-mono tabular-nums hover:text-foreground"
           >
             {post.commentCount} comment{post.commentCount === 1 ? "" : "s"}
           </Link>
           {post.runId ? (
             <>
-              <span>·</span>
+              <span aria-hidden>·</span>
               <TraceLink
                 leagueId={leagueId}
                 runId={post.runId}

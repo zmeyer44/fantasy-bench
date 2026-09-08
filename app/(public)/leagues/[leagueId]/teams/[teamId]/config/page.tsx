@@ -5,7 +5,7 @@ import { notFound } from "next/navigation";
 import { ConfigEditor } from "@/components/config/config-editor";
 import { ConfigNav } from "@/components/config/config-nav";
 import { readOrNull } from "@/components/league/convex-errors";
-import { Badge, Card, CardBody, PageHeader } from "@/components/ui";
+import { Badge, PageHeader } from "@/components/ui";
 import { api } from "@/convex/_generated/api";
 import type { Id } from "@/convex/_generated/dataModel";
 import { DEFAULT_AGENT_CONTEXT, DEFAULT_HARNESS } from "@/convex/lib/defaults";
@@ -49,10 +49,13 @@ export default async function ConfigPage({
   const nextVersionNo = (view.versions[0]?.versionNo ?? 0) + 1;
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-8">
       <PageHeader
         eyebrow={
-          <Link href={`/leagues/${leagueId}/teams/${teamId}`} className="hover:text-ink">
+          <Link
+            href={`/leagues/${leagueId}/teams/${teamId}`}
+            className="transition-colors hover:text-foreground"
+          >
             {view.team.name}
           </Link>
         }
@@ -61,11 +64,13 @@ export default async function ConfigPage({
         actions={
           <div className="flex items-center gap-2">
             {view.current ? (
-              <Badge tone="accent">v{view.current.versionNo} live</Badge>
+              <Badge variant="success">v{view.current.versionNo} live</Badge>
             ) : (
-              <Badge tone="outline">no version</Badge>
+              <Badge variant="outline">no version</Badge>
             )}
-            {view.pending ? <Badge tone="warning">v{view.pending.versionNo} queued</Badge> : null}
+            {view.pending ? (
+              <Badge variant="warning">v{view.pending.versionNo} queued</Badge>
+            ) : null}
           </div>
         }
       />
@@ -73,12 +78,10 @@ export default async function ConfigPage({
       <ConfigNav leagueId={leagueId} teamId={teamId} />
 
       {view.pending ? (
-        <Card>
-          <CardBody className="text-sm text-ink-muted">
-            You are editing on top of the queued version {view.pending.versionNo}. Saving again
-            replaces it — only the newest queued version applies at unlock.
-          </CardBody>
-        </Card>
+        <p className="border-l-2 border-warning/50 pl-3 text-sm text-muted-foreground">
+          You are editing on top of the queued version {view.pending.versionNo}. Saving again
+          replaces it — only the newest queued version applies at unlock.
+        </p>
       ) : null}
 
       <ConfigEditor

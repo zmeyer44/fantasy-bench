@@ -1,35 +1,36 @@
 "use client";
 
 import { useMutation, useQuery } from "convex/react";
+import { ArrowDown, ArrowUp, X } from "lucide-react";
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 
+import { formatUsd } from "@/components/cost/format";
+import { MarkdownEditor, clearDraft } from "@/components/editor/markdown-editor";
+import {
+  mutationErrorIssues,
+  mutationErrorMessage,
+  type ConvexIssue,
+} from "@/components/league/convex-errors";
 import {
   Badge,
   Button,
-  Card,
-  CardBody,
-  CardFooter,
-  CardHeader,
+  Checkbox,
   Field,
+  FieldDescription,
+  FieldLabel,
   Input,
-  Select,
+  NativeSelect,
+  NativeSelectOption,
   Textarea,
   cn,
 } from "@/components/ui";
 import { api } from "@/convex/_generated/api";
 import type { Id } from "@/convex/_generated/dataModel";
 import type { HarnessSettings } from "@/convex/lib/config_pure";
-import { formatUsd } from "@/components/cost/format";
 import { MODEL_CATALOG, findModel } from "@/lib/models";
-import {
-  mutationErrorIssues,
-  mutationErrorMessage,
-  type ConvexIssue,
-} from "@/components/league/convex-errors";
 import { formatET } from "@/lib/time";
 
-import { Markdown } from "./markdown";
 import { AttachSkillDialog, AuthorSkillDialog, type AttachedSkill } from "./skill-picker";
 import { Toast, type ToastTone } from "./toast";
 
@@ -79,7 +80,6 @@ export function ConfigEditor(props: ConfigEditorProps) {
   const [harness, setHarness] = useState<HarnessSettings>(initial.harness);
   const [changeSummary, setChangeSummary] = useState("");
 
-  const [previewContext, setPreviewContext] = useState(false);
   const [attachOpen, setAttachOpen] = useState(false);
   const [authorOpen, setAuthorOpen] = useState(false);
   const [toast, setToast] = useState<{ message: string; tone: ToastTone } | null>(null);
@@ -136,8 +136,8 @@ export function ConfigEditor(props: ConfigEditorProps) {
     estimateInput.modelId !== modelId ||
     estimateInput.skillIds.join() !== skillIds.join();
 
-  const charCount = contextMd.length;
-  const overLimit = charCount > rules.contextCharLimit;
+  const overLimit = contextMd.length > rules.contextCharLimit;
+  const draftKey = `context:${leagueId}:${teamId}`;
 
   // Convex mutations: the versions list, the lock banner and the changelog are
   // all live subscriptions, so a save needs no refetch — only local feedback.
@@ -172,6 +172,7 @@ export function ConfigEditor(props: ConfigEditorProps) {
       });
       setChangeSummary("");
       setNote("");
+      clearDraft(draftKey);
       setToast({
         message: result.applied
           ? `Version ${result.versionNo} saved and applied.`
@@ -206,7 +207,7 @@ export function ConfigEditor(props: ConfigEditorProps) {
   const disabled = !canEdit;
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-8">
       <LockBanner
         open={lock.open}
         nextChangeLabel={nextChangeLabel}
@@ -215,205 +216,191 @@ export function ConfigEditor(props: ConfigEditorProps) {
         canEdit={canEdit}
       />
 
-      <div className="grid gap-6 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
+      <div className="grid gap-10 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
         {/* ------------------------------------------------------ pane 1 */}
-        <div className="space-y-6">
-          <Card>
-            <CardHeader
-              title="Context"
-              description="The system prompt your agent runs with. Markdown."
-              action={
-                <button
-                  type="button"
-                  className="text-xs text-accent-strong underline underline-offset-2"
-                  onClick={() => setPreviewContext((p) => !p)}
-                >
-                  {previewContext ? "Edit" : "Preview"}
-                </button>
-              }
+        <div className="space-y-10">
+          <Section
+            title="Context"
+            description="The system prompt your agent runs with. Markdown, public to the league."
+          >
+            <MarkdownEditor
+              kind="context"
+              aria-label="Agent context"
+              value={contextMd}
+              onChange={setContextMd}
+              disabled={disabled}
+              maxChars={rules.contextCharLimit}
+              draftKey={draftKey}
+              onSave={() => {
+                if (!disabled && !saving) void submitVersion();
+              }}
+              placeholder={"# How to run this team\n\nStrategy, preferences, heuristics. Use Insert for a starting structure."}
             />
-            <CardBody className="space-y-2">
-              {previewContext ? (
-                <div className="min-h-64 rounded-md border border-line px-3 py-2">
-                  <Markdown>{contextMd || "_Nothing written yet._"}</Markdown>
-                </div>
-              ) : (
-                <Textarea
-                  rows={22}
-                  value={contextMd}
-                  disabled={disabled}
-                  onChange={(e) => setContextMd(e.target.value)}
-                  aria-invalid={overLimit}
-                  className={cn(overLimit && "border-danger")}
-                />
-              )}
-              <div className="flex items-center justify-between">
-                <p className="text-xs text-ink-faint">
-                  Public to the league. Everyone can read what you wrote.
-                </p>
-                <p
-                  className={cn(
-                    "font-mono text-[11px] tabular-nums",
-                    overLimit ? "font-semibold text-danger" : "text-ink-faint",
-                  )}
-                >
-                  {charCount.toLocaleString()} / {rules.contextCharLimit.toLocaleString()}
-                </p>
-              </div>
-            </CardBody>
-          </Card>
+            <p className="mt-2.5 text-sm text-muted-foreground">
+              Everyone in the league can read what you wrote. The limit of{" "}
+              <span className="font-mono tabular-nums">{rules.contextCharLimit.toLocaleString()}</span>{" "}
+              characters is set by the commissioner.
+            </p>
+          </Section>
 
-          <Card>
-            <CardHeader
-              title="Note to agent"
-              description="A scratchpad. It is appended to the context — and cleared — on your next save."
+          <Section
+            title="Note to agent"
+            description="A scratchpad. It is appended to the context — and cleared — on your next save."
+          >
+            <Textarea
+              rows={4}
+              aria-label="Note to agent"
+              value={note}
+              disabled={disabled}
+              maxLength={4_000}
+              placeholder="You benched your best receiver on a hunch. Weight the projection more heavily next time."
+              onChange={(e) => setNote(e.target.value)}
             />
-            <CardBody className="space-y-2">
-              <Textarea
-                rows={4}
-                value={note}
-                disabled={disabled}
-                maxLength={4_000}
-                placeholder="You benched your best receiver on a hunch. Weight the projection more heavily next time."
-                onChange={(e) => setNote(e.target.value)}
-              />
-              <div className="flex justify-end">
-                <Button
-                  size="sm"
-                  variant="secondary"
-                  disabled={disabled || savingNote}
-                  onClick={() => void submitNote()}
-                >
-                  {savingNote ? "Saving…" : "Save note"}
-                </Button>
-              </div>
-            </CardBody>
-          </Card>
+            <div className="mt-2.5 flex justify-end">
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                disabled={disabled || savingNote}
+                onClick={() => void submitNote()}
+              >
+                {savingNote ? "Saving…" : "Save note"}
+              </Button>
+            </div>
+          </Section>
 
           {/* ---------------------------------------------------- pane 2 */}
-          <Card>
-            <CardHeader
-              title="Skills"
-              description="Injected in this order, after your context."
-              action={
-                <div className="flex gap-2">
-                  <Button size="sm" variant="secondary" disabled={disabled} onClick={() => setAttachOpen(true)}>
-                    Attach from library
-                  </Button>
-                  <Button size="sm" variant="secondary" disabled={disabled} onClick={() => setAuthorOpen(true)}>
-                    Author new
-                  </Button>
-                </div>
-              }
-            />
-            <CardBody>
-              {skills.length === 0 ? (
-                <p className="text-sm text-ink-muted">
-                  No skills attached. Your agent runs on its context alone.
-                </p>
-              ) : (
-                <ol className="space-y-2">
-                  {skills.map((skill, i) => (
-                    <li
-                      key={skill.id}
-                      className="flex items-start gap-3 rounded-md border border-line px-3 py-2"
-                    >
-                      <span className="mt-0.5 font-mono text-[10px] text-ink-faint">{i + 1}</span>
-                      <div className="min-w-0 flex-1">
-                        <Link
-                          href={`/skills/${skill.slug}`}
-                          className="text-sm font-medium text-ink hover:text-accent-strong"
+          <Section
+            title="Skills"
+            description="Injected in this order, after your context."
+            action={
+              <>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  disabled={disabled}
+                  onClick={() => setAttachOpen(true)}
+                >
+                  Attach from library
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  disabled={disabled}
+                  onClick={() => setAuthorOpen(true)}
+                >
+                  Author new
+                </Button>
+              </>
+            }
+          >
+            {skills.length === 0 ? (
+              <p className="text-sm text-muted-foreground">
+                No skills attached. Your agent runs on its context alone.
+              </p>
+            ) : (
+              <ol className="divide-y divide-border border-b border-border">
+                {skills.map((skill, i) => (
+                  <li key={skill.id} className="flex items-start gap-3 py-2.5">
+                    <span className="mt-1 font-mono text-[10px] text-ink-faint tabular-nums">
+                      {String(i + 1).padStart(2, "0")}
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <Link
+                        href={`/skills/${skill.slug}`}
+                        className="text-sm font-medium text-foreground transition-colors hover:text-brand"
+                      >
+                        {skill.name}
+                      </Link>
+                      <p className="mt-0.5 line-clamp-2 text-sm text-muted-foreground">
+                        {skill.description || `${skill.bodyMd.length.toLocaleString()} chars`}
+                      </p>
+                    </div>
+                    {!disabled ? (
+                      <div className="flex shrink-0 items-center gap-0.5">
+                        <Button
+                          type="button"
+                          size="icon-sm"
+                          variant="ghost"
+                          aria-label={`Move ${skill.name} up`}
+                          disabled={i === 0}
+                          onClick={() => move(i, -1)}
                         >
-                          {skill.name}
-                        </Link>
-                        <p className="mt-0.5 line-clamp-2 text-xs text-ink-muted">
-                          {skill.description || `${skill.bodyMd.length.toLocaleString()} chars`}
-                        </p>
+                          <ArrowUp />
+                        </Button>
+                        <Button
+                          type="button"
+                          size="icon-sm"
+                          variant="ghost"
+                          aria-label={`Move ${skill.name} down`}
+                          disabled={i === skills.length - 1}
+                          onClick={() => move(i, 1)}
+                        >
+                          <ArrowDown />
+                        </Button>
+                        <Button
+                          type="button"
+                          size="icon-sm"
+                          variant="ghost"
+                          aria-label={`Detach ${skill.name}`}
+                          onClick={() => setSkills((c) => c.filter((s) => s.id !== skill.id))}
+                        >
+                          <X />
+                        </Button>
                       </div>
-                      {!disabled ? (
-                        <div className="flex shrink-0 items-center gap-1">
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            aria-label={`Move ${skill.name} up`}
-                            disabled={i === 0}
-                            onClick={() => move(i, -1)}
-                          >
-                            ↑
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            aria-label={`Move ${skill.name} down`}
-                            disabled={i === skills.length - 1}
-                            onClick={() => move(i, 1)}
-                          >
-                            ↓
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            aria-label={`Detach ${skill.name}`}
-                            onClick={() => setSkills((c) => c.filter((s) => s.id !== skill.id))}
-                          >
-                            ✕
-                          </Button>
-                        </div>
-                      ) : null}
-                    </li>
-                  ))}
-                </ol>
-              )}
-            </CardBody>
-            <CardFooter>
+                    ) : null}
+                  </li>
+                ))}
+              </ol>
+            )}
+            <p className="mt-3 text-sm text-ink-faint">
               Skills are attached by id: if the author edits one, your future runs get the new text.
-            </CardFooter>
-          </Card>
+            </p>
+          </Section>
         </div>
 
         {/* ------------------------------------------------------ pane 3 */}
-        <div className="space-y-6">
-          <Card>
-            <CardHeader title="Model" description="Version-pinned. Prices per million tokens." />
-            <CardBody className="space-y-3">
-              <Select
-                value={modelId}
-                disabled={disabled}
-                aria-label="Model"
-                onChange={(e) => setModelId(e.target.value)}
-              >
-                {allowed.map((m) => (
-                  <option key={m.modelId} value={m.modelId}>
-                    {m.displayName} — {m.provider}
-                  </option>
-                ))}
-                {!allowed.some((m) => m.modelId === modelId) ? (
-                  <option value={modelId}>{modelId} (not allowlisted)</option>
-                ) : null}
-              </Select>
+        <div className="space-y-10 lg:border-l lg:border-border lg:pl-10">
+          <Section title="Model" description="Version-pinned. Prices per million tokens.">
+            <NativeSelect
+              className="w-full"
+              value={modelId}
+              disabled={disabled}
+              aria-label="Model"
+              onChange={(e) => setModelId(e.target.value)}
+            >
+              {allowed.map((m) => (
+                <NativeSelectOption key={m.modelId} value={m.modelId}>
+                  {m.displayName} — {m.provider}
+                </NativeSelectOption>
+              ))}
+              {!allowed.some((m) => m.modelId === modelId) ? (
+                <NativeSelectOption value={modelId}>{modelId} (not allowlisted)</NativeSelectOption>
+              ) : null}
+            </NativeSelect>
 
-              {model ? (
-                <dl className="space-y-1.5">
-                  <SpecRow label="Gateway id" value={model.modelId} mono />
-                  <SpecRow label="Provider" value={model.provider} />
-                  <SpecRow label="$ / M in" value={`$${model.inputPerM}`} />
-                  <SpecRow label="$ / M out" value={`$${model.outputPerM}`} />
-                  <SpecRow
-                    label="Reasoning"
-                    value={model.supportsReasoning ? "supported" : "not supported"}
-                  />
-                </dl>
-              ) : (
-                <p className="text-xs text-danger">
-                  {modelId} is not in the model catalog.
-                </p>
-              )}
-            </CardBody>
-          </Card>
+            {model ? (
+              <dl className="mt-4">
+                <SpecRow label="Gateway id" value={model.modelId} />
+                <SpecRow label="Provider" value={model.provider} />
+                <SpecRow label="$ / M in" value={`$${model.inputPerM}`} />
+                <SpecRow label="$ / M out" value={`$${model.outputPerM}`} />
+                <SpecRow
+                  label="Reasoning"
+                  value={model.supportsReasoning ? "supported" : "not supported"}
+                />
+              </dl>
+            ) : (
+              <p className="mt-3 text-sm text-destructive">
+                <span className="font-mono">{modelId}</span> is not in the model catalog.
+              </p>
+            )}
+          </Section>
 
-          <Card>
-            <CardHeader title="Harness" description="Runtime knobs, bounded by league rules." />
-            <CardBody className="space-y-4">
+          <Section title="Harness" description="Runtime knobs, bounded by league rules.">
+            <div className="space-y-5">
               <SliderField
                 label="Max steps"
                 hint={`League cap: ${rules.maxStepsCap}`}
@@ -425,25 +412,26 @@ export function ConfigEditor(props: ConfigEditorProps) {
                 onChange={(v) => setHarness((h) => ({ ...h, maxSteps: v }))}
               />
 
-              <Field
-                label="Token budget per run"
-                hint={
-                  rules.weeklyTokenCapPerTeam
-                    ? `Weekly team cap: ${rules.weeklyTokenCapPerTeam.toLocaleString()}`
-                    : "No weekly cap set by the commissioner."
-                }
-              >
+              <Field>
+                <FieldLabel htmlFor="token-budget">Token budget per run</FieldLabel>
                 <Input
+                  id="token-budget"
                   type="number"
                   min={1_000}
                   max={rules.weeklyTokenCapPerTeam ?? 2_000_000}
                   step={1_000}
                   disabled={disabled}
+                  className="font-mono tabular-nums"
                   value={harness.tokenBudget}
                   onChange={(e) =>
                     setHarness((h) => ({ ...h, tokenBudget: Number(e.target.value) || 0 }))
                   }
                 />
+                <FieldDescription>
+                  {rules.weeklyTokenCapPerTeam
+                    ? `Weekly team cap: ${rules.weeklyTokenCapPerTeam.toLocaleString()}`
+                    : "No weekly cap set by the commissioner."}
+                </FieldDescription>
               </Field>
 
               <SliderField
@@ -459,101 +447,116 @@ export function ConfigEditor(props: ConfigEditorProps) {
               />
 
               {model?.supportsReasoning ? (
-                <Field label="Reasoning effort">
-                  <Select
+                <Field>
+                  <FieldLabel htmlFor="reasoning-effort">Reasoning effort</FieldLabel>
+                  <NativeSelect
+                    id="reasoning-effort"
+                    className="w-full"
                     disabled={disabled}
                     value={harness.reasoningEffort ?? ""}
                     onChange={(e) =>
                       setHarness((h) => ({
                         ...h,
-                        reasoningEffort: (e.target.value || null) as HarnessSettings["reasoningEffort"],
+                        reasoningEffort: (e.target.value ||
+                          null) as HarnessSettings["reasoningEffort"],
                       }))
                     }
                   >
-                    <option value="">Off</option>
-                    <option value="low">Low</option>
-                    <option value="medium">Medium</option>
-                    <option value="high">High</option>
-                  </Select>
+                    <NativeSelectOption value="">Off</NativeSelectOption>
+                    <NativeSelectOption value="low">Low</NativeSelectOption>
+                    <NativeSelectOption value="medium">Medium</NativeSelectOption>
+                    <NativeSelectOption value="high">High</NativeSelectOption>
+                  </NativeSelect>
                 </Field>
               ) : (
-                <p className="text-xs text-ink-faint">
+                <p className="text-sm text-ink-faint">
                   {model?.displayName ?? "This model"} does not expose a reasoning-effort control.
                 </p>
               )}
 
-              <label className="flex items-center gap-2 text-sm">
-                <input
-                  type="checkbox"
-                  className="size-4 accent-[var(--color-accent)]"
+              <Field orientation="horizontal">
+                <Checkbox
+                  id="deliberate-mode"
                   disabled={disabled}
                   checked={harness.deliberateMode}
-                  onChange={(e) => setHarness((h) => ({ ...h, deliberateMode: e.target.checked }))}
+                  onCheckedChange={(checked) =>
+                    setHarness((h) => ({ ...h, deliberateMode: checked }))
+                  }
                 />
-                <span>
+                <FieldLabel htmlFor="deliberate-mode" className="font-normal">
                   Deliberate mode
-                  <span className="ml-2 text-xs text-ink-faint">
-                    plan before any tool call
-                  </span>
-                </span>
-              </label>
-            </CardBody>
-          </Card>
+                  <span className="text-muted-foreground">plan before any tool call</span>
+                </FieldLabel>
+              </Field>
+            </div>
+          </Section>
 
-          <Card>
-            <CardHeader
-              title="Live preview"
-              description="Updates as you type. Assumes 4 steps and 1,500 output tokens per step."
-            />
-            <CardBody className="space-y-3">
-              <div className="flex items-baseline justify-between">
-                <span className="eyebrow">Prompt tokens</span>
-                <span
-                  className={cn("font-mono text-lg tabular-nums", estimateStale && "opacity-50")}
+          <Section
+            title="Live preview"
+            description="Updates as you type. Assumes 4 steps and 1,500 output tokens per step."
+          >
+            <div className="grid grid-cols-2 divide-x divide-border border-y border-border">
+              <div className="min-w-0 py-3 pr-4">
+                <div className="eyebrow">Prompt tokens</div>
+                <div
+                  className={cn(
+                    "mt-2 font-mono text-xl font-medium tracking-tight tabular-nums",
+                    estimateStale && "opacity-50",
+                  )}
                 >
                   {estimate ? estimate.tokens.toLocaleString() : "—"}
-                </span>
+                </div>
               </div>
-              <div className="flex items-baseline justify-between">
-                <span className="eyebrow">Est. cost / run</span>
-                <span
-                  className={cn("font-mono text-lg tabular-nums", estimateStale && "opacity-50")}
+              <div className="min-w-0 py-3 pl-4">
+                <div className="eyebrow">Est. cost / run</div>
+                <div
+                  className={cn(
+                    "mt-2 font-mono text-xl font-medium tracking-tight tabular-nums",
+                    estimateStale && "opacity-50",
+                  )}
                 >
                   {estimate ? formatUsd(estimate.estimatedCostPerRunUsd) : "—"}
-                </span>
+                </div>
               </div>
-              {estimate ? (
-                <dl className="space-y-1 border-t border-line pt-3">
-                  <SpecRow label="Base prompt" value={estimate.breakdown.baseTokens.toLocaleString()} />
-                  <SpecRow label="Your context" value={estimate.breakdown.contextTokens.toLocaleString()} />
-                  <SpecRow label="Skills" value={estimate.breakdown.skillTokens.toLocaleString()} />
-                </dl>
-              ) : null}
-            </CardBody>
-            <CardFooter>
+            </div>
+            {estimate ? (
+              <dl className="mt-4">
+                <SpecRow label="Base prompt" value={estimate.breakdown.baseTokens.toLocaleString()} />
+                <SpecRow
+                  label="Your context"
+                  value={estimate.breakdown.contextTokens.toLocaleString()}
+                />
+                <SpecRow label="Skills" value={estimate.breakdown.skillTokens.toLocaleString()} />
+              </dl>
+            ) : null}
+            <p className="mt-3 text-sm text-ink-faint">
               Excludes the per-window snapshot, which varies. Input is priced uncached, so the real
               figure is usually lower.
-            </CardFooter>
-          </Card>
+            </p>
+          </Section>
         </div>
       </div>
 
       {/* --------------------------------------------------------- save bar */}
       {canEdit ? (
         <div className="sticky bottom-4 z-20">
-          <Card className="shadow-lg">
-            <CardBody className="flex flex-wrap items-end gap-3">
-              <div className="min-w-56 flex-1">
-                <Field label="Change summary" hint="Shown in the changelog. Optional.">
-                  <Input
-                    value={changeSummary}
-                    maxLength={200}
-                    placeholder="Weight floor over ceiling when favoured"
-                    onChange={(e) => setChangeSummary(e.target.value)}
-                  />
-                </Field>
-              </div>
+          <div className="rounded-lg border border-line-strong bg-card/95 shadow-lg backdrop-blur supports-backdrop-filter:bg-card/80">
+            <div className="flex flex-wrap items-end gap-4 p-4">
+              <Field className="min-w-56 flex-1">
+                <FieldLabel htmlFor="change-summary" className="eyebrow text-foreground">
+                  Change summary
+                </FieldLabel>
+                <Input
+                  id="change-summary"
+                  value={changeSummary}
+                  maxLength={200}
+                  placeholder="Weight floor over ceiling when favoured"
+                  onChange={(e) => setChangeSummary(e.target.value)}
+                />
+              </Field>
               <Button
+                type="button"
+                size="lg"
                 disabled={saving || overLimit}
                 onClick={() => void submitVersion()}
               >
@@ -563,32 +566,33 @@ export function ConfigEditor(props: ConfigEditorProps) {
                     ? `Save version ${props.nextVersionNo}`
                     : `Queue version ${props.nextVersionNo}`}
               </Button>
-            </CardBody>
+            </div>
             {error ? (
-              <CardFooter>
-                <p role="alert" className="text-danger">
+              <div className="border-t border-border px-4 py-3">
+                <p role="alert" className="text-sm text-destructive">
                   {error}
                 </p>
                 {issues.length > 0 ? (
-                  <ul className="mt-1 space-y-0.5">
+                  <ul className="mt-1.5 space-y-1">
                     {issues.map((issue) => (
-                      <li key={`${issue.field}:${issue.message}`} className="text-danger">
-                        <span className="font-mono text-[11px]">{issue.field}</span> — {issue.message}
+                      <li
+                        key={`${issue.field}:${issue.message}`}
+                        className="text-sm text-destructive"
+                      >
+                        <span className="font-mono text-xs">{issue.field}</span> — {issue.message}
                       </li>
                     ))}
                   </ul>
                 ) : null}
-              </CardFooter>
+              </div>
             ) : null}
-          </Card>
+          </div>
         </div>
       ) : (
-        <Card>
-          <CardBody className="text-sm text-ink-muted">
-            You are reading {props.teamName}&apos;s configuration. Every config in the league is
-            public; only its owner (or the commissioner) can change it.
-          </CardBody>
-        </Card>
+        <p className="border-t border-border pt-5 text-sm text-muted-foreground">
+          You are reading {props.teamName}&apos;s configuration. Every config in the league is
+          public; only its owner (or the commissioner) can change it.
+        </p>
       )}
 
       <AttachSkillDialog
@@ -611,6 +615,37 @@ export function ConfigEditor(props: ConfigEditorProps) {
   );
 }
 
+/**
+ * A titled block of the editor. Sections are separated by a rule rather than
+ * nested cards: the page is one dense surface, not a stack of boxes.
+ */
+function Section({
+  title,
+  description,
+  action,
+  children,
+}: {
+  title: string;
+  description?: string;
+  action?: ReactNode;
+  children: ReactNode;
+}) {
+  return (
+    <section>
+      <div className="mb-4 flex flex-wrap items-end justify-between gap-3 border-b border-border pb-3">
+        <div className="min-w-0">
+          <h2 className="eyebrow text-foreground">{title}</h2>
+          {description ? (
+            <p className="mt-2 text-sm text-muted-foreground">{description}</p>
+          ) : null}
+        </div>
+        {action ? <div className="flex shrink-0 items-center gap-2">{action}</div> : null}
+      </div>
+      {children}
+    </section>
+  );
+}
+
 function LockBanner({
   open,
   nextChangeLabel,
@@ -627,13 +662,11 @@ function LockBanner({
   return (
     <div
       className={cn(
-        "flex flex-wrap items-center gap-3 rounded-lg border px-4 py-3 text-sm",
-        open
-          ? "border-accent/40 bg-accent-soft text-accent-strong"
-          : "border-warning/40 bg-warning/10 text-ink",
+        "flex flex-wrap items-center gap-3 rounded-lg border px-3 py-2.5 text-sm",
+        open ? "border-brand/30 bg-brand-soft text-foreground" : "border-warning/40 bg-warning/10 text-foreground",
       )}
     >
-      <Badge tone={open ? "accent" : "warning"}>{open ? "editable" : "locked"}</Badge>
+      <Badge variant={open ? "success" : "warning"}>{open ? "editable" : "locked"}</Badge>
       <span>
         {open
           ? `Editable until ${nextChangeLabel}.`
@@ -642,7 +675,7 @@ function LockBanner({
             : `Locked until ${nextChangeLabel}.`}
       </span>
       {pendingVersionNo !== null ? (
-        <span className="text-ink-muted">
+        <span className="text-muted-foreground">
           Version {pendingVersionNo} is already queued and will replace it.
         </span>
       ) : null}
@@ -650,13 +683,12 @@ function LockBanner({
   );
 }
 
-function SpecRow({ label, value, mono }: { label: string; value: string; mono?: boolean }) {
+/** Label / value pair on a hairline rule. Values are mono because they are read as data. */
+function SpecRow({ label, value }: { label: string; value: string }) {
   return (
-    <div className="flex items-baseline justify-between gap-3">
-      <dt className="text-xs uppercase tracking-wide text-ink-faint">{label}</dt>
-      <dd className={cn("truncate text-xs text-ink", mono !== false && "font-mono tabular-nums")}>
-        {value}
-      </dd>
+    <div className="flex items-baseline justify-between gap-3 border-b border-border py-1.5 last:border-b-0">
+      <dt className="eyebrow">{label}</dt>
+      <dd className="truncate font-mono text-xs text-foreground tabular-nums">{value}</dd>
     </div>
   );
 }
@@ -683,16 +715,16 @@ function SliderField({
   format?: (value: number) => string;
 }) {
   return (
-    <div className="space-y-1.5">
-      <div className="flex items-baseline justify-between">
+    <div className="space-y-2">
+      <div className="flex items-baseline justify-between gap-3">
         <span className="eyebrow">{label}</span>
-        <span className="font-mono text-xs tabular-nums text-ink">
+        <span className="font-mono text-xs text-foreground tabular-nums">
           {format ? format(value) : value}
         </span>
       </div>
       <input
         type="range"
-        className="w-full accent-[var(--color-accent)]"
+        className="w-full accent-[var(--color-brand)]"
         aria-label={label}
         min={min}
         max={max}
@@ -701,7 +733,7 @@ function SliderField({
         disabled={disabled}
         onChange={(e) => onChange(Number(e.target.value))}
       />
-      {hint ? <p className="text-xs text-ink-faint">{hint}</p> : null}
+      {hint ? <p className="text-sm text-muted-foreground">{hint}</p> : null}
     </div>
   );
 }

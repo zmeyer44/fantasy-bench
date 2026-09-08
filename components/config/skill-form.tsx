@@ -1,15 +1,24 @@
 "use client";
 
 import { useMutation } from "convex/react";
+import { TriangleAlert } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
+import { MarkdownEditor, clearDraft } from "@/components/editor/markdown-editor";
 import { mutationErrorMessage } from "@/components/league/convex-errors";
-import { Button, Card, CardBody, CardFooter, CardHeader, Field, Input, Select, Textarea } from "@/components/ui";
+import {
+  Button,
+  Field,
+  FieldDescription,
+  FieldLabel,
+  Input,
+  NativeSelect,
+  NativeSelectOption,
+} from "@/components/ui";
 import { api } from "@/convex/_generated/api";
 import type { Id } from "@/convex/_generated/dataModel";
 
-import { Markdown } from "./markdown";
 import { Toast, type ToastTone } from "./toast";
 
 const MAX_BODY = 20_000;
@@ -28,7 +37,7 @@ export type SkillFormProps = {
   usageCount?: number;
 };
 
-/** Author or edit a library skill. Markdown editor with a preview toggle. */
+/** Author or edit a library skill: identity fields plus the markdown editor. */
 export function SkillForm({ mode, skillId, initial, usageCount = 0 }: SkillFormProps) {
   const router = useRouter();
 
@@ -38,13 +47,13 @@ export function SkillForm({ mode, skillId, initial, usageCount = 0 }: SkillFormP
   const [visibility, setVisibility] = useState<"public" | "private">(
     initial?.visibility ?? "public",
   );
-  const [preview, setPreview] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [toast, setToast] = useState<{ message: string; tone: ToastTone } | null>(null);
   const [pending, setPending] = useState(false);
 
   const create = useMutation(api.skills.create);
   const update = useMutation(api.skills.update);
+  const draftKey = `skill:${mode === "edit" && skillId ? skillId : "new"}`;
 
   async function submit() {
     setError(null);
@@ -52,6 +61,7 @@ export function SkillForm({ mode, skillId, initial, usageCount = 0 }: SkillFormP
     try {
       if (mode === "create") {
         const skill = await create({ name, description, bodyMd, visibility });
+        clearDraft(draftKey);
         router.push(`/skills/${skill.slug}`);
         return;
       }
@@ -63,6 +73,7 @@ export function SkillForm({ mode, skillId, initial, usageCount = 0 }: SkillFormP
         bodyMd,
         visibility,
       });
+      clearDraft(draftKey);
       setToast({ message: "Saved.", tone: "success" });
       // The skill page reads Convex live; navigating is enough.
       router.push(`/skills/${skill.slug}`);
@@ -76,86 +87,110 @@ export function SkillForm({ mode, skillId, initial, usageCount = 0 }: SkillFormP
   const valid = name.trim().length >= 3 && bodyMd.trim().length > 0 && bodyMd.length <= MAX_BODY;
 
   return (
-    <Card>
-      <CardHeader
-        title={mode === "create" ? "Author a skill" : "Edit skill"}
-        description="Markdown, injected into an agent's context after the owner's own context."
-        action={
-          <button
-            type="button"
-            className="text-xs text-accent-strong underline underline-offset-2"
-            onClick={() => setPreview((p) => !p)}
-          >
-            {preview ? "Edit" : "Preview"}
-          </button>
-        }
-      />
-      <CardBody className="space-y-4">
-        {mode === "edit" && usageCount > 0 ? (
-          <p className="rounded-md border border-warning/40 bg-warning/10 px-3 py-2 text-xs text-ink">
-            <strong>{usageCount}</strong> current config version
+    <form
+      className="space-y-8"
+      onSubmit={(event) => {
+        event.preventDefault();
+        void submit();
+      }}
+    >
+      {mode === "edit" && usageCount > 0 ? (
+        <p className="flex items-start gap-2.5 rounded-lg border border-warning/40 bg-warning/10 px-3 py-2.5 text-sm text-foreground">
+          <TriangleAlert className="mt-0.5 size-4 shrink-0 text-warning" aria-hidden />
+          <span>
+            <span className="font-mono tabular-nums">{usageCount}</span> current config version
             {usageCount === 1 ? "" : "s"} attach this skill. Skills are attached by id and are not
             versioned, so this edit changes what those agents read on their next run — including
             teams in other leagues.
-          </p>
-        ) : null}
+          </span>
+        </p>
+      ) : null}
 
-        <div className="grid gap-4 sm:grid-cols-2">
-          <Field label="Name">
-            <Input value={name} maxLength={80} onChange={(e) => setName(e.target.value)} />
+      <section className="space-y-5">
+        <div className="border-b border-border pb-3">
+          <h2 className="eyebrow text-foreground">Identity</h2>
+          <p className="mt-2 text-sm text-muted-foreground">
+            The name and one-line description shown in the library index.
+          </p>
+        </div>
+
+        <div className="grid gap-5 sm:grid-cols-2">
+          <Field>
+            <FieldLabel htmlFor="skill-name">Name</FieldLabel>
+            <Input
+              id="skill-name"
+              value={name}
+              maxLength={80}
+              onChange={(e) => setName(e.target.value)}
+            />
           </Field>
-          <Field label="Visibility" hint="Private skills are visible only to you.">
-            <Select
+          <Field>
+            <FieldLabel htmlFor="skill-visibility">Visibility</FieldLabel>
+            <NativeSelect
+              id="skill-visibility"
+              className="w-full"
               value={visibility}
               onChange={(e) => setVisibility(e.target.value as "public" | "private")}
             >
-              <option value="public">Public</option>
-              <option value="private">Private</option>
-            </Select>
+              <NativeSelectOption value="public">Public</NativeSelectOption>
+              <NativeSelectOption value="private">Private</NativeSelectOption>
+            </NativeSelect>
+            <FieldDescription>Private skills are visible only to you.</FieldDescription>
           </Field>
         </div>
 
-        <Field label="One-line description">
+        <Field>
+          <FieldLabel htmlFor="skill-description">One-line description</FieldLabel>
           <Input
+            id="skill-description"
             value={description}
             maxLength={280}
             onChange={(e) => setDescription(e.target.value)}
             placeholder="Read designations and practice reports correctly."
           />
         </Field>
+      </section>
 
-        <div>
-          <div className="eyebrow mb-1.5">Body</div>
-          {preview ? (
-            <div className="min-h-64 rounded-md border border-line px-3 py-3">
-              <Markdown>{bodyMd || "_Nothing to preview yet._"}</Markdown>
-            </div>
-          ) : (
-            <Textarea
-              rows={24}
-              value={bodyMd}
-              maxLength={MAX_BODY}
-              onChange={(e) => setBodyMd(e.target.value)}
-              placeholder={"# My skill\n\n## When to use it\n\n…"}
-            />
-          )}
-          <p className="mt-1 text-right font-mono text-[10px] text-ink-faint">
-            {bodyMd.length.toLocaleString()} / {MAX_BODY.toLocaleString()}
+      <section className="space-y-4">
+        <div className="border-b border-border pb-3">
+          <h2 className="eyebrow text-foreground">Body</h2>
+          <p className="mt-2 text-sm text-muted-foreground">
+            Markdown, injected into an agent&apos;s context after the owner&apos;s own context.
+            Start from a scaffold with Insert if you like.
           </p>
         </div>
 
-        {error ? (
-          <p role="alert" className="rounded-md border border-danger/40 bg-danger/10 px-3 py-2 text-xs text-danger">
-            {error}
-          </p>
-        ) : null}
-      </CardBody>
-      <CardFooter className="flex justify-end gap-2">
-        <Button disabled={pending || !valid} onClick={() => void submit()}>
+        <MarkdownEditor
+          kind="skill"
+          id="skill-body"
+          aria-label="Skill body"
+          value={bodyMd}
+          onChange={setBodyMd}
+          maxChars={MAX_BODY}
+          draftKey={draftKey}
+          onSave={() => {
+            if (valid && !pending) void submit();
+          }}
+          placeholder={"# My skill\n\n## When to use it\n\n…"}
+        />
+      </section>
+
+      {error ? (
+        <p
+          role="alert"
+          className="rounded-lg border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive"
+        >
+          {error}
+        </p>
+      ) : null}
+
+      <div className="flex justify-end gap-2 border-t border-border pt-5">
+        <Button type="submit" disabled={pending || !valid}>
           {pending ? "Saving…" : mode === "create" ? "Publish skill" : "Save changes"}
         </Button>
-      </CardFooter>
+      </div>
+
       <Toast message={toast?.message ?? null} tone={toast?.tone} onDismiss={() => setToast(null)} />
-    </Card>
+    </form>
   );
 }

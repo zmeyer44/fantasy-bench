@@ -1,4 +1,4 @@
-import { Badge, Card, CardBody, CardFooter, CardHeader } from "@/components/ui";
+import { Badge, Section, SectionHeader, cn } from "@/components/ui";
 
 import type { FilmRoomEfficiency } from "./lineup-compare";
 
@@ -18,54 +18,87 @@ export function CounterfactualPanel({
   reason: string | null;
 }) {
   return (
-    <Card>
-      <CardHeader
+    <Section>
+      <SectionHeader
         title="Counterfactual"
         description="What the best available call was worth."
       />
-      <CardBody className="space-y-4">
+
+      <div className="space-y-4">
         {efficiency ? (
           <>
-            <p className="text-sm text-ink">
-              Your optimal lineup would have scored{" "}
-              <span className="font-mono font-semibold tabular-nums text-accent-strong">
-                {efficiency.optimal.toFixed(2)}
-              </span>
-              . Your agent scored{" "}
-              <span className="font-mono font-semibold tabular-nums">
-                {efficiency.actual.toFixed(2)}
-              </span>
-              .
-            </p>
+            <dl className="space-y-2">
+              <Figure label="Optimal" value={efficiency.optimal.toFixed(2)} tone="brand" />
+              <Figure label="Your agent" value={efficiency.actual.toFixed(2)} />
+              <Figure
+                label="Left on the bench"
+                value={`${efficiency.pointsLeftOnBench > 0 ? "−" : ""}${efficiency.pointsLeftOnBench.toFixed(2)}`}
+                tone={efficiency.pointsLeftOnBench > 0 ? "destructive" : "faint"}
+                last
+              />
+            </dl>
             <div className="flex flex-wrap items-center gap-2">
-              <Badge tone={efficiency.efficiency >= 0.95 ? "accent" : "warning"}>
+              <Badge variant={efficiency.efficiency >= 0.95 ? "success" : "warning"}>
                 {(efficiency.efficiency * 100).toFixed(1)}% efficient
               </Badge>
-              <Badge tone={efficiency.pointsLeftOnBench > 0 ? "danger" : "outline"}>
-                {efficiency.pointsLeftOnBench.toFixed(2)} left on the bench
-              </Badge>
-              <Badge tone="outline">{efficiency.basis} points</Badge>
+              <Badge variant="outline">{efficiency.basis} points</Badge>
             </div>
           </>
         ) : (
-          <p className="text-sm text-ink-muted">
+          <p className="text-sm text-muted-foreground">
             n/a — {reason ?? "no stored snapshot for this week."}
           </p>
         )}
 
-        <div className="rounded-md border border-dashed border-line-strong px-3 py-3">
-          <div className="eyebrow mb-1">Coming in v1.1</div>
-          <p className="text-sm text-ink-muted">
-            &ldquo;Your previous config version would have started Z.&rdquo; Replaying a run against
-            the stored snapshot needs the runtime&apos;s replay path; the snapshots are already
-            retained for it.
+        <div className="rounded-lg border border-dashed border-line-strong px-3 py-3">
+          <div className="eyebrow mb-2">Coming in v1.1</div>
+          <p className="text-sm text-muted-foreground">
+            &ldquo;Your previous config version would have started Z.&rdquo; Replaying a run
+            against the stored snapshot needs the runtime&apos;s replay path; the snapshots are
+            already retained for it.
           </p>
         </div>
-      </CardBody>
-      <CardFooter>
-        &ldquo;Optimal&rdquo; is the best lineup by the projection the agent could see at window
-        open — a decision-quality measure, not hindsight.
-      </CardFooter>
-    </Card>
+
+        <p className="text-sm text-muted-foreground">
+          &ldquo;Optimal&rdquo; is the best lineup by the projection the agent could see at window
+          open — a decision-quality measure, not hindsight.
+        </p>
+      </div>
+    </Section>
+  );
+}
+
+/** One row of the actual-vs-optimal ledger: tracked label left, figure right. */
+function Figure({
+  label,
+  value,
+  tone = "default",
+  last,
+}: {
+  label: string;
+  value: string;
+  tone?: "default" | "brand" | "destructive" | "faint";
+  last?: boolean;
+}) {
+  return (
+    <div
+      className={cn(
+        "flex items-baseline justify-between gap-3",
+        last ? undefined : "border-b border-border pb-2",
+      )}
+    >
+      <dt className="eyebrow">{label}</dt>
+      <dd
+        className={cn(
+          "font-mono text-sm font-medium tabular-nums",
+          tone === "brand" && "text-brand",
+          tone === "destructive" && "text-destructive",
+          tone === "faint" && "text-ink-faint",
+          tone === "default" && "text-foreground",
+        )}
+      >
+        {value}
+      </dd>
+    </div>
   );
 }

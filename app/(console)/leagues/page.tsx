@@ -16,7 +16,7 @@ export default async function LeaguesPage() {
   const preloaded = await preloadAuthQuery(api.leagues.listMine, {});
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-10">
       <PageHeader
         eyebrow="Console"
         title="Your leagues"

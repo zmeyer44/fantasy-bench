@@ -1,6 +1,16 @@
 import Link from "next/link";
+import type { ReactNode } from "react";
 
-import { Badge, Card, CardBody, CardHeader, cn } from "@/components/ui";
+import {
+  Badge,
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+  cn,
+} from "@/components/ui";
 import type { ConfigDiff, DiffHunk } from "@/convex/lib/config_pure";
 
 /**
@@ -20,9 +30,9 @@ export function DiffView({
   const changedFields = fieldRows.filter((f) => f.changed);
 
   return (
-    <div className="space-y-6">
-      <Card>
-        <CardHeader
+    <div className="space-y-10">
+      <section className="space-y-4">
+        <SectionHeading
           title="Model & harness"
           description={
             changedFields.length === 0
@@ -30,81 +40,77 @@ export function DiffView({
               : `${changedFields.length} setting${changedFields.length === 1 ? "" : "s"} changed.`
           }
         />
-        <CardBody className="p-0">
-          <table className="w-full border-collapse text-sm">
-            <thead className="border-b border-line">
-              <tr>
-                <th className="eyebrow px-4 py-2 text-left">Setting</th>
-                <th className="eyebrow px-4 py-2 text-left">
-                  v{diff.a.versionNo}
-                </th>
-                <th className="eyebrow px-4 py-2 text-left">
-                  v{diff.b.versionNo}
-                </th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-line">
-              {fieldRows.map((f) => (
-                <tr key={f.field} className={f.changed ? "bg-accent-soft/40" : undefined}>
-                  <td className="px-4 py-2 text-ink-muted">{f.label}</td>
-                  <td
-                    className={cn(
-                      "px-4 py-2 font-mono text-xs tabular-nums",
-                      f.changed && "text-danger line-through decoration-danger/50",
-                    )}
-                  >
-                    {f.from ?? "—"}
-                  </td>
-                  <td
-                    className={cn(
-                      "px-4 py-2 font-mono text-xs tabular-nums",
-                      f.changed ? "font-semibold text-accent-strong" : "text-ink",
-                    )}
-                  >
-                    {f.to ?? "—"}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </CardBody>
-      </Card>
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Setting</TableHead>
+              <TableHead>v{diff.a.versionNo}</TableHead>
+              <TableHead>v{diff.b.versionNo}</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {fieldRows.map((f) => (
+              <TableRow key={f.field}>
+                <TableCell className="text-muted-foreground">{f.label}</TableCell>
+                <TableCell
+                  className={cn(
+                    "font-mono text-xs",
+                    f.changed
+                      ? "text-destructive line-through decoration-destructive/50"
+                      : "text-muted-foreground",
+                  )}
+                >
+                  {f.from ?? "—"}
+                </TableCell>
+                <TableCell
+                  className={cn(
+                    "font-mono text-xs",
+                    f.changed ? "font-semibold text-brand" : "text-foreground",
+                  )}
+                >
+                  {f.to ?? "—"}
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </section>
 
-      <Card>
-        <CardHeader
+      <section className="space-y-4">
+        <SectionHeading
           title="Skills"
           description={
             diff.skills.changed
-              ? diff.skills.reordered && diff.skills.added.length === 0 && diff.skills.removed.length === 0
+              ? diff.skills.reordered &&
+                diff.skills.added.length === 0 &&
+                diff.skills.removed.length === 0
                 ? "Same skills, different injection order."
                 : "Attached skills changed."
               : "No change."
           }
         />
-        <CardBody className="space-y-3">
-          {diff.skills.after.length === 0 && diff.skills.before.length === 0 ? (
-            <p className="text-sm text-ink-muted">No skills attached to either version.</p>
-          ) : (
-            <div className="grid gap-4 sm:grid-cols-2">
-              <SkillColumn
-                title={`v${diff.a.versionNo}`}
-                skills={diff.skills.before}
-                highlight={new Set(diff.skills.removed.map((s) => s.id))}
-                tone="danger"
-              />
-              <SkillColumn
-                title={`v${diff.b.versionNo}`}
-                skills={diff.skills.after}
-                highlight={new Set(diff.skills.added.map((s) => s.id))}
-                tone="accent"
-              />
-            </div>
-          )}
-        </CardBody>
-      </Card>
+        {diff.skills.after.length === 0 && diff.skills.before.length === 0 ? (
+          <p className="text-sm text-muted-foreground">No skills attached to either version.</p>
+        ) : (
+          <div className="grid gap-6 sm:grid-cols-2">
+            <SkillColumn
+              title={`v${diff.a.versionNo}`}
+              skills={diff.skills.before}
+              highlight={new Set(diff.skills.removed.map((s) => s.id))}
+              tone="danger"
+            />
+            <SkillColumn
+              title={`v${diff.b.versionNo}`}
+              skills={diff.skills.after}
+              highlight={new Set(diff.skills.added.map((s) => s.id))}
+              tone="accent"
+            />
+          </div>
+        )}
+      </section>
 
-      <Card>
-        <CardHeader
+      <section className="space-y-4">
+        <SectionHeading
           title="Context"
           description={
             diff.context.changed
@@ -115,27 +121,47 @@ export function DiffView({
             leagueId && teamId ? (
               <Link
                 href={`/leagues/${leagueId}/teams/${teamId}/config`}
-                className="text-xs text-accent-strong underline underline-offset-2"
+                className="text-sm text-muted-foreground underline decoration-border underline-offset-4 transition-colors hover:text-foreground hover:decoration-brand"
               >
                 Open editor
               </Link>
             ) : null
           }
         />
-        <CardBody className="p-0">
-          {diff.context.changed ? (
-            <div className="overflow-x-auto">
-              {diff.context.hunks.map((hunk, i) => (
-                <Hunk key={i} hunk={hunk} />
-              ))}
-            </div>
-          ) : (
-            <p className="px-4 py-6 text-sm text-ink-muted">
-              The context is byte-identical between these two versions.
-            </p>
-          )}
-        </CardBody>
-      </Card>
+        {diff.context.changed ? (
+          <div className="overflow-x-auto rounded-lg border border-border">
+            {diff.context.hunks.map((hunk, i) => (
+              <Hunk key={i} hunk={hunk} />
+            ))}
+          </div>
+        ) : (
+          <p className="text-sm text-muted-foreground">
+            The context is byte-identical between these two versions.
+          </p>
+        )}
+      </section>
+    </div>
+  );
+}
+
+function SectionHeading({
+  title,
+  description,
+  action,
+}: {
+  title: string;
+  description?: string;
+  action?: ReactNode;
+}) {
+  return (
+    <div className="flex flex-wrap items-end justify-between gap-3 border-b border-border pb-3">
+      <div className="min-w-0">
+        <h2 className="eyebrow text-foreground">{title}</h2>
+        {description ? (
+          <p className="mt-2 text-sm text-muted-foreground">{description}</p>
+        ) : null}
+      </div>
+      {action ? <div className="shrink-0">{action}</div> : null}
     </div>
   );
 }
@@ -153,7 +179,7 @@ function SkillColumn({
 }) {
   return (
     <div>
-      <div className="eyebrow mb-2">{title}</div>
+      <div className="eyebrow mb-2.5">{title}</div>
       {skills.length === 0 ? (
         <p className="text-sm text-ink-faint">none</p>
       ) : (
@@ -162,15 +188,15 @@ function SkillColumn({
             <li
               key={s.id}
               className={cn(
-                "flex items-center gap-2 rounded border px-2 py-1 text-sm",
+                "flex items-center gap-2.5 rounded-sm border px-2.5 py-1.5 text-sm",
                 highlight.has(s.id)
                   ? tone === "accent"
-                    ? "border-accent/40 bg-accent-soft text-accent-strong"
-                    : "border-danger/40 bg-danger/10 text-danger"
-                  : "border-line bg-surface-muted/50 text-ink",
+                    ? "border-brand/30 bg-brand-soft text-brand"
+                    : "border-destructive/40 bg-destructive/10 text-destructive"
+                  : "border-border text-foreground",
               )}
             >
-              <span className="font-mono text-[10px] text-ink-faint">{i + 1}</span>
+              <span className="font-mono text-[10px] text-ink-faint tabular-nums">{i + 1}</span>
               <span className="truncate">{s.name}</span>
             </li>
           ))}
@@ -182,37 +208,41 @@ function SkillColumn({
 
 function Hunk({ hunk }: { hunk: DiffHunk }) {
   return (
-    <div className="border-b border-line last:border-b-0">
-      <div className="bg-surface-muted px-4 py-1 font-mono text-[10px] text-ink-faint">
+    <div className="border-b border-border last:border-b-0">
+      <div className="border-b border-border bg-muted px-3 py-1.5 font-mono text-[10px] tracking-wider text-ink-faint">
         {hunk.header}
       </div>
-      <table className="w-full border-collapse font-mono text-[11px] leading-5">
+      <table className="w-full border-collapse font-mono text-xs leading-5 tabular-nums">
         <tbody>
           {hunk.lines.map((line, i) => (
             <tr
               key={i}
               className={cn(
-                line.kind === "add" && "bg-accent-soft",
-                line.kind === "del" && "bg-danger/10",
+                line.kind === "add" && "bg-brand-soft",
+                line.kind === "del" && "bg-destructive/10",
               )}
             >
-              <td className="w-10 select-none px-2 text-right text-ink-faint">{line.oldNo ?? ""}</td>
-              <td className="w-10 select-none px-2 text-right text-ink-faint">{line.newNo ?? ""}</td>
+              <td className="w-10 px-2 text-right text-ink-faint select-none">
+                {line.oldNo ?? ""}
+              </td>
+              <td className="w-10 px-2 text-right text-ink-faint select-none">
+                {line.newNo ?? ""}
+              </td>
               <td
                 className={cn(
-                  "w-4 select-none text-center",
-                  line.kind === "add" && "text-accent-strong",
-                  line.kind === "del" && "text-danger",
+                  "w-4 text-center select-none",
+                  line.kind === "add" && "text-brand",
+                  line.kind === "del" && "text-destructive",
                 )}
               >
                 {line.kind === "add" ? "+" : line.kind === "del" ? "−" : ""}
               </td>
               <td
                 className={cn(
-                  "whitespace-pre-wrap break-words px-2 py-0.5",
-                  line.kind === "add" && "text-accent-strong",
-                  line.kind === "del" && "text-danger",
-                  line.kind === "context" && "text-ink-muted",
+                  "px-2 py-0.5 break-words whitespace-pre-wrap",
+                  line.kind === "add" && "text-brand",
+                  line.kind === "del" && "text-destructive",
+                  line.kind === "context" && "text-muted-foreground",
                 )}
               >
                 {line.text || " "}
@@ -234,11 +264,11 @@ export function DiffSummaryBadges({ diff }: { diff: ConfigDiff }) {
   if (harness > 0) bits.push(`${harness} harness`);
   if (diff.skills.changed) bits.push("skills");
 
-  if (bits.length === 0) return <Badge tone="outline">no change</Badge>;
+  if (bits.length === 0) return <Badge variant="outline">no change</Badge>;
   return (
     <div className="flex flex-wrap gap-1">
       {bits.map((b) => (
-        <Badge key={b} tone="accent">
+        <Badge key={b} variant="secondary">
           {b}
         </Badge>
       ))}

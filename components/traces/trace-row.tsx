@@ -14,24 +14,24 @@ export function TraceRow({
   showTeam?: boolean;
 }) {
   return (
-    <div className="border-b border-line px-4 py-3 last:border-0">
+    <div className="border-b border-border py-3 transition-colors last:border-b-0 hover:bg-accent">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0 flex-1 space-y-1.5">
           <Link
             href={`/leagues/${leagueId}/traces/${run.id}`}
-            className="block font-mono text-sm text-ink hover:text-accent-strong"
+            className="block font-mono text-sm text-foreground hover:text-brand-strong"
           >
             {run.windowLabelText}
             {run.teamName ? ` · ${run.teamName}` : ""}
           </Link>
           <RunTags run={run} leagueId={leagueId} showTeam={showTeam} />
           {run.rationale ? (
-            <p className="line-clamp-2 max-w-3xl text-xs leading-relaxed text-ink-muted">
+            <p className="line-clamp-2 max-w-3xl text-sm leading-relaxed text-muted-foreground">
               {run.rationale}
             </p>
           ) : null}
         </div>
-        <div className="shrink-0 text-right font-mono text-[10px] tabular-nums text-ink-faint">
+        <div className="shrink-0 space-y-0.5 text-right font-mono text-[10px] tabular-nums text-ink-faint">
           <div>{formatET(run.createdAt, "MMM d HH:mm")} ET</div>
           <div>
             {run.stepCount} step{run.stepCount === 1 ? "" : "s"} · {run.actionCount} action

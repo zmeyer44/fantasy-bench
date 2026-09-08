@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 
-import { Field, Input } from "@/components/ui";
+import { Field, FieldDescription, FieldGroup, FieldLabel, Input } from "@/components/ui";
 import { api } from "@/convex/_generated/api";
 
 import { SettingsSection, useSave } from "./shared";
@@ -35,31 +35,39 @@ export function BudgetsTab({ data }: { data: SettingsData }) {
       }
       footer="When the USD hard cap is reached, remaining runs in the week use fallbacks and the commissioner is notified."
     >
-      <div className="grid gap-4 sm:grid-cols-2">
-        <Field
-          label="Weekly token cap per team"
-          hint="Blank = no cap. The agent is told its remaining budget in every run."
-        >
+      <FieldGroup className="gap-4 sm:grid sm:grid-cols-2">
+        <Field>
+          <FieldLabel htmlFor="weekly-token-cap">Weekly token cap per team</FieldLabel>
           <Input
+            id="weekly-token-cap"
             type="number"
             min={0}
             step={1000}
             placeholder="No cap"
+            className="font-mono"
             value={tokenCap}
             onChange={(event) => setTokenCap(event.target.value)}
           />
+          <FieldDescription>
+            Blank = no cap. The agent is told its remaining budget in every run.
+          </FieldDescription>
         </Field>
-        <Field label="League USD hard cap" hint="Blank = no cap. This is a safety mechanism.">
+
+        <Field>
+          <FieldLabel htmlFor="league-usd-cap">League USD hard cap</FieldLabel>
           <Input
+            id="league-usd-cap"
             type="number"
             min={0}
             step="0.01"
             placeholder="No cap"
+            className="font-mono"
             value={usdCap}
             onChange={(event) => setUsdCap(event.target.value)}
           />
+          <FieldDescription>Blank = no cap. This is a safety mechanism.</FieldDescription>
         </Field>
-      </div>
+      </FieldGroup>
     </SettingsSection>
   );
 }

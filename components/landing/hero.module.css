@@ -1,0 +1,148 @@
+/* Reference-specific tokens stay local to the landing page and its header. */
+.hero,
+.header {
+  --hero-lime: #baff29;
+  --hero-blue: #193fe5;
+  --hero-ink: #a9b9e0;
+  --hero-rule: #29303d;
+  --brand: var(--hero-lime);
+  --primary: var(--hero-lime);
+  background: #090c0d;
+}
+
+.hero { overflow: hidden; border-bottom: 1px solid var(--hero-rule); }
+.heroInner { position: relative; max-width: 1800px; min-height: 680px; height: 50vw; max-height: 900px; margin: auto; }
+.copy { position: relative; z-index: 2; width: 42%; padding-top: 5.1%; margin-left: 5.1%; }
+.kicker, .description, .signature, .art, .header { font-family: var(--font-geist-mono), monospace; }
+.kicker { display: flex; align-items: center; gap: 1.15em; color: var(--hero-ink); font-size: clamp(11px, .91vw, 16px); letter-spacing: .12em; text-transform: uppercase; }
+.kicker span { color: var(--hero-lime); font-size: 1.4em; line-height: 1; }
+.heading { margin-top: 1.6vw; font-family: var(--font-geist-sans), sans-serif; font-size: clamp(100px, 9.45vw, 170px); font-weight: 950; letter-spacing: -.065em; line-height: .78; text-transform: uppercase; color: #fafafa; }
+.heading span { display: block; width: fit-content; transform: scaleX(1.14); transform-origin: left; }
+.heading span + span { margin-top: .025em; }
+.heading span:last-child { color: var(--hero-lime); }
+.description { margin-top: 1.15vw; font-size: clamp(17px, 1.28vw, 23px); line-height: 1.35; letter-spacing: .11em; color: var(--hero-ink); }
+.actions { display: flex; gap: 1.55vw; margin-top: 2.3vw; }
+.primaryAction, .secondaryAction { height: clamp(48px, 3.65vw, 66px); border-radius: 0; font-family: var(--font-geist-mono), monospace; font-size: clamp(11px, .94vw, 17px); letter-spacing: .08em; text-transform: uppercase; padding-inline: 1.9vw; }
+.primaryAction { gap: 2vw; background: var(--hero-lime); color: #090c0d; }
+.primaryAction svg { width: 24px; height: 24px; }
+.secondaryAction { border-color: var(--hero-rule); background: transparent; color: var(--hero-ink); }
+.secondaryAction:hover { border-color: var(--hero-ink); background: #14191e; }
+.signature { display: flex; align-items: center; gap: 2.7vw; margin-top: 3.05vw; color: var(--hero-ink); font-size: clamp(10px, .76vw, 14px); letter-spacing: .07em; line-height: 1.45; text-transform: uppercase; }
+.signal { display: flex; gap: 9px; }
+.signal i { height: 3px; width: 2.3vw; background: var(--hero-rule); }
+.signal i:first-child { background: var(--hero-lime); }
+.art { position: absolute; left: 40%; right: 1.7%; top: 0; height: 100%; color: var(--hero-ink); font-size: clamp(10px, .8vw, 14px); line-height: 1.3; letter-spacing: .08em; text-transform: uppercase; }
+.blueBand { position: absolute; left: 48.05%; top: 1%; width: 27.5%; height: 92.4%; background: var(--hero-blue); }
+.blueBand::after { content: ""; position: absolute; inset: 0; background-image: linear-gradient(#86a2ff1a 1px, transparent 1px), linear-gradient(90deg, #86a2ff1a 1px, transparent 1px); background-size: 27px 27px; }
+.construction { position: absolute; inset: 0; width: 100%; height: 100%; }
+.helmet { position: absolute; left: 11.5%; top: 8%; width: 73.3%; height: 81%; }
+.helmet img { object-fit: contain; }
+.strategy { position: absolute; top: 5.5%; left: 1.2%; }
+.marker { display: block; color: var(--hero-lime); margin-bottom: 18px; }
+.marker::after, .dash { content: ""; display: block; width: 20px; height: 2px; background: var(--hero-lime); margin-top: 10px; }
+.guidance { position: absolute; top: 8.8%; left: 82%; }
+.dash { margin-top: 18px; }
+.fieldNote { position: absolute; top: 30.6%; left: 86.5%; }
+.fieldNote svg { width: 5.1vw; max-width: 92px; height: auto; margin-bottom: 24px; }
+.stats { position: absolute; bottom: 7.8%; left: 1.2%; border-left: 1px solid var(--hero-ink); padding: 12px 0 12px 23px; }
+.stats div { display: flex; flex-direction: row-reverse; justify-content: flex-end; align-items: center; gap: 22px; margin: 6px 0; }
+.stats dd { min-width: 24px; color: #fafafa; font-size: 15px; font-weight: 600; }
+.stats div:last-child dd { font-size: 24px; line-height: 16px; }
+.stats dt { font-size: .9em; }
+.season { position: absolute; bottom: 9.9%; left: 86.5%; }
+
+.header { position: relative; backdrop-filter: none; border-color: var(--hero-rule); }
+.header::before { content: ""; position: absolute; left: 0; top: 0; width: 7px; height: 76%; background: #5070f5; }
+.nav { height: clamp(80px, 6.35vw, 114px); max-width: 1800px; padding-inline: 5.1%; gap: 4.5vw; }
+.brandLink { gap: 1.6vw; }
+.brandLogo { width: 43px; height: 43px; }
+.brandName { font-family: var(--font-geist-mono), monospace; font-size: clamp(16px, 1.36vw, 24px); font-weight: 700; letter-spacing: .08em; white-space: nowrap; }
+.navLinks { gap: 2.2vw; }
+.navLinks a, .login { font-size: clamp(11px, .86vw, 15px); color: var(--hero-ink); letter-spacing: .08em; }
+.account { gap: 2.5vw; }
+.signup { height: clamp(44px, 3.25vw, 59px); border-radius: 0; padding-inline: 1.45vw; gap: 1.55vw; font-size: clamp(11px, .93vw, 16px); }
+.signup svg { width: 23px; height: 23px; }
+
+@media (min-width: 1800px) {
+  .heading { margin-top: 33px; }
+  .description { margin-top: 27px; }
+  .actions { margin-top: 41px; gap: 28px; }
+  .signature { margin-top: 55px; }
+}
+@media (min-width: 901px) and (max-width: 1200px) {
+  .copy { padding-top: 70px; }
+  .heading { font-size: 9.65vw; }
+  .description { margin-top: 24px; }
+  .actions { gap: 12px; margin-top: 32px; }
+  .primaryAction, .secondaryAction { padding-inline: 15px; font-size: 10px; }
+  .signature { margin-top: 40px; }
+  .nav { gap: 3vw; }
+  .navLinks { gap: 1vw; }
+  .guidance, .fieldNote, .season { font-size: 9px; }
+}
+@media (max-width: 900px) {
+  .heroInner { height: auto; max-height: none; min-height: 0; }
+  .copy { width: auto; margin: 0; padding: 56px 6% 0; }
+  .kicker { font-size: 12px; }
+  .heading { font-size: clamp(96px, 15.5vw, 139px); margin-top: 30px; line-height: .81; }
+  .description { margin-top: 26px; font-size: 19px; }
+  .actions { margin-top: 28px; gap: 16px; }
+  .primaryAction, .secondaryAction { height: 54px; padding-inline: 24px; font-size: 12px; }
+  .primaryAction { gap: 28px; }
+  .signature { margin-top: 32px; font-size: 10px; gap: 24px; }
+  .signal i { width: 28px; }
+  .art { position: relative; left: auto; right: auto; width: 100%; height: auto; aspect-ratio: 1.2; margin-top: 20px; font-size: 11px; }
+  .strategy { left: 6%; }
+  .stats { left: 6%; bottom: 5%; padding-left: 15px; }
+  .fieldNote svg { width: 7vw; margin-bottom: 16px; }
+  .guidance { left: 83%; }
+  .nav { height: 80px; padding-inline: 5%; gap: 20px; }
+  .brandLink { gap: 12px; }
+  .brandName { font-size: 16px; }
+  .brandLogo { width: 36px; height: 36px; }
+  .navLinks { display: none; }
+  .menuTrigger { display: inline-flex; width: 44px; height: 44px; }
+  .account { gap: 12px; }
+  .signup { padding-inline: 16px; font-size: 11px; gap: 12px; }
+}
+@media (max-width: 600px) {
+  .nav { height: 72px; gap: 8px; }
+  .brandName { font-size: 12px; letter-spacing: .04em; }
+  .brandLogo { width: 31px; height: 31px; }
+  .brandLink { gap: 7px; }
+  .account { gap: 4px; }
+  .signup { padding-inline: 10px; font-size: 9px; gap: 4px; height: 40px; letter-spacing: .04em; }
+  .signup svg { width: 16px; height: 16px; }
+  .menuTrigger { width: 36px; }
+  .copy { padding-top: 42px; }
+  .kicker { font-size: 10px; gap: 12px; letter-spacing: .08em; }
+  .heading { font-size: 20.7vw; margin-top: 29px; }
+  .heading span { transform: scaleX(1.1); }
+  .description { font-size: 16px; margin-top: 24px; }
+  .actions { gap: 10px; }
+  .primaryAction, .secondaryAction { flex: 1; font-size: 9px; padding-inline: 10px; height: 48px; }
+  .primaryAction { gap: 12px; }
+  .primaryAction svg { width: 19px; height: 19px; }
+  .signature { gap: 20px; margin-top: 26px; font-size: 9px; }
+  .signal { gap: 6px; }
+  .signal i { width: 22px; height: 2px; }
+  .art { aspect-ratio: 1; margin-top: 28px; font-size: 8px; }
+  .blueBand { left: 50%; width: 33%; }
+  .helmet { left: 7%; width: 87%; top: 12%; height: 76%; }
+  .strategy { top: 2%; }
+  .marker { margin-bottom: 10px; }
+  .guidance { left: 79%; top: 1%; font-size: 7px; }
+  .guidance .dash { margin-top: 8px; }
+  .fieldNote { display: none; }
+  .stats { bottom: 4%; font-size: 8px; padding: 6px 0 6px 10px; }
+  .stats div { gap: 8px; margin: 3px 0; }
+  .stats dd { font-size: 11px; min-width: 18px; }
+  .stats div:last-child dd { font-size: 18px; }
+  .season { bottom: 6%; left: 86%; font-size: 7px; }
+  .season .dash { width: 14px; margin-top: 9px; }
+}
+@media (max-width: 359px) {
+  .brandName { max-width: 76px; white-space: normal; line-height: 1.2; }
+  .kicker { font-size: 9px; }
+  .primaryAction, .secondaryAction { font-size: 8px; letter-spacing: .04em; }
+}

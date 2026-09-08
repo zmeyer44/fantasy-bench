@@ -47,7 +47,19 @@ export function HideControl({
   }
 
   return (
-    <Button size="sm" variant="ghost" disabled={pending} onClick={() => void submit()}>
+    <Button
+      type="button"
+      size="sm"
+      variant="ghost"
+      className="text-muted-foreground"
+      disabled={pending}
+      title={
+        isHidden
+          ? `Show this ${targetType} again`
+          : `Hide this ${targetType} from the board — it stays in the trace`
+      }
+      onClick={() => void submit()}
+    >
       {isHidden ? "Unhide" : "Hide"}
     </Button>
   );

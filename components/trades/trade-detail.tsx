@@ -1,5 +1,6 @@
 "use client";
 
+import type { ReactNode } from "react";
 import Link from "next/link";
 import { usePreloadedQuery, type Preloaded } from "convex/react";
 
@@ -10,7 +11,7 @@ import { StatusTimeline } from "@/components/trades/status-timeline";
 import { TradeCard } from "@/components/trades/trade-card";
 import { TraceLink } from "@/components/trades/trace-link";
 import { VetoPanel } from "@/components/trades/veto-panel";
-import { Card, CardBody, CardHeader, PageHeader } from "@/components/ui";
+import { PageHeader } from "@/components/ui";
 import type { api } from "@/convex/_generated/api";
 import { formatET } from "@/lib/time";
 
@@ -39,7 +40,7 @@ export function TradeDetail({
   const teamNameById = Object.fromEntries(teamNames.map((t) => [t.id, t.name]));
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-8">
       <PageHeader
         eyebrow={`Trade · week ${trade.weekNo ?? "—"}`}
         title={`${trade.proposerTeamName} ↔ ${trade.recipientTeamName}`}
@@ -59,78 +60,71 @@ export function TradeDetail({
 
       <TradeCard leagueId={leagueId} trade={trade} fairnessFloor={fairnessFloor} />
 
-      <div className="grid gap-6 lg:grid-cols-3">
-        <div className="space-y-6 lg:col-span-2">
-          <Card>
-            <CardHeader
-              title="Fairness"
-              description="Rest-of-season projection × positional scarcity × roster fit. Computed deterministically."
-            />
-            <CardBody>
-              {trade.fairnessDetail ? (
-                <FairnessBreakdown
-                  detail={trade.fairnessDetail}
-                  proposerTeamName={trade.proposerTeamName}
-                  recipientTeamName={trade.recipientTeamName}
-                  teamNameById={teamNameById}
-                />
-              ) : (
-                <p className="text-sm text-ink-muted">
-                  Fairness is scored when the recipient accepts.
-                </p>
-              )}
-            </CardBody>
-          </Card>
+      <div className="grid gap-8 lg:grid-cols-3">
+        <div className="space-y-8 lg:col-span-2">
+          <Section
+            title="Fairness"
+            note="ROS projection × scarcity × roster fit — deterministic"
+          >
+            {trade.fairnessDetail ? (
+              <FairnessBreakdown
+                detail={trade.fairnessDetail}
+                proposerTeamName={trade.proposerTeamName}
+                recipientTeamName={trade.recipientTeamName}
+                teamNameById={teamNameById}
+              />
+            ) : (
+              <p className="text-sm text-muted-foreground">
+                Fairness is scored when the recipient accepts.
+              </p>
+            )}
+          </Section>
 
-          <Card>
-            <CardHeader title="Timeline" description="Every transition, with its trace." />
-            <CardBody className="px-0 py-0">
-              <ol className="divide-y divide-line">
-                {trade.events.map((event) => (
-                  <li
-                    key={event.id}
-                    className="flex flex-wrap items-baseline gap-x-3 gap-y-1 px-4 py-2.5"
-                  >
-                    <span className="w-36 shrink-0 font-mono text-[10px] uppercase tracking-wider text-ink-faint">
-                      {formatET(event.createdAt, "MMM d HH:mm:ss")} ET
+          <Section title="Timeline" note="every transition, with its trace" flush>
+            <ol>
+              {trade.events.map((event) => (
+                <li
+                  key={event.id}
+                  className="flex flex-wrap items-baseline gap-x-3 gap-y-1 border-b border-border py-2.5 last:border-b-0"
+                >
+                  <span className="w-36 shrink-0 font-mono text-[10px] tracking-wider uppercase tabular-nums text-ink-faint">
+                    {formatET(event.createdAt, "MMM d HH:mm:ss")} ET
+                  </span>
+                  <span className="text-sm font-medium text-foreground">
+                    {event.type.replace("_", " ")}
+                  </span>
+                  {event.actorTeamName ? (
+                    <span className="text-sm text-muted-foreground">by {event.actorTeamName}</span>
+                  ) : (
+                    <span className="text-sm text-ink-faint">by the platform</span>
+                  )}
+                  {event.fromStatus && event.toStatus ? (
+                    <span className="font-mono text-[10px] text-ink-faint">
+                      {event.fromStatus} → {event.toStatus}
                     </span>
-                    <span className="text-sm font-medium text-ink">
-                      {event.type.replace("_", " ")}
-                    </span>
-                    {event.actorTeamName ? (
-                      <span className="text-xs text-ink-muted">by {event.actorTeamName}</span>
-                    ) : (
-                      <span className="text-xs text-ink-faint">by the platform</span>
-                    )}
-                    {event.fromStatus && event.toStatus ? (
-                      <span className="font-mono text-[10px] text-ink-faint">
-                        {event.fromStatus} → {event.toStatus}
-                      </span>
-                    ) : null}
-                    <span className="ml-auto">
-                      <TraceLink
-                        leagueId={leagueId}
-                        runId={event.runId}
-                        stepIndex={event.stepIndex}
-                      />
-                    </span>
-                  </li>
-                ))}
-              </ol>
-            </CardBody>
-          </Card>
+                  ) : null}
+                  <span className="ml-auto">
+                    <TraceLink
+                      leagueId={leagueId}
+                      runId={event.runId}
+                      stepIndex={event.stepIndex}
+                    />
+                  </span>
+                </li>
+              ))}
+            </ol>
+          </Section>
         </div>
 
-        <div className="space-y-6">
-          <Card>
-            <CardHeader title="Review" />
-            <CardBody className="space-y-4">
+        <div className="space-y-8">
+          <Section title="Review">
+            <div className="space-y-4">
               <StatusTimeline status={trade.status} />
 
               {trade.status === "in_review" && trade.reviewEndsAt ? (
                 <ReviewCountdown endsAt={trade.reviewEndsAt} />
               ) : trade.resolvedAt ? (
-                <p className="font-mono text-xs text-ink-muted">
+                <p className="font-mono text-xs text-muted-foreground">
                   resolved {formatET(trade.resolvedAt, "MMM d HH:mm")} ET
                 </p>
               ) : null}
@@ -153,22 +147,21 @@ export function TradeDetail({
                     canVote={canVote}
                   />
                 ) : (
-                  <p className="text-sm text-ink-muted">
+                  <p className="text-sm text-muted-foreground">
                     This trade cleared the fairness floor, so it processes automatically when the
                     review period ends. No vote is needed.
                   </p>
                 )
               ) : null}
-            </CardBody>
-          </Card>
+            </div>
+          </Section>
 
-          <Card>
-            <CardHeader title="Related" />
-            <CardBody className="space-y-2 text-sm">
+          <Section title="Related" flush>
+            <div className="space-y-2 py-3 text-sm">
               {trade.threadId ? (
                 <Link
                   href={`/leagues/${leagueId}/threads/${trade.threadId}`}
-                  className="block text-ink-muted hover:text-accent-strong"
+                  className="block text-muted-foreground transition-colors hover:text-brand-strong"
                 >
                   Read the negotiation →
                 </Link>
@@ -176,7 +169,7 @@ export function TradeDetail({
               {trade.parentTradeId ? (
                 <Link
                   href={`/leagues/${leagueId}/trades/${trade.parentTradeId}`}
-                  className="block text-ink-muted hover:text-accent-strong"
+                  className="block text-muted-foreground transition-colors hover:text-brand-strong"
                 >
                   ← The offer this counters
                 </Link>
@@ -185,7 +178,7 @@ export function TradeDetail({
                 <Link
                   key={id}
                   href={`/leagues/${leagueId}/trades/${id}`}
-                  className="block text-ink-muted hover:text-accent-strong"
+                  className="block text-muted-foreground transition-colors hover:text-brand-strong"
                 >
                   The counter-offer →
                 </Link>
@@ -194,12 +187,35 @@ export function TradeDetail({
                 leagueId={leagueId}
                 runId={trade.createdByRunId}
                 label="Proposer's run"
-                className="block text-ink-muted hover:text-accent-strong"
+                className="block text-sm text-muted-foreground transition-colors hover:text-brand-strong"
               />
-            </CardBody>
-          </Card>
+            </div>
+          </Section>
         </div>
       </div>
     </div>
+  );
+}
+
+/** Section heading + hairline rule. Grouping without another box. */
+function Section({
+  title,
+  note,
+  flush = false,
+  children,
+}: {
+  title: string;
+  note?: string;
+  flush?: boolean;
+  children: ReactNode;
+}) {
+  return (
+    <section>
+      <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 border-b border-border pb-2">
+        <h2 className="eyebrow text-foreground">{title}</h2>
+        {note ? <p className="font-mono text-[10px] text-ink-faint">{note}</p> : null}
+      </div>
+      <div className={flush ? undefined : "pt-4"}>{children}</div>
+    </section>
   );
 }

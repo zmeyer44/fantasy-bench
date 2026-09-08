@@ -2,11 +2,21 @@
 
 import { useState } from "react";
 
-import { Badge, Button, Field, Input, Select } from "@/components/ui";
+import {
+  Badge,
+  Button,
+  Field,
+  FieldDescription,
+  FieldGroup,
+  FieldLabel,
+  Input,
+  NativeSelect,
+  NativeSelectOption,
+} from "@/components/ui";
 import { api } from "@/convex/_generated/api";
 import { formatET } from "@/lib/time";
 
-import { SettingsSection, Toggle, useSave } from "./shared";
+import { SaveStatus, SettingsSection, ToggleField, useSave } from "./shared";
 import type { SettingsData } from "./types";
 
 /** Name, visibility, draft format/time, invite link, and starting the draft. */
@@ -25,8 +35,10 @@ export function LeagueTab({ data }: { data: SettingsData }) {
   const start = useSave(api.commissioner.startDraft);
   const rotate = useSave(api.commissioner.rotateJoinCode);
 
+  const unowned = data.teams.filter((team) => team.ownerUserId === null).length;
+
   return (
-    <div className="space-y-5">
+    <div className="space-y-10">
       <SettingsSection
         title="League"
         description="Public leagues render every spectator page without a login."
@@ -44,61 +56,81 @@ export function LeagueTab({ data }: { data: SettingsData }) {
           })
         }
       >
-        <Field label="League name">
-          <Input value={name} onChange={(event) => setName(event.target.value)} maxLength={60} />
+        <Field>
+          <FieldLabel htmlFor="league-name">League name</FieldLabel>
+          <Input
+            id="league-name"
+            value={name}
+            onChange={(event) => setName(event.target.value)}
+            maxLength={60}
+          />
         </Field>
 
-        <Toggle
+        <ToggleField
           label="Public league"
           hint="Anyone with the link can read standings, traces, and the forum."
           checked={isPublic}
           onChange={setIsPublic}
         />
 
-        <div className="grid gap-4 sm:grid-cols-2">
-          <Field
-            label="Draft format"
-            hint={locked ? "Frozen once the draft begins." : "Auction is a nomination + sealed-bid sequence."}
-          >
-            <Select
+        <FieldGroup className="gap-4 sm:grid sm:grid-cols-2">
+          <Field>
+            <FieldLabel htmlFor="draft-type">Draft format</FieldLabel>
+            <NativeSelect
+              id="draft-type"
+              className="w-full"
               value={draftType}
               disabled={locked}
               onChange={(event) => setDraftType(event.target.value as "snake" | "auction")}
             >
-              <option value="snake">Snake</option>
-              <option value="auction">Auction</option>
-            </Select>
+              <NativeSelectOption value="snake">Snake</NativeSelectOption>
+              <NativeSelectOption value="auction">Auction</NativeSelectOption>
+            </NativeSelect>
+            <FieldDescription>
+              {locked
+                ? "Frozen once the draft begins."
+                : "Auction is a nomination + sealed-bid sequence."}
+            </FieldDescription>
           </Field>
 
-          <Field label="Draft time" hint="Your local time; stored as UTC.">
+          <Field>
+            <FieldLabel htmlFor="draft-at">Draft time</FieldLabel>
             <Input
+              id="draft-at"
               type="datetime-local"
               value={draftAt}
               onChange={(event) => setDraftAt(event.target.value)}
             />
+            <FieldDescription>Your local time; stored as UTC.</FieldDescription>
           </Field>
-        </div>
+        </FieldGroup>
       </SettingsSection>
 
       <SettingsSection
         title="Invite link"
         description="Share this to let owners claim a team. Rotating it invalidates every previous link."
+        error={rotate.error}
         footer={
-          <span className="font-mono">
-            Code <span className="text-ink">{data.invite.code ?? "not minted yet"}</span>
-          </span>
+          <>
+            Code{" "}
+            <span className="font-mono text-foreground">
+              {data.invite.code ?? "not minted yet"}
+            </span>
+          </>
         }
       >
         <div className="flex flex-wrap items-center gap-2">
           <Input
             readOnly
+            aria-label="Invite link"
             value={data.invite.url ?? ""}
             placeholder="Rotate to mint a join code"
             className="min-w-64 flex-1 font-mono text-xs"
           />
           <Button
+            type="button"
             size="sm"
-            variant="secondary"
+            variant="outline"
             disabled={!data.invite.url}
             onClick={() => {
               void navigator.clipboard.writeText(data.invite.url ?? "");
@@ -109,6 +141,7 @@ export function LeagueTab({ data }: { data: SettingsData }) {
             {copied ? "Copied" : "Copy"}
           </Button>
           <Button
+            type="button"
             size="sm"
             variant="ghost"
             disabled={rotate.isPending}
@@ -117,7 +150,6 @@ export function LeagueTab({ data }: { data: SettingsData }) {
             Rotate
           </Button>
         </div>
-        {rotate.error ? <p className="text-xs text-danger">{rotate.error}</p> : null}
       </SettingsSection>
 
       <SettingsSection
@@ -136,11 +168,12 @@ export function LeagueTab({ data }: { data: SettingsData }) {
         }
       >
         <div className="flex flex-wrap items-center gap-3">
-          <Badge tone={league.status === "setup" ? "outline" : "accent"}>
+          <Badge variant={league.status === "setup" ? "outline" : "success"}>
             {league.status.replace("_", " ")}
           </Badge>
           {league.status === "setup" ? (
             <Button
+              type="button"
               size="sm"
               disabled={start.isPending}
               onClick={() =>
@@ -153,13 +186,12 @@ export function LeagueTab({ data }: { data: SettingsData }) {
               {start.isPending ? "Starting…" : "Start the draft"}
             </Button>
           ) : null}
-          {start.error ? <span className="text-xs text-danger">{start.error}</span> : null}
-          {start.saved ? <span className="text-xs text-accent-strong">Draft started.</span> : null}
+          <SaveStatus error={start.error} saved={start.saved} savedLabel="Draft started." />
         </div>
-        {data.teams.some((team) => team.ownerUserId === null) ? (
-          <p className="text-xs text-ink-muted">
-            {data.teams.filter((team) => team.ownerUserId === null).length} team(s) are unowned and
-            will draft on the default agent config.
+        {unowned > 0 ? (
+          <p className="text-sm text-muted-foreground">
+            {unowned} team{unowned === 1 ? "" : "s"} unowned — they will draft on the default agent
+            config.
           </p>
         ) : null}
       </SettingsSection>
@@ -167,7 +199,6 @@ export function LeagueTab({ data }: { data: SettingsData }) {
   );
 }
 
-/** `Date` → `YYYY-MM-DDTHH:mm` in the browser's zone, for `datetime-local`. */
 /** Epoch ms → the local wall-clock string `<input type="datetime-local">` wants. */
 function toLocalInput(epochMs: number): string {
   const date = new Date(epochMs);

@@ -12,44 +12,58 @@ import { cn } from "@/components/ui";
  */
 export function Markdown({ children, className }: { children: string; className?: string }) {
   return (
-    <div className={cn("space-y-3 text-sm leading-relaxed text-ink", className)}>
+    <div className={cn("space-y-3 text-sm leading-relaxed text-foreground", className)}>
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
         components={{
-          h1: (props) => <h1 className="mt-4 text-base font-semibold first:mt-0" {...props} />,
-          h2: (props) => <h2 className="mt-4 text-sm font-semibold first:mt-0" {...props} />,
-          h3: (props) => (
-            <h3 className="mt-3 text-xs font-semibold uppercase tracking-wide text-ink-muted" {...props} />
+          h1: (props) => (
+            <h1 className="mt-5 text-base font-semibold tracking-tight first:mt-0" {...props} />
           ),
-          p: (props) => <p className="text-sm text-ink" {...props} />,
+          h2: (props) => (
+            <h2 className="mt-5 text-sm font-semibold tracking-tight first:mt-0" {...props} />
+          ),
+          h3: (props) => <h3 className="eyebrow mt-4 text-foreground first:mt-0" {...props} />,
+          p: (props) => <p className="text-sm text-foreground" {...props} />,
           ul: (props) => <ul className="list-disc space-y-1 pl-5 text-sm" {...props} />,
           ol: (props) => <ol className="list-decimal space-y-1 pl-5 text-sm" {...props} />,
           li: (props) => <li className="text-sm" {...props} />,
           a: (props) => (
-            <a className="text-accent-strong underline underline-offset-2" rel="noreferrer" {...props} />
+            <a
+              className="text-foreground underline decoration-border underline-offset-4 transition-colors hover:decoration-brand"
+              rel="noreferrer"
+              {...props}
+            />
           ),
           blockquote: (props) => (
-            <blockquote className="border-l-2 border-line-strong pl-3 text-ink-muted" {...props} />
+            <blockquote
+              className="border-l-2 border-line-strong pl-3 text-muted-foreground"
+              {...props}
+            />
           ),
           code: (props) => (
-            <code className="rounded bg-surface-muted px-1 py-0.5 font-mono text-[11px]" {...props} />
+            <code className="rounded-sm bg-muted px-1 py-0.5 font-mono text-xs" {...props} />
           ),
           pre: (props) => (
             <pre
-              className="overflow-x-auto rounded-md border border-line bg-surface-muted p-3 font-mono text-[11px]"
+              className="overflow-x-auto rounded-lg border border-border bg-muted p-3 font-mono text-xs leading-relaxed"
               {...props}
             />
           ),
           table: (props) => (
             <div className="w-full overflow-x-auto">
-              <table className="w-full border-collapse text-xs" {...props} />
+              <table className="w-full caption-bottom border-collapse text-sm tabular-nums" {...props} />
             </div>
           ),
           th: (props) => (
-            <th className="border border-line px-2 py-1 text-left font-medium text-ink-muted" {...props} />
+            <th
+              className="border-b border-border px-3 py-2 text-left font-mono text-[10px] font-medium tracking-wider text-muted-foreground uppercase"
+              {...props}
+            />
           ),
-          td: (props) => <td className="border border-line px-2 py-1 align-top" {...props} />,
-          hr: () => <hr className="border-line" />,
+          td: (props) => (
+            <td className="border-b border-border px-3 py-2 align-top" {...props} />
+          ),
+          hr: () => <hr className="border-border" />,
         }}
       >
         {children}

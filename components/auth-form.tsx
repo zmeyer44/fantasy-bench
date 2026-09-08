@@ -6,7 +6,7 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useState } from "react";
 
-import { Button, Card, CardBody, Field, Input } from "@/components/ui";
+import { Button, Field, FieldDescription, FieldLabel, Input } from "@/components/ui";
 
 type Mode = "login" | "signup";
 
@@ -70,77 +70,83 @@ export function AuthForm({ mode }: { mode: Mode }) {
   }
 
   return (
-    <Card>
-      <CardBody className="space-y-5 p-6">
-        <div>
-          <div className="eyebrow">Fantasy Bench</div>
-          <h1 className="mt-2 text-lg font-semibold tracking-tight text-ink">{copy.title}</h1>
-        </div>
-
-        <form className="space-y-4" onSubmit={onSubmit}>
-          {mode === "signup" ? (
-            <Field label="Name" htmlFor="name">
-              <Input
-                id="name"
-                name="name"
-                autoComplete="name"
-                required
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                placeholder="Zach Meyer"
-              />
-            </Field>
-          ) : null}
-
-          <Field label="Email" htmlFor="email">
-            <Input
-              id="email"
-              name="email"
-              type="email"
-              autoComplete="email"
-              required
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder="you@example.com"
-            />
-          </Field>
-
-          <Field
-            label="Password"
-            htmlFor="password"
-            hint={mode === "signup" ? "At least 8 characters." : undefined}
-          >
-            <Input
-              id="password"
-              name="password"
-              type="password"
-              autoComplete={mode === "signup" ? "new-password" : "current-password"}
-              required
-              minLength={8}
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-            />
-          </Field>
-
-          {error ? (
-            <p role="alert" className="rounded-md border border-danger/40 bg-danger/10 px-3 py-2 text-xs text-danger">
-              {error}
-            </p>
-          ) : null}
-
-          <Button type="submit" className="w-full" disabled={pending}>
-            {pending ? "Working…" : copy.cta}
-          </Button>
-        </form>
-
-        <p className="text-xs text-ink-muted">
-          {copy.altText}{" "}
-          <Link href={copy.altHref} className="text-accent-strong underline underline-offset-2">
-            {copy.altLabel}
-          </Link>
+    <div className="space-y-8">
+      <div>
+        <div className="eyebrow text-brand">Fantasy Bench</div>
+        <h1 className="mt-3 text-2xl font-semibold tracking-tight text-foreground">{copy.title}</h1>
+        <p className="mt-1.5 text-sm text-muted-foreground">
+          {mode === "signup"
+            ? "Your agents run the team. You guide them."
+            : "Welcome back. Your agents kept working."}
         </p>
-      </CardBody>
-    </Card>
+      </div>
+
+      <form className="space-y-5" onSubmit={onSubmit}>
+        {mode === "signup" ? (
+          <Field>
+            <FieldLabel htmlFor="name">Name</FieldLabel>
+            <Input
+              id="name"
+              name="name"
+              autoComplete="name"
+              required
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="Zach Meyer"
+            />
+          </Field>
+        ) : null}
+
+        <Field>
+          <FieldLabel htmlFor="email">Email</FieldLabel>
+          <Input
+            id="email"
+            name="email"
+            type="email"
+            autoComplete="email"
+            required
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            placeholder="you@example.com"
+          />
+        </Field>
+
+        <Field>
+          <FieldLabel htmlFor="password">Password</FieldLabel>
+          <Input
+            id="password"
+            name="password"
+            type="password"
+            autoComplete={mode === "signup" ? "new-password" : "current-password"}
+            required
+            minLength={8}
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+          />
+          {mode === "signup" ? <FieldDescription>At least 8 characters.</FieldDescription> : null}
+        </Field>
+
+        {error ? (
+          <p
+            role="alert"
+            className="border border-destructive/40 bg-destructive/10 px-3 py-2 text-xs text-destructive"
+          >
+            {error}
+          </p>
+        ) : null}
+
+        <Button type="submit" variant="brand" size="lg" className="w-full" disabled={pending}>
+          {pending ? "Working…" : copy.cta}
+        </Button>
+      </form>
+
+      <p className="text-sm text-muted-foreground">
+        {copy.altText}{" "}
+        <Link href={copy.altHref} className="text-foreground underline underline-offset-4 hover:text-brand">
+          {copy.altLabel}
+        </Link>
+      </p>
+    </div>
   );
 }
 

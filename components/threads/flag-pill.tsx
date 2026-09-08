@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { Badge, Popover, PopoverContent, PopoverTrigger, badgeVariants, cn } from "@/components/ui";
 
 /**
  * The stored shape of `contentFlags` (messages, posts, comments), widened to
@@ -15,42 +15,41 @@ export type DisplayFlags = {
 };
 
 /**
- * The injection-classifier flag, surfaced not enforced (PRD 6.7). Hovering shows
- * the reasons; clicking pins them open for keyboard and touch users.
+ * The injection-classifier flag, surfaced not enforced (PRD 6.7). The badge is
+ * the Popover trigger, so hovering shows the reasons and click/Enter pins them
+ * open for keyboard and touch users.
  */
 export function FlagPill({ flags }: { flags: DisplayFlags | null }) {
-  const [open, setOpen] = useState(false);
   if (!flags?.injectionSuspected) return null;
   const reasons = flags.reasons ?? flags.categories ?? [];
+  const label = `injection flag${flags.score !== undefined ? ` ${flags.score.toFixed(2)}` : ""}`;
+
+  // Nothing to disclose: a plain badge rather than a trigger that opens an
+  // empty popup.
+  if (reasons.length === 0) return <Badge variant="warning">{label}</Badge>;
 
   return (
-    <span className="relative inline-flex">
-      <button
-        type="button"
-        onClick={() => setOpen((value) => !value)}
-        onMouseEnter={() => setOpen(true)}
-        onMouseLeave={() => setOpen(false)}
-        aria-expanded={open}
-        className="inline-flex items-center gap-1 rounded border border-warning/40 bg-warning/15 px-1.5 py-0.5 font-mono text-[10px] uppercase tracking-wider text-warning"
+    <Popover>
+      <PopoverTrigger
+        openOnHover
+        delay={80}
+        className={cn(badgeVariants({ variant: "warning" }), "cursor-default")}
       >
-        injection flag
-        {flags.score !== undefined ? ` ${flags.score.toFixed(2)}` : null}
-      </button>
-      {open && reasons.length > 0 ? (
-        <span className="absolute left-0 top-full z-10 mt-1 w-64 rounded-md border border-line bg-surface p-2 text-left shadow-lg">
-          <span className="eyebrow mb-1 block">Why this was flagged</span>
-          <ul className="space-y-1">
-            {reasons.map((reason) => (
-              <li key={reason} className="text-xs leading-snug text-ink-muted">
-                {reason}
-              </li>
-            ))}
-          </ul>
-          <span className="mt-1.5 block text-[10px] text-ink-faint">
-            Flags are informational — the league permits persuasion, so nothing is blocked.
-          </span>
+        {label}
+      </PopoverTrigger>
+      <PopoverContent align="start" className="gap-2">
+        <span className="eyebrow">Why this was flagged</span>
+        <ul className="space-y-1">
+          {reasons.map((reason) => (
+            <li key={reason} className="text-sm leading-snug text-muted-foreground">
+              {reason}
+            </li>
+          ))}
+        </ul>
+        <span className="text-xs text-ink-faint">
+          Flags are informational — the league permits persuasion, so nothing is blocked.
         </span>
-      ) : null}
-    </span>
+      </PopoverContent>
+    </Popover>
   );
 }

@@ -1,21 +1,28 @@
 import type { ReactNode } from "react";
 
+import { cn } from "@/lib/utils";
+
+import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyTitle } from "./empty";
+
+/** Product-level empty state built on the shadcn `Empty` primitive. */
 export function EmptyState({
   title,
   description,
   action,
+  className,
 }: {
   title: string;
   description?: ReactNode;
   action?: ReactNode;
+  className?: string;
 }) {
   return (
-    <div className="flex flex-col items-center justify-center gap-3 rounded-lg border border-dashed border-line-strong px-6 py-12 text-center">
-      <p className="text-sm font-medium text-ink">{title}</p>
-      {description ? (
-        <p className="max-w-md text-sm text-ink-muted">{description}</p>
-      ) : null}
-      {action}
-    </div>
+    <Empty className={cn("border border-dashed border-line-strong py-12", className)}>
+      <EmptyHeader>
+        <EmptyTitle>{title}</EmptyTitle>
+        {description ? <EmptyDescription>{description}</EmptyDescription> : null}
+      </EmptyHeader>
+      {action ? <EmptyContent>{action}</EmptyContent> : null}
+    </Empty>
   );
 }

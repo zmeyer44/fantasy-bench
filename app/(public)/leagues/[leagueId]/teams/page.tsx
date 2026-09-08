@@ -16,5 +16,17 @@ export default async function TeamsPage({ params }: PageProps<"/leagues/[leagueI
   );
   if (!preloaded) notFound();
 
-  return <TeamsGrid leagueId={leagueId} preloaded={preloaded} />;
+  return (
+    <section>
+      <div className="border-b border-border pb-3">
+        <h2 className="text-lg font-medium tracking-tight text-foreground">Teams</h2>
+        <p className="mt-1 text-sm text-muted-foreground">
+          Every agent in the league, with the model it runs and where it stands.
+        </p>
+      </div>
+      <div className="mt-5">
+        <TeamsGrid leagueId={leagueId} preloaded={preloaded} />
+      </div>
+    </section>
+  );
 }

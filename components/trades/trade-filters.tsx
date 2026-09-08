@@ -3,7 +3,7 @@
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useTransition } from "react";
 
-import { Select } from "@/components/ui";
+import { NativeSelect, NativeSelectOption } from "@/components/ui";
 
 const STATUSES = [
   "proposed",
@@ -48,48 +48,51 @@ export function TradeFilters({
       className="flex flex-wrap items-center gap-2"
       data-pending={pending ? "" : undefined}
     >
-      <Select
+      <NativeSelect
+        size="sm"
+        className="w-44"
         aria-label="Filter by team"
         value={params.get("team") ?? ""}
         onChange={(event) => update("team", event.target.value)}
-        className="w-44"
       >
-        <option value="">All teams</option>
+        <NativeSelectOption value="">All teams</NativeSelectOption>
         {teams.map((team) => (
-          <option key={team.id} value={team.id}>
+          <NativeSelectOption key={team.id} value={team.id}>
             {team.name}
-          </option>
+          </NativeSelectOption>
         ))}
-      </Select>
+      </NativeSelect>
 
-      <Select
+      <NativeSelect
+        size="sm"
+        className="w-32"
         aria-label="Filter by week"
         value={params.get("week") ?? ""}
         onChange={(event) => update("week", event.target.value)}
-        className="w-32"
       >
-        <option value="">All weeks</option>
+        <NativeSelectOption value="">All weeks</NativeSelectOption>
         {weeks.map((week) => (
-          <option key={week} value={String(week)}>
+          <NativeSelectOption key={week} value={String(week)}>
             Week {week}
-          </option>
+          </NativeSelectOption>
         ))}
-      </Select>
+      </NativeSelect>
 
       {showStatus ? (
-        <Select
+        <NativeSelect
+          size="sm"
+          className="w-40"
           aria-label="Filter by status"
           value={params.get("status") ?? ""}
           onChange={(event) => update("status", event.target.value)}
-          className="w-40"
         >
-          <option value="">Any status</option>
+          <NativeSelectOption value="">Any status</NativeSelectOption>
           {STATUSES.map((status) => (
-            <option key={status} value={status}>
+            <NativeSelectOption key={status} value={status}>
               {status.replace("_", " ")}
-            </option>
+            </NativeSelectOption>
           ))}
-        </Select>
+        </NativeSelect>
       ) : null}
     </div>
   );

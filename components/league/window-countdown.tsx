@@ -7,6 +7,7 @@ import { useEffect, useState } from "react";
  *
  * The server renders the same string first (via `initial`) so there is no
  * layout shift and spectators with JS off still see a correct-at-render value.
+ * The remaining time is the one lime mark in the league header strip.
  */
 export function WindowCountdown({
   labelText,
@@ -30,9 +31,9 @@ export function WindowCountdown({
   }, [target]);
 
   return (
-    <span className="font-mono text-xs text-ink-muted">
-      <span className="text-ink">{labelText}</span> {verb} in{" "}
-      <span className="text-accent-strong tabular-nums">{remaining}</span> ET
+    <span className="font-mono text-xs text-muted-foreground">
+      <span className="text-foreground">{labelText}</span> {verb} in{" "}
+      <span className="tabular-nums text-brand">{remaining}</span> ET
     </span>
   );
 }

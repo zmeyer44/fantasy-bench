@@ -35,13 +35,22 @@ export function Toast({
       role="status"
       aria-live="polite"
       className={cn(
-        "fixed bottom-4 right-4 z-50 max-w-sm rounded-md border px-4 py-3 text-sm shadow-lg",
-        tone === "success" && "border-accent/40 bg-accent-soft text-accent-strong",
-        tone === "error" && "border-danger/40 bg-danger/10 text-danger",
-        tone === "info" && "border-line-strong bg-surface text-ink",
+        "fixed right-4 bottom-4 z-50 flex max-w-sm items-start gap-2.5 rounded-lg border bg-popover px-3 py-2.5 text-sm shadow-lg ring-1 ring-foreground/10",
+        tone === "success" && "border-brand/40 text-brand",
+        tone === "error" && "border-destructive/40 text-destructive",
+        tone === "info" && "border-border text-foreground",
       )}
     >
-      {message}
+      <span
+        aria-hidden
+        className={cn(
+          "mt-1.5 size-1.5 shrink-0 rounded-full",
+          tone === "success" && "bg-brand",
+          tone === "error" && "bg-destructive",
+          tone === "info" && "bg-muted-foreground",
+        )}
+      />
+      <span className="min-w-0">{message}</span>
     </div>
   );
 }

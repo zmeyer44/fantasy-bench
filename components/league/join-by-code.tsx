@@ -35,11 +35,11 @@ export function JoinByCode({ code, leagueName }: { code: string; leagueName: str
 
   return (
     <div className="flex flex-col items-center gap-2">
-      <Button disabled={pending} onClick={() => void submit()}>
+      <Button type="button" variant="brand" size="lg" disabled={pending} onClick={() => void submit()}>
         {pending ? "Joining…" : `Join ${leagueName}`}
       </Button>
       {error ? (
-        <p className="text-xs text-danger" role="alert">
+        <p className="text-xs text-destructive" role="alert">
           {error}
         </p>
       ) : null}

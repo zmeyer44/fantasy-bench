@@ -1,9 +1,10 @@
 import Link from "next/link";
 
+import { TeamTag } from "@/components/nfl/team-logo";
 import { FairnessBadge, FlaggedPill, StatusBadge } from "@/components/trades/fairness-badge";
 import { StatusTimeline } from "@/components/trades/status-timeline";
 import { TraceLink } from "@/components/trades/trace-link";
-import { Badge } from "@/components/ui";
+import { Badge, Card, CardAction, CardContent, CardFooter, CardHeader } from "@/components/ui";
 import type { TradeSummary } from "@/convex/trades";
 import { formatET } from "@/lib/time";
 
@@ -21,8 +22,8 @@ export function TradeCard({
   fairnessFloor?: number;
 }) {
   return (
-    <article className="rounded-lg border border-line bg-surface">
-      <header className="flex flex-wrap items-center justify-between gap-2 border-b border-line px-4 py-2.5">
+    <Card size="sm">
+      <CardHeader className="border-b">
         <div className="flex flex-wrap items-center gap-2">
           <StatusBadge status={trade.status} />
           <FairnessBadge
@@ -31,17 +32,17 @@ export function TradeCard({
             floor={fairnessFloor}
           />
           <FlaggedPill flagged={trade.flagged} />
-          {trade.weekNo !== null ? <Badge tone="outline">week {trade.weekNo}</Badge> : null}
+          {trade.weekNo !== null ? <Badge variant="outline">week {trade.weekNo}</Badge> : null}
         </div>
-        <div className="flex items-center gap-3">
-          <span className="font-mono text-[10px] text-ink-faint">
+        <CardAction className="flex items-center gap-3">
+          <span className="font-mono text-[10px] tabular-nums text-ink-faint">
             {formatET(trade.createdAt, "MMM d HH:mm")} ET
           </span>
           <TraceLink leagueId={leagueId} runId={trade.createdByRunId} label="proposer trace" />
-        </div>
-      </header>
+        </CardAction>
+      </CardHeader>
 
-      <div className="grid gap-px bg-line sm:grid-cols-2">
+      <CardContent className="grid gap-px bg-border px-0 sm:grid-cols-2">
         <Side
           teamName={trade.proposerTeamName}
           direction="sends"
@@ -54,28 +55,28 @@ export function TradeCard({
           players={trade.receive}
           faab={trade.faab && trade.faab < 0 ? -trade.faab : null}
         />
-      </div>
+      </CardContent>
 
-      <footer className="flex flex-wrap items-center justify-between gap-3 border-t border-line px-4 py-2.5">
-        <StatusTimeline status={trade.status} />
-        <div className="flex items-center gap-3 text-xs">
+      <CardFooter className="flex flex-wrap items-center justify-between gap-3">
+        <StatusTimeline status={trade.status} orientation="horizontal" />
+        <div className="flex items-center gap-4 text-sm">
           {trade.threadId ? (
             <Link
               href={`/leagues/${leagueId}/threads/${trade.threadId}`}
-              className="text-ink-muted hover:text-accent-strong"
+              className="text-muted-foreground transition-colors hover:text-brand-strong"
             >
               Negotiation →
             </Link>
           ) : null}
           <Link
             href={`/leagues/${leagueId}/trades/${trade.id}`}
-            className="text-ink-muted hover:text-accent-strong"
+            className="text-muted-foreground transition-colors hover:text-brand-strong"
           >
             Details →
           </Link>
         </div>
-      </footer>
-    </article>
+      </CardFooter>
+    </Card>
   );
 }
 
@@ -91,8 +92,8 @@ function Side({
   faab: number | null;
 }) {
   return (
-    <div className="bg-surface px-4 py-3">
-      <p className="eyebrow mb-2">
+    <div className="bg-card px-4 py-3">
+      <p className="eyebrow mb-2.5">
         {teamName} {direction}
       </p>
       {players.length === 0 && !faab ? (
@@ -104,20 +105,16 @@ function Side({
               <span className="w-8 shrink-0 font-mono text-[10px] uppercase text-ink-faint">
                 {player.position ?? "—"}
               </span>
-              <span className="min-w-0 truncate text-sm text-ink">
+              <span className="min-w-0 truncate text-sm text-foreground">
                 {player.playerName ?? player.playerId}
               </span>
-              {player.nflTeam ? (
-                <span className="font-mono text-[10px] text-ink-faint">{player.nflTeam}</span>
-              ) : null}
+              <TeamTag team={player.nflTeam} size={14} />
             </li>
           ))}
           {faab ? (
             <li className="flex items-baseline gap-2">
-              <span className="w-8 shrink-0 font-mono text-[10px] uppercase text-ink-faint">
-                $
-              </span>
-              <span className="text-sm text-ink">${faab} FAAB</span>
+              <span className="w-8 shrink-0 font-mono text-[10px] uppercase text-ink-faint">$</span>
+              <span className="text-sm tabular-nums text-foreground">${faab} FAAB</span>
             </li>
           ) : null}
         </ul>

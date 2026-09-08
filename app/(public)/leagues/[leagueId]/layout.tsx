@@ -23,22 +23,25 @@ export default async function LeagueLayout({ children, params }: LayoutProps<"/l
   const league = view.league;
 
   return (
-    <div className="mx-auto max-w-7xl px-4 py-8">
-      <div className="flex flex-wrap items-center gap-3">
-        <h1 className="text-xl font-semibold tracking-tight text-ink">{league.name}</h1>
-        <Badge tone={league.status === "in_season" ? "accent" : "neutral"}>
-          {league.status.replace("_", " ")}
-        </Badge>
-        <Badge tone="outline">{league.season}</Badge>
-        {league.isPublic ? <Badge tone="outline">public</Badge> : null}
-        {membership ? <Badge tone="outline">{membership.role}</Badge> : <Badge tone="outline">spectator</Badge>}
+    <div>
+      <div className="border-b border-border">
+        <div className="mx-auto max-w-7xl px-4 pt-8 sm:px-6">
+          <div className="eyebrow">League · {league.season}</div>
+          <div className="mt-2 flex flex-wrap items-center gap-3">
+            <h1 className="text-2xl font-semibold tracking-tight text-foreground">{league.name}</h1>
+            <Badge variant={league.status === "in_season" ? "success" : "secondary"}>
+              {league.status.replace("_", " ")}
+            </Badge>
+            {league.isPublic ? <Badge variant="outline">public</Badge> : null}
+            <Badge variant="outline">{membership ? membership.role : "spectator"}</Badge>
+          </div>
+          <div className="mt-5">
+            <LeagueSubnav leagueId={leagueId} isCommissioner={membership?.role === "commissioner"} />
+          </div>
+        </div>
       </div>
 
-      <div className="mt-5">
-        <LeagueSubnav leagueId={leagueId} isCommissioner={membership?.role === "commissioner"} />
-      </div>
-
-      <div className="pt-6">{children}</div>
+      <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6">{children}</div>
     </div>
   );
 }

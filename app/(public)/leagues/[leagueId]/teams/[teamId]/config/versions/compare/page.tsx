@@ -5,7 +5,7 @@ import { notFound } from "next/navigation";
 import { ConfigNav } from "@/components/config/config-nav";
 import { DiffView } from "@/components/config/diff-view";
 import { readOrNull } from "@/components/league/convex-errors";
-import { Card, CardBody, EmptyState, PageHeader } from "@/components/ui";
+import { EmptyState, PageHeader, cn } from "@/components/ui";
 import { api } from "@/convex/_generated/api";
 import type { Id } from "@/convex/_generated/dataModel";
 import { fetchAuthQuery } from "@/lib/convex/server";
@@ -50,10 +50,10 @@ export default async function CompareVersionsPage({
       : null;
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-8">
       <PageHeader
         eyebrow={
-          <Link href={base} className="hover:text-ink">
+          <Link href={base} className="transition-colors hover:text-foreground">
             {view.team.name} · history
           </Link>
         }
@@ -63,26 +63,24 @@ export default async function CompareVersionsPage({
 
       <ConfigNav leagueId={leagueId} teamId={teamId} />
 
-      <Card>
-        <CardBody className="grid gap-4 sm:grid-cols-2">
-          <VersionColumn
-            title="Base (a)"
-            base={base}
-            selectedId={diff ? (aId ?? null) : null}
-            otherId={bId && known.has(bId) ? bId : null}
-            side="a"
-            versions={view.versions}
-          />
-          <VersionColumn
-            title="Compare (b)"
-            base={base}
-            selectedId={diff ? (bId ?? null) : null}
-            otherId={aId && known.has(aId) ? aId : null}
-            side="b"
-            versions={view.versions}
-          />
-        </CardBody>
-      </Card>
+      <div className="grid gap-6 sm:grid-cols-2">
+        <VersionColumn
+          title="Base (a)"
+          base={base}
+          selectedId={diff ? (aId ?? null) : null}
+          otherId={bId && known.has(bId) ? bId : null}
+          side="a"
+          versions={view.versions}
+        />
+        <VersionColumn
+          title="Compare (b)"
+          base={base}
+          selectedId={diff ? (bId ?? null) : null}
+          otherId={aId && known.has(aId) ? aId : null}
+          side="b"
+          versions={view.versions}
+        />
+      </div>
 
       {diff ? (
         <DiffView diff={diff} leagueId={leagueId} teamId={teamId} />
@@ -119,8 +117,8 @@ function VersionColumn({
 }) {
   return (
     <div>
-      <div className="eyebrow mb-2">{title}</div>
-      <ul className="max-h-64 space-y-1 overflow-y-auto">
+      <div className="eyebrow border-b border-border pb-3">{title}</div>
+      <ul className="max-h-64 divide-y divide-border overflow-y-auto">
         {versions.map((v) => {
           const href =
             side === "a"
@@ -131,17 +129,19 @@ function VersionColumn({
             <li key={v._id}>
               <Link
                 href={href}
-                className={
+                aria-current={selected ? "true" : undefined}
+                className={cn(
+                  "flex items-baseline gap-2.5 px-2 py-2 text-sm transition-colors",
                   selected
-                    ? "flex items-baseline gap-2 rounded border border-accent/40 bg-accent-soft px-2 py-1 text-xs text-accent-strong"
-                    : "flex items-baseline gap-2 rounded border border-line px-2 py-1 text-xs text-ink hover:bg-surface-muted"
-                }
+                    ? "bg-brand-soft text-brand"
+                    : "text-foreground hover:bg-accent",
+                )}
               >
-                <span className="font-mono">v{v.versionNo}</span>
-                <span className="text-ink-faint">
+                <span className="font-mono text-xs tabular-nums">v{v.versionNo}</span>
+                <span className="font-mono text-xs text-ink-faint">
                   {formatET(v.createdAt ?? v._creationTime, "MMM d, HH:mm")}
                 </span>
-                <span className="truncate text-ink-muted">{v.changeSummary ?? ""}</span>
+                <span className="truncate text-muted-foreground">{v.changeSummary ?? ""}</span>
               </Link>
             </li>
           );

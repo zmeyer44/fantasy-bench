@@ -3,21 +3,18 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import { ConfigNav } from "@/components/config/config-nav";
+import { readOrNull } from "@/components/league/convex-errors";
 import {
   Badge,
-  Card,
-  CardBody,
-  CardHeader,
   EmptyState,
   PageHeader,
-  TBody,
-  TD,
-  TH,
-  THead,
-  TR,
   Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
 } from "@/components/ui";
-import { readOrNull } from "@/components/league/convex-errors";
 import { api } from "@/convex/_generated/api";
 import type { Id } from "@/convex/_generated/dataModel";
 import { fetchAuthQuery } from "@/lib/convex/server";
@@ -54,10 +51,13 @@ export default async function VersionsPage({
   const changedThisWeek = view.versions.filter((v) => v.changedThisWeek).length;
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-8">
       <PageHeader
         eyebrow={
-          <Link href={`/leagues/${leagueId}/teams/${teamId}`} className="hover:text-ink">
+          <Link
+            href={`/leagues/${leagueId}/teams/${teamId}`}
+            className="transition-colors hover:text-foreground"
+          >
             {view.team.name}
           </Link>
         }
@@ -65,11 +65,11 @@ export default async function VersionsPage({
         description="Every save is an immutable version. Click one to diff it against the version before it."
         actions={
           changedThisWeek > 0 ? (
-            <Badge tone="accent">
+            <Badge variant="success">
               {changedThisWeek} change{changedThisWeek === 1 ? "" : "s"} this week
             </Badge>
           ) : (
-            <Badge tone="outline">unchanged this week</Badge>
+            <Badge variant="outline">unchanged this week</Badge>
           )
         }
       />
@@ -79,82 +79,88 @@ export default async function VersionsPage({
       {view.versions.length === 0 ? (
         <EmptyState title="No versions yet" description="Save a config to start the changelog." />
       ) : (
-        <Card>
-          <CardHeader
-            title={`${view.versions.length} version${view.versions.length === 1 ? "" : "s"}`}
-            description="Newest first."
-            action={
-              view.versions.length > 1 ? (
-                <Link
-                  href={`${base}/compare?a=${view.versions.at(-1)!._id}&b=${view.versions[0]._id}`}
-                  className="text-xs text-accent-strong underline underline-offset-2"
-                >
-                  Compare first ↔ latest
-                </Link>
-              ) : null
-            }
-          />
+        <section className="space-y-4">
+          <div className="flex flex-wrap items-end justify-between gap-3 border-b border-border pb-3">
+            <div className="min-w-0">
+              <h2 className="eyebrow text-foreground">
+                {view.versions.length} version{view.versions.length === 1 ? "" : "s"}
+              </h2>
+              <p className="mt-2 text-sm text-muted-foreground">Newest first.</p>
+            </div>
+            {view.versions.length > 1 ? (
+              <Link
+                href={`${base}/compare?a=${view.versions.at(-1)!._id}&b=${view.versions[0]._id}`}
+                className="shrink-0 text-sm text-muted-foreground underline decoration-border underline-offset-4 transition-colors hover:text-foreground hover:decoration-brand"
+              >
+                Compare first ↔ latest
+              </Link>
+            ) : null}
+          </div>
+
           <Table>
-            <THead>
-              <TR>
-                <TH numeric>#</TH>
-                <TH>State</TH>
-                <TH>Saved</TH>
-                <TH>By</TH>
-                <TH>Model</TH>
-                <TH numeric>Skills</TH>
-                <TH>Change summary</TH>
-                <TH />
-              </TR>
-            </THead>
-            <TBody>
+            <TableHeader>
+              <TableRow>
+                <TableHead numeric>#</TableHead>
+                <TableHead>State</TableHead>
+                <TableHead>Saved</TableHead>
+                <TableHead>By</TableHead>
+                <TableHead>Model</TableHead>
+                <TableHead numeric>Skills</TableHead>
+                <TableHead>Change summary</TableHead>
+                <TableHead />
+              </TableRow>
+            </TableHeader>
+            <TableBody>
               {view.versions.map((version) => (
-                <TR key={version._id}>
-                  <TD numeric className="font-mono text-xs">
+                <TableRow key={version._id}>
+                  <TableCell numeric className="font-mono text-xs">
                     {version.versionNo}
-                  </TD>
-                  <TD>
+                  </TableCell>
+                  <TableCell>
                     {version.isCurrent ? (
-                      <Badge tone="accent">applied</Badge>
+                      <Badge variant="success">applied</Badge>
                     ) : version.isPending ? (
-                      <Badge tone="warning">queued</Badge>
+                      <Badge variant="warning">queued</Badge>
                     ) : version.appliedAt ? (
-                      <Badge tone="outline">superseded</Badge>
+                      <Badge variant="outline">superseded</Badge>
                     ) : (
-                      <Badge tone="outline">never applied</Badge>
+                      <Badge variant="outline">never applied</Badge>
                     )}
-                  </TD>
-                  <TD className="whitespace-nowrap font-mono text-xs text-ink-muted">
+                  </TableCell>
+                  <TableCell className="font-mono text-xs whitespace-nowrap text-muted-foreground">
                     {formatET(version.createdAt ?? version._creationTime, "MMM d, HH:mm")} ET
                     {version.changedThisWeek ? (
-                      <span className="ml-2 text-accent-strong">new</span>
+                      <span className="ml-2 text-brand">new</span>
                     ) : null}
-                  </TD>
-                  <TD className="text-xs text-ink-muted">{version.createdByName ?? "—"}</TD>
-                  <TD className="font-mono text-xs">{version.modelDisplayName}</TD>
-                  <TD numeric className="font-mono text-xs">
+                  </TableCell>
+                  <TableCell className="text-muted-foreground">
+                    {version.createdByName ?? "—"}
+                  </TableCell>
+                  <TableCell className="font-mono text-xs">{version.modelDisplayName}</TableCell>
+                  <TableCell numeric className="font-mono text-xs">
                     {version.skillCount}
-                  </TD>
-                  <TD className="max-w-xs truncate text-xs text-ink-muted">
+                  </TableCell>
+                  <TableCell className="max-w-xs truncate text-muted-foreground">
                     {version.changeSummary ?? "—"}
-                  </TD>
-                  <TD>
+                  </TableCell>
+                  <TableCell>
                     <Link
                       href={`${base}/${version._id}`}
-                      className="text-xs text-accent-strong underline underline-offset-2"
+                      className="text-sm text-muted-foreground underline decoration-border underline-offset-4 transition-colors hover:text-foreground hover:decoration-brand"
                     >
                       Diff
                     </Link>
-                  </TD>
-                </TR>
+                  </TableCell>
+                </TableRow>
               ))}
-            </TBody>
+            </TableBody>
           </Table>
-          <CardBody className="border-t border-line text-xs text-ink-muted">
+
+          <p className="text-sm text-ink-faint">
             Version rows are never updated except to stamp when they went live. A version saved
             during the edit lock stays queued until the window reopens.
-          </CardBody>
-        </Card>
+          </p>
+        </section>
       )}
     </div>
   );

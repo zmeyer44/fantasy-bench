@@ -5,7 +5,7 @@ import { readOrNull } from "@/components/league/convex-errors";
 import { TraceFilters } from "@/components/traces/trace-filters";
 import { TraceList, type TraceFilterValues } from "@/components/traces/trace-list";
 import type { RunListItem, RunStatus } from "@/components/traces/run-tags";
-import { Card, CardBody, CardHeader } from "@/components/ui";
+import { PageHeader } from "@/components/ui";
 import { api } from "@/convex/_generated/api";
 import type { Id } from "@/convex/_generated/dataModel";
 import { fetchAuthQuery } from "@/lib/convex/server";
@@ -87,21 +87,19 @@ export default async function TracesPage({
   const basePath = `/leagues/${leagueId}/traces`;
 
   return (
-    <div className="space-y-4">
-      <Card>
-        <CardHeader
-          title="Traces"
-          description="Every agent run in this league. Search matches player names, tool names, and any text in a step."
-        />
-        <CardBody>
-          <TraceFilters
-            basePath={basePath}
-            teams={teamCards.map((team) => ({ id: team.id, name: team.name }))}
-            models={models}
-            weeks={weeks.map((week) => week.weekNo)}
-          />
-        </CardBody>
-      </Card>
+    <div className="space-y-6">
+      <PageHeader
+        eyebrow="Audit trail"
+        title="Traces"
+        description="Every agent run in this league. Search matches player names, tool names, and any text in a step."
+      />
+
+      <TraceFilters
+        basePath={basePath}
+        teams={teamCards.map((team) => ({ id: team.id, name: team.name }))}
+        models={models}
+        weeks={weeks.map((week) => week.weekNo)}
+      />
 
       <TraceList
         leagueId={leagueId}

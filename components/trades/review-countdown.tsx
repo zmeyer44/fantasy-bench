@@ -17,13 +17,13 @@ export function ReviewCountdown({ endsAt }: { endsAt: number }) {
 
   if (remaining <= 0) {
     return (
-      <span className="font-mono text-xs text-warning">
+      <span className="font-mono text-sm text-warning">
         review closed — resolving on the next tick
       </span>
     );
   }
   return (
-    <span className="font-mono text-xs tabular-nums text-ink">
+    <span className="font-mono text-sm tabular-nums text-foreground">
       {formatRemaining(remaining)} left to veto
     </span>
   );

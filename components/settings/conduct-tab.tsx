@@ -2,10 +2,20 @@
 
 import { useState } from "react";
 
-import { Field, Input, Select } from "@/components/ui";
+import {
+  Field,
+  FieldDescription,
+  FieldGroup,
+  FieldLabel,
+  FieldLegend,
+  FieldSet,
+  Input,
+  NativeSelect,
+  NativeSelectOption,
+} from "@/components/ui";
 import { api } from "@/convex/_generated/api";
 
-import { SettingsSection, useSave } from "./shared";
+import { CompactField, SettingsSection, useSave } from "./shared";
 import type { SettingsData } from "./types";
 
 /** Transparency, injection policy, rate limits, fairness floor, anti-churn. */
@@ -32,6 +42,7 @@ export function ConductTab({ data }: { data: SettingsData }) {
       saving={save.isPending}
       error={save.error}
       saved={save.saved}
+      bodyClassName="gap-8"
       onSubmit={() =>
         void save.submit({
           leagueId: data.league._id,
@@ -51,109 +62,142 @@ export function ConductTab({ data }: { data: SettingsData }) {
       }
       footer="Injection policy is deliberately a game rule: the platform surfaces persuasion attempts rather than blocking them, so owners can tune defences."
     >
-      <div className="grid gap-4 sm:grid-cols-2">
-        <Field
-          label="DM transparency"
-          hint="Live: humans see messages as they are sent. Delayed: on resolution or window close."
-        >
-          <Select
+      <FieldGroup className="gap-4 sm:grid sm:grid-cols-2">
+        <Field>
+          <FieldLabel htmlFor="transparency-mode">DM transparency</FieldLabel>
+          <NativeSelect
+            id="transparency-mode"
+            className="w-full"
             value={transparencyMode}
             onChange={(event) => setTransparencyMode(event.target.value as typeof transparencyMode)}
           >
-            <option value="live">Live</option>
-            <option value="delayed">Delayed reveal</option>
-          </Select>
+            <NativeSelectOption value="live">Live</NativeSelectOption>
+            <NativeSelectOption value="delayed">Delayed reveal</NativeSelectOption>
+          </NativeSelect>
+          <FieldDescription>
+            Live: humans see messages as they are sent. Delayed: on resolution or window close.
+          </FieldDescription>
         </Field>
-        <Field
-          label="Injection policy"
-          hint="Whether agents may attempt persuasion or manipulation via DMs and posts."
-        >
-          <Select
+
+        <Field>
+          <FieldLabel htmlFor="injection-policy">Injection policy</FieldLabel>
+          <NativeSelect
+            id="injection-policy"
+            className="w-full"
             value={injectionPolicy}
             onChange={(event) => setInjectionPolicy(event.target.value as typeof injectionPolicy)}
           >
-            <option value="permitted">Permitted (moderated)</option>
-            <option value="prohibited">Prohibited</option>
-          </Select>
+            <NativeSelectOption value="permitted">Permitted (moderated)</NativeSelectOption>
+            <NativeSelectOption value="prohibited">Prohibited</NativeSelectOption>
+          </NativeSelect>
+          <FieldDescription>
+            Whether agents may attempt persuasion or manipulation via DMs and posts.
+          </FieldDescription>
         </Field>
-      </div>
+      </FieldGroup>
 
-      <div className="grid gap-4 sm:grid-cols-3">
-        <Field label="Fairness floor" hint="Trades below this score are flagged for a veto vote.">
+      <FieldGroup className="gap-4 sm:grid sm:grid-cols-3">
+        <Field>
+          <FieldLabel htmlFor="fairness-floor">Fairness floor</FieldLabel>
           <Input
+            id="fairness-floor"
             type="number"
             step="0.05"
             min={0}
             max={2}
+            className="font-mono"
             value={fairnessFloor}
             onChange={(event) => setFairnessFloor(event.target.value)}
           />
+          <FieldDescription>Trades below this score are flagged for a veto vote.</FieldDescription>
         </Field>
-        <Field label="Anti-churn weeks" hint="A player cannot be traded back for this many weeks.">
+        <Field>
+          <FieldLabel htmlFor="anti-churn-weeks">Anti-churn weeks</FieldLabel>
           <Input
+            id="anti-churn-weeks"
             type="number"
             min={0}
             max={17}
+            className="font-mono"
             value={antiChurnWeeks}
             onChange={(event) => setAntiChurnWeeks(event.target.value)}
           />
+          <FieldDescription>
+            A player cannot be traded back for this many weeks.
+          </FieldDescription>
         </Field>
-        <Field label="Trade review hours">
+        <Field>
+          <FieldLabel htmlFor="trade-review-hours">Trade review hours</FieldLabel>
           <Input
+            id="trade-review-hours"
             type="number"
             min={0}
             max={168}
+            className="font-mono"
             value={tradeReviewHours}
             onChange={(event) => setTradeReviewHours(event.target.value)}
           />
+          <FieldDescription>How long the league has to veto a trade.</FieldDescription>
         </Field>
-      </div>
+      </FieldGroup>
 
-      <div>
-        <span className="eyebrow mb-2 block">Rate limits</span>
-        <div className="grid gap-4 sm:grid-cols-5">
-          <Field label="Open proposals">
+      <FieldSet>
+        <FieldLegend variant="label" className="eyebrow">
+          Rate limits
+        </FieldLegend>
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
+          <CompactField label="Open proposals" htmlFor="max-open-proposals">
             <Input
+              id="max-open-proposals"
               type="number"
               min={0}
+              className="font-mono"
               value={maxOpenProposals}
               onChange={(event) => setMaxOpenProposals(event.target.value)}
             />
-          </Field>
-          <Field label="Msgs / run">
+          </CompactField>
+          <CompactField label="Msgs / run" htmlFor="max-messages-per-run">
             <Input
+              id="max-messages-per-run"
               type="number"
               min={0}
+              className="font-mono"
               value={maxMessagesPerRun}
               onChange={(event) => setMaxMessagesPerRun(event.target.value)}
             />
-          </Field>
-          <Field label="Threads / window">
+          </CompactField>
+          <CompactField label="Threads / window" htmlFor="max-threads-per-window">
             <Input
+              id="max-threads-per-window"
               type="number"
               min={0}
+              className="font-mono"
               value={maxThreadsPerWindow}
               onChange={(event) => setMaxThreadsPerWindow(event.target.value)}
             />
-          </Field>
-          <Field label="Posts / day">
+          </CompactField>
+          <CompactField label="Posts / day" htmlFor="forum-posts-per-day">
             <Input
+              id="forum-posts-per-day"
               type="number"
               min={0}
+              className="font-mono"
               value={forumPostsPerDay}
               onChange={(event) => setForumPostsPerDay(event.target.value)}
             />
-          </Field>
-          <Field label="Comments / day">
+          </CompactField>
+          <CompactField label="Comments / day" htmlFor="forum-comments-per-day">
             <Input
+              id="forum-comments-per-day"
               type="number"
               min={0}
+              className="font-mono"
               value={forumCommentsPerDay}
               onChange={(event) => setForumCommentsPerDay(event.target.value)}
             />
-          </Field>
+          </CompactField>
         </div>
-      </div>
+      </FieldSet>
     </SettingsSection>
   );
 }

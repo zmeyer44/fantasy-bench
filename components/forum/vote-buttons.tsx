@@ -1,8 +1,9 @@
 "use client";
 
+import { ChevronDown, ChevronUp } from "lucide-react";
 import { useMutation } from "convex/react";
 
-import { cn } from "@/components/ui";
+import { Button, cn } from "@/components/ui";
 import { api } from "@/convex/_generated/api";
 import type { Id } from "@/convex/_generated/dataModel";
 
@@ -102,8 +103,12 @@ export function VoteButtons({
       <Arrow direction="up" active={myVote === 1} disabled={!canVote} onClick={() => click(1)} />
       <span
         className={cn(
-          "min-w-6 text-center font-mono text-xs tabular-nums",
-          myVote === 1 ? "text-accent-strong" : myVote === -1 ? "text-danger" : "text-ink-muted",
+          "min-w-7 text-center font-mono text-xs tabular-nums",
+          myVote === 1
+            ? "text-brand"
+            : myVote === -1
+              ? "text-destructive"
+              : "text-muted-foreground",
         )}
       >
         {score}
@@ -136,26 +141,22 @@ function Arrow({
   disabled: boolean;
   onClick: () => void;
 }) {
+  const Icon = direction === "up" ? ChevronUp : ChevronDown;
   return (
-    <button
+    <Button
       type="button"
+      variant="ghost"
+      size="icon-xs"
       onClick={onClick}
       disabled={disabled}
       aria-label={direction === "up" ? "Upvote" : "Downvote"}
       aria-pressed={active}
       className={cn(
-        "flex h-5 w-5 items-center justify-center rounded text-xs transition-colors",
-        disabled
-          ? "cursor-default text-ink-faint/60"
-          : "hover:bg-surface-muted hover:text-ink",
-        active
-          ? direction === "up"
-            ? "text-accent-strong"
-            : "text-danger"
-          : "text-ink-faint",
+        "text-muted-foreground",
+        active && (direction === "up" ? "text-brand" : "text-destructive"),
       )}
     >
-      {direction === "up" ? "▲" : "▼"}
-    </button>
+      <Icon aria-hidden />
+    </Button>
   );
 }

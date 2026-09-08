@@ -6,7 +6,7 @@ import { useEffect, useState } from "react";
 import { usePreloadedQuery, useQuery, type Preloaded } from "convex/react";
 
 import { api } from "@/convex/_generated/api";
-import { Badge, Button, Card, CardBody, EmptyState, Input } from "@/components/ui";
+import { Badge, Button, EmptyState, Input, Skeleton } from "@/components/ui";
 
 const DEBOUNCE_MS = 250;
 
@@ -64,8 +64,8 @@ export function SkillsLibrary({
   const skills = library ?? [];
 
   return (
-    <>
-      <div className="flex flex-wrap items-center gap-2">
+    <div className="space-y-6">
+      <div className="flex flex-wrap items-center gap-3 border-b border-border pb-5">
         <Input
           name="q"
           value={input}
@@ -75,16 +75,18 @@ export function SkillsLibrary({
           aria-label="Search skills"
         />
         {signedIn ? (
-          <button
+          <Button
             type="button"
+            size="sm"
+            variant={mine ? "secondary" : "ghost"}
+            aria-pressed={mine}
             onClick={() => setMine((value) => !value)}
-            className="text-xs text-accent-strong underline underline-offset-2"
           >
-            {mine ? "Show all skills" : "Only mine"}
-          </button>
+            {mine ? "Showing yours" : "Only mine"}
+          </Button>
         ) : null}
         {term ? (
-          <span className="text-xs text-ink-muted">
+          <span className="text-sm text-muted-foreground">
             {library === undefined
               ? "Searching…"
               : `${skills.length} result${skills.length === 1 ? "" : "s"} for “${term}”`}
@@ -93,7 +95,15 @@ export function SkillsLibrary({
       </div>
 
       {library === undefined ? (
-        <p className="text-sm text-ink-muted">Loading the library…</p>
+        <div className="grid gap-px bg-border sm:grid-cols-2 lg:grid-cols-3">
+          {Array.from({ length: 6 }).map((_, i) => (
+            <div key={i} className="space-y-3 bg-background p-4">
+              <Skeleton className="h-4 w-40" />
+              <Skeleton className="h-3 w-full" />
+              <Skeleton className="h-3 w-24" />
+            </div>
+          ))}
+        </div>
       ) : skills.length === 0 ? (
         <EmptyState
           title={term ? "No skills match that search" : "The library is empty"}
@@ -104,42 +114,45 @@ export function SkillsLibrary({
           }
           action={
             signedIn ? (
-              <Link href="/skills/new">
-                <Button size="sm">Author a skill</Button>
-              </Link>
+              <Button size="sm" render={<Link href="/skills/new" />}>
+                Author a skill
+              </Button>
             ) : null
           }
         />
       ) : (
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+        // A hairline grid rather than a deck of cards: the rows read as one
+        // table of the library, not as six separate objects.
+        <ul className="grid gap-px border border-border bg-border sm:grid-cols-2 lg:grid-cols-3">
           {skills.map((skill) => (
-            <Card key={skill._id}>
-              <CardBody className="space-y-3">
-                <div className="flex items-start justify-between gap-3">
-                  <Link
-                    href={`/skills/${skill.slug}`}
-                    className="text-sm font-semibold text-ink hover:text-accent-strong"
-                  >
-                    {skill.name}
-                  </Link>
-                  <Badge tone={skill.usageCount > 0 ? "accent" : "outline"}>
-                    {skill.usageCount} in use
-                  </Badge>
-                </div>
-                <p className="line-clamp-3 text-sm text-ink-muted">
-                  {skill.description || "No description."}
-                </p>
-                <p className="font-mono text-[11px] text-ink-faint">
-                  /{skill.slug} · {skill.bodyMd.length.toLocaleString()} chars ·{" "}
-                  {skill.authorName ?? "platform"}
-                  {skill.visibility === "private" ? " · private" : ""}
-                </p>
-              </CardBody>
-            </Card>
+            <li
+              key={skill._id}
+              className="flex min-w-0 flex-col gap-2.5 bg-background p-4 transition-colors hover:bg-card"
+            >
+              <div className="flex items-start justify-between gap-3">
+                <Link
+                  href={`/skills/${skill.slug}`}
+                  className="truncate text-sm font-medium text-foreground transition-colors hover:text-brand"
+                >
+                  {skill.name}
+                </Link>
+                <Badge variant={skill.usageCount > 0 ? "success" : "outline"}>
+                  {skill.usageCount} in use
+                </Badge>
+              </div>
+              <p className="line-clamp-3 text-sm text-muted-foreground">
+                {skill.description || "No description."}
+              </p>
+              <p className="mt-auto font-mono text-xs text-ink-faint">
+                /{skill.slug} · {skill.bodyMd.length.toLocaleString()} chars ·{" "}
+                {skill.authorName ?? "platform"}
+                {skill.visibility === "private" ? " · private" : ""}
+              </p>
+            </li>
           ))}
-        </div>
+        </ul>
       )}
-    </>
+    </div>
   );
 }
 
@@ -148,14 +161,12 @@ export function AuthorSkillAction() {
   const viewer = useQuery(api.users.me, {});
   if (viewer === undefined) return null;
   return viewer ? (
-    <Link href="/skills/new">
-      <Button size="sm">Author a skill</Button>
-    </Link>
+    <Button size="sm" render={<Link href="/skills/new" />}>
+      Author a skill
+    </Button>
   ) : (
-    <Link href="/login?next=/skills/new">
-      <Button size="sm" variant="secondary">
-        Sign in to author
-      </Button>
-    </Link>
+    <Button size="sm" variant="outline" render={<Link href="/login?next=/skills/new" />}>
+      Sign in to author
+    </Button>
   );
 }

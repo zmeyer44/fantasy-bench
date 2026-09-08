@@ -1,6 +1,7 @@
 "use client";
 
 import { useMutation } from "convex/react";
+import { GitFork } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
@@ -31,12 +32,14 @@ export function ForkSkillButton({ slug, signedIn }: { slug: string; signedIn: bo
   return (
     <>
       <Button
+        type="button"
         size="sm"
-        variant="secondary"
+        variant="outline"
         disabled={pending || !signedIn}
         title={signedIn ? undefined : "Sign in to fork"}
         onClick={() => void submit()}
       >
+        <GitFork data-icon="inline-start" />
         {pending ? "Forking…" : "Fork"}
       </Button>
       <Toast message={toast?.message ?? null} tone={toast?.tone} onDismiss={() => setToast(null)} />

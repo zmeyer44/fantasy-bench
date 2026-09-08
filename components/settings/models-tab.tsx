@@ -2,14 +2,30 @@
 
 import { useState } from "react";
 
-import { Badge, Field, Select } from "@/components/ui";
+import {
+  Badge,
+  Checkbox,
+  Field,
+  FieldDescription,
+  FieldError,
+  FieldGroup,
+  FieldLabel,
+  NativeSelect,
+  NativeSelectOption,
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui";
 import { api } from "@/convex/_generated/api";
 
-import { SettingsSection, Toggle, useSave } from "./shared";
+import { SettingsSection, ToggleField, useSave } from "./shared";
 import type { SettingsData } from "./types";
 
 /**
- * Allowlist checklist with prices, the fallback model, and the
+ * Allowlist table with prices, the fallback model, and the
  * deprecated-model replacement tool (PRD 5.1 / 7).
  */
 export function ModelsTab({ data }: { data: SettingsData }) {
@@ -31,7 +47,7 @@ export function ModelsTab({ data }: { data: SettingsData }) {
     );
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-10">
       <SettingsSection
         title="Model allowlist"
         description="Owners may only pick from this list. Versions are pinned — “latest” aliases are rejected."
@@ -42,43 +58,62 @@ export function ModelsTab({ data }: { data: SettingsData }) {
           void saveAllowlist.submit({ leagueId: data.league._id, modelIds: allowlist })
         }
       >
-        <div className="space-y-1.5">
-          {data.catalog.map((model) => {
-            const teams = usedBy.get(model.modelId) ?? 0;
-            const checked = allowlist.includes(model.modelId);
-            return (
-              <label
-                key={model.modelId}
-                className="flex items-center gap-3 rounded-md border border-line px-3 py-2 hover:bg-surface-muted"
-              >
-                <input
-                  type="checkbox"
-                  checked={checked}
-                  onChange={() => toggle(model.modelId)}
-                  className="size-4 accent-[var(--color-accent)]"
-                />
-                <span className="min-w-0 flex-1">
-                  <span className="block text-sm text-ink">{model.displayName}</span>
-                  <span className="block font-mono text-[10px] text-ink-faint">
-                    {model.modelId}
-                  </span>
-                </span>
-                <span className="shrink-0 text-right font-mono text-[10px] tabular-nums text-ink-muted">
-                  ${model.inputPerM}/M in · ${model.outputPerM}/M out
-                  {model.cachedInputPerM !== null ? ` · $${model.cachedInputPerM}/M cached` : ""}
-                </span>
-                {teams > 0 ? (
-                  <Badge tone="accent">
-                    {teams} team{teams === 1 ? "" : "s"}
-                  </Badge>
-                ) : null}
-              </label>
-            );
-          })}
-        </div>
-        {allowlist.length === 0 ? (
-          <p className="text-xs text-danger">Pick at least one model.</p>
-        ) : null}
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead className="w-8">
+                <span className="sr-only">Allowed</span>
+              </TableHead>
+              <TableHead>Model</TableHead>
+              <TableHead>Provider</TableHead>
+              <TableHead numeric>$/M in</TableHead>
+              <TableHead numeric>$/M out</TableHead>
+              <TableHead numeric>$/M cached</TableHead>
+              <TableHead numeric>Teams</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {data.catalog.map((model) => {
+              const teams = usedBy.get(model.modelId) ?? 0;
+              const checked = allowlist.includes(model.modelId);
+              return (
+                <TableRow key={model.modelId} data-state={checked ? "selected" : undefined}>
+                  <TableCell>
+                    <Checkbox
+                      checked={checked}
+                      aria-label={`Allow ${model.displayName}`}
+                      onCheckedChange={() => toggle(model.modelId)}
+                    />
+                  </TableCell>
+                  <TableCell className="max-w-72">
+                    <span className="block truncate text-foreground">{model.displayName}</span>
+                    <span className="block truncate font-mono text-xs text-ink-faint">
+                      {model.modelId}
+                    </span>
+                  </TableCell>
+                  <TableCell className="text-muted-foreground">{model.provider}</TableCell>
+                  <TableCell numeric className="font-mono text-xs">
+                    {model.inputPerM}
+                  </TableCell>
+                  <TableCell numeric className="font-mono text-xs">
+                    {model.outputPerM}
+                  </TableCell>
+                  <TableCell numeric className="font-mono text-xs text-muted-foreground">
+                    {model.cachedInputPerM ?? "—"}
+                  </TableCell>
+                  <TableCell numeric>
+                    {teams > 0 ? (
+                      <Badge variant="secondary">{teams}</Badge>
+                    ) : (
+                      <span className="font-mono text-xs text-ink-faint">0</span>
+                    )}
+                  </TableCell>
+                </TableRow>
+              );
+            })}
+          </TableBody>
+        </Table>
+        {allowlist.length === 0 ? <FieldError>Pick at least one model.</FieldError> : null}
       </SettingsSection>
 
       <SettingsSection
@@ -95,20 +130,27 @@ export function ModelsTab({ data }: { data: SettingsData }) {
           })
         }
       >
-        <Field
-          label="Fallback model"
-          hint="Used after retries are exhausted. Disclosed in the trace."
-        >
-          <Select value={fallback} onChange={(event) => setFallback(event.target.value)}>
-            <option value="">None — fail without a model fallback</option>
+        <Field className="sm:max-w-lg">
+          <FieldLabel htmlFor="fallback-model">Fallback model</FieldLabel>
+          <NativeSelect
+            id="fallback-model"
+            className="w-full"
+            value={fallback}
+            onChange={(event) => setFallback(event.target.value)}
+          >
+            <NativeSelectOption value="">None — fail without a model fallback</NativeSelectOption>
             {data.catalog.map((model) => (
-              <option key={model.modelId} value={model.modelId}>
+              <NativeSelectOption key={model.modelId} value={model.modelId}>
                 {model.displayName} ({model.modelId})
-              </option>
+              </NativeSelectOption>
             ))}
-          </Select>
+          </NativeSelect>
+          <FieldDescription>
+            Used after retries are exhausted. Disclosed in the trace.
+          </FieldDescription>
         </Field>
-        <Toggle
+
+        <ToggleField
           label="Safety autopilot"
           hint="If a lineup run fails, keep the last valid lineup and fill empty or locked-out starting slots with the highest-projected eligible bench player."
           checked={autopilot}
@@ -131,32 +173,45 @@ export function ModelsTab({ data }: { data: SettingsData }) {
           })
         }
       >
-        <div className="grid gap-4 sm:grid-cols-2">
-          <Field label="From (deprecated)">
-            <Select value={fromModel} onChange={(event) => setFromModel(event.target.value)}>
-              <option value="">Select a model in use</option>
+        <FieldGroup className="gap-4 sm:grid sm:grid-cols-2">
+          <Field>
+            <FieldLabel htmlFor="replace-from">From (deprecated)</FieldLabel>
+            <NativeSelect
+              id="replace-from"
+              className="w-full"
+              value={fromModel}
+              onChange={(event) => setFromModel(event.target.value)}
+            >
+              <NativeSelectOption value="">Select a model in use</NativeSelectOption>
               {data.modelsInUse.map((row) => (
-                <option key={row.modelId} value={row.modelId}>
+                <NativeSelectOption key={row.modelId} value={row.modelId}>
                   {row.modelId} ({row.teamCount} team{row.teamCount === 1 ? "" : "s"})
-                </option>
+                </NativeSelectOption>
               ))}
-            </Select>
+            </NativeSelect>
           </Field>
-          <Field label="To (replacement)">
-            <Select value={toModel} onChange={(event) => setToModel(event.target.value)}>
-              <option value="">Select a replacement</option>
+          <Field>
+            <FieldLabel htmlFor="replace-to">To (replacement)</FieldLabel>
+            <NativeSelect
+              id="replace-to"
+              className="w-full"
+              value={toModel}
+              onChange={(event) => setToModel(event.target.value)}
+            >
+              <NativeSelectOption value="">Select a replacement</NativeSelectOption>
               {data.catalog
                 .filter((model) => model.modelId !== fromModel)
                 .map((model) => (
-                  <option key={model.modelId} value={model.modelId}>
+                  <NativeSelectOption key={model.modelId} value={model.modelId}>
                     {model.displayName} ({model.modelId})
-                  </option>
+                  </NativeSelectOption>
                 ))}
-            </Select>
+            </NativeSelect>
           </Field>
-        </div>
+        </FieldGroup>
+
         {replace.data ? (
-          <p className="text-xs text-accent-strong">
+          <p className="text-sm text-muted-foreground">
             Updated {replace.data.teamsUpdated.length} team(s).
           </p>
         ) : null}

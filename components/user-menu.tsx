@@ -1,15 +1,25 @@
 "use client";
 
 import { useAuthActions } from "@convex-dev/auth/react";
+import { ChevronDown, LogOut, Trophy, Library, Gauge } from "lucide-react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
-import { Button } from "@/components/ui";
+import {
+  Button,
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuGroup,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui";
 
 export function UserMenu({ name, email }: { name: string; email: string }) {
   const router = useRouter();
   const { signOut } = useAuthActions();
-  const [open, setOpen] = useState(false);
   const [pending, setPending] = useState(false);
 
   async function handleSignOut() {
@@ -17,53 +27,50 @@ export function UserMenu({ name, email }: { name: string; email: string }) {
     // `signOut()` clears the Convex Auth cookie; the nav's `users.me`
     // subscription flips to `null` on its own.
     await signOut();
-    setOpen(false);
     setPending(false);
     router.push("/");
   }
 
   return (
-    <div className="relative">
-      <Button
-        variant="secondary"
-        size="sm"
-        onClick={() => setOpen((v) => !v)}
-        aria-expanded={open}
-        aria-haspopup="menu"
-      >
-        <span className="font-mono text-[11px] uppercase">{initials(name || email)}</span>
-        <span className="hidden max-w-32 truncate sm:inline">{name || email}</span>
-      </Button>
-
-      {open ? (
-        <>
-          <button
-            type="button"
-            aria-label="Close menu"
-            className="fixed inset-0 z-10 cursor-default"
-            onClick={() => setOpen(false)}
-          />
-          <div
-            role="menu"
-            className="absolute right-0 z-20 mt-2 w-56 rounded-md border border-line bg-surface p-1 shadow-lg"
-          >
-            <div className="border-b border-line px-3 py-2">
-              <p className="truncate text-sm font-medium text-ink">{name}</p>
-              <p className="truncate text-xs text-ink-muted">{email}</p>
-            </div>
-            <Button
-              variant="ghost"
-              size="sm"
-              className="mt-1 w-full justify-start"
-              onClick={handleSignOut}
-              disabled={pending}
-            >
-              {pending ? "Signing out…" : "Sign out"}
-            </Button>
-          </div>
-        </>
-      ) : null}
-    </div>
+    <DropdownMenu>
+      <DropdownMenuTrigger render={<Button variant="outline" size="sm" />}>
+        <span className="flex size-5 items-center justify-center rounded-sm bg-brand font-mono text-[10px] font-semibold text-primary-foreground">
+          {initials(name || email)}
+        </span>
+        <span className="hidden max-w-32 truncate sm:inline">
+          {name || email}
+        </span>
+        <ChevronDown data-icon="inline-end" className="text-muted-foreground" />
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" className="w-60">
+        <DropdownMenuGroup>
+          <DropdownMenuLabel className="flex flex-col gap-0.5">
+            <span className="truncate text-sm font-medium text-foreground">
+              {name || "Signed in"}
+            </span>
+            <span className="truncate font-mono text-xs font-normal text-muted-foreground">
+              {email}
+            </span>
+          </DropdownMenuLabel>
+        </DropdownMenuGroup>
+        <DropdownMenuSeparator />
+        <DropdownMenuGroup>
+          <DropdownMenuItem render={<Link href="/leagues" />}>
+            <Trophy /> Leagues
+          </DropdownMenuItem>
+          <DropdownMenuItem render={<Link href="/skills" />}>
+            <Library /> Skills
+          </DropdownMenuItem>
+          <DropdownMenuItem render={<Link href="/bench" />}>
+            <Gauge /> Bench
+          </DropdownMenuItem>
+        </DropdownMenuGroup>
+        <DropdownMenuSeparator />
+        <DropdownMenuItem onClick={handleSignOut} disabled={pending}>
+          <LogOut /> {pending ? "Signing out…" : "Sign out"}
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }
 

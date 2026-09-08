@@ -1,31 +1,33 @@
 "use client";
 
+import type { ReactNode } from "react";
 import Link from "next/link";
 import { usePreloadedQuery, type Preloaded } from "convex/react";
 
 import {
   Badge,
-  Card,
-  CardBody,
-  CardHeader,
+  Button,
   EmptyState,
-  TBody,
-  TD,
-  TH,
-  THead,
-  TR,
+  Stat,
+  StatStrip,
   Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
 } from "@/components/ui";
 import type { api } from "@/convex/_generated/api";
 import type { FunctionReturnType } from "convex/server";
 import { formatET } from "@/lib/time";
 
 type WaiverStatus = FunctionReturnType<typeof api.waivers.results>["results"][number]["status"];
+type BadgeVariant = "success" | "secondary" | "destructive" | "outline";
 
-const TONES: Record<WaiverStatus, "accent" | "neutral" | "danger" | "outline"> = {
-  won: "accent",
-  lost: "neutral",
-  invalid: "danger",
+const VARIANTS: Record<WaiverStatus, BadgeVariant> = {
+  won: "success",
+  lost: "secondary",
+  invalid: "destructive",
   pending: "outline",
 };
 
@@ -43,20 +45,17 @@ export function WaiversView({
   const weeks = view.weeksWithClaims.length > 0 ? view.weeksWithClaims : [weekNo];
 
   return (
-    <div className="space-y-5">
-      <div className="grid gap-4 sm:grid-cols-3">
+    <div className="space-y-8">
+      <StatStrip className="sm:grid-cols-3">
         <Stat label="Claims this week" value={String(view.results.length)} />
-        <Stat
-          label="Won"
-          value={String(view.results.filter((row) => row.status === "won").length)}
-        />
+        <Stat label="Won" value={String(view.results.filter((row) => row.status === "won").length)} />
         <Stat label="Pending league-wide" value={String(view.pendingCount)} />
-      </div>
+      </StatStrip>
 
-      <Card>
-        <CardHeader
+      <section>
+        <SectionRule
           title={`Week ${weekNo} waivers`}
-          description={
+          meta={
             view.window
               ? `Window ${formatET(view.window.opensAt, "EEE HH:mm")} → ${formatET(
                   view.window.closesAt,
@@ -67,110 +66,125 @@ export function WaiversView({
           action={<WeekLinks leagueId={leagueId} weekNo={weekNo} weeks={weeks} />}
         />
         {view.results.length === 0 ? (
-          <CardBody>
+          <div className="mt-4">
             <EmptyState
               title="No claims"
               description="Agents submit FAAB bids during the Tuesday waiver window."
             />
-          </CardBody>
+          </div>
         ) : (
           <Table>
-            <THead>
-              <TR>
-                <TH>Team</TH>
-                <TH>Add</TH>
-                <TH>Drop</TH>
-                <TH numeric>Bid</TH>
-                <TH>Result</TH>
-                <TH>Reason</TH>
-                <TH>Trace</TH>
-              </TR>
-            </THead>
-            <TBody>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Team</TableHead>
+                <TableHead>Add</TableHead>
+                <TableHead>Drop</TableHead>
+                <TableHead numeric>Bid</TableHead>
+                <TableHead>Result</TableHead>
+                <TableHead>Reason</TableHead>
+                <TableHead>Trace</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
               {view.results.map((row) => (
-                <TR key={row.claimId}>
-                  <TD>
+                <TableRow key={row.claimId}>
+                  <TableCell>
                     <Link
                       href={`/leagues/${leagueId}/teams/${row.teamId}`}
-                      className="text-sm hover:text-accent-strong"
+                      className="text-sm hover:text-brand-strong"
                     >
                       {row.teamName}
                     </Link>
-                  </TD>
-                  <TD className="text-sm">
+                  </TableCell>
+                  <TableCell className="text-sm">
                     {row.addPlayerName}
                     <span className="ml-1.5 font-mono text-[10px] text-ink-faint">
                       {row.addPlayerPosition}
                     </span>
-                  </TD>
-                  <TD className="text-sm text-ink-muted">{row.dropPlayerName ?? "—"}</TD>
-                  <TD numeric className="font-mono text-xs">
+                  </TableCell>
+                  <TableCell className="text-sm text-muted-foreground">
+                    {row.dropPlayerName ?? "—"}
+                  </TableCell>
+                  <TableCell numeric className="font-mono text-xs">
                     ${row.bid}
-                  </TD>
-                  <TD>
-                    <Badge tone={TONES[row.status]}>{row.status}</Badge>
-                  </TD>
-                  <TD className="text-xs text-ink-muted">{row.resultReason ?? "—"}</TD>
-                  <TD>
+                  </TableCell>
+                  <TableCell>
+                    <Badge variant={VARIANTS[row.status]}>{row.status}</Badge>
+                  </TableCell>
+                  <TableCell className="text-sm text-muted-foreground">
+                    {row.resultReason ?? "—"}
+                  </TableCell>
+                  <TableCell>
                     {row.runId ? (
                       <Link
                         href={`/leagues/${leagueId}/traces/${row.runId}`}
-                        className="font-mono text-[10px] text-ink-muted hover:text-accent-strong"
+                        className="font-mono text-[10px] text-muted-foreground hover:text-brand-strong"
                       >
                         trace →
                       </Link>
                     ) : (
                       <span className="font-mono text-[10px] text-ink-faint">—</span>
                     )}
-                  </TD>
-                </TR>
+                  </TableCell>
+                </TableRow>
               ))}
-            </TBody>
+            </TableBody>
           </Table>
         )}
-      </Card>
+      </section>
 
-      <Card>
-        <CardHeader title="FAAB" description="Remaining budget and total won bids" />
+      <section>
+        <SectionRule title="FAAB" meta="Remaining budget and total won bids" />
         <Table>
-          <THead>
-            <TR>
-              <TH>Team</TH>
-              <TH numeric>Remaining</TH>
-              <TH numeric>Spent on won claims</TH>
-            </TR>
-          </THead>
-          <TBody>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Team</TableHead>
+              <TableHead numeric>Remaining</TableHead>
+              <TableHead numeric>Spent on won claims</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
             {view.faab.map((row) => (
-              <TR key={row.teamId}>
-                <TD>
+              <TableRow key={row.teamId}>
+                <TableCell>
                   <Link
                     href={`/leagues/${leagueId}/teams/${row.teamId}`}
-                    className="text-sm hover:text-accent-strong"
+                    className="text-sm hover:text-brand-strong"
                   >
                     {row.teamName}
                   </Link>
-                </TD>
-                <TD numeric className="font-mono text-xs">
+                </TableCell>
+                <TableCell numeric className="font-mono text-xs">
                   ${row.remaining}
-                </TD>
-                <TD numeric className="font-mono text-xs text-ink-muted">
+                </TableCell>
+                <TableCell numeric className="font-mono text-xs text-muted-foreground">
                   ${row.spent}
-                </TD>
-              </TR>
+                </TableCell>
+              </TableRow>
             ))}
-          </TBody>
+          </TableBody>
         </Table>
-      </Card>
+      </section>
     </div>
   );
 }
 
-function Stat({ label, value }: { label: string; value: string }) {
+function SectionRule({
+  title,
+  meta,
+  action,
+}: {
+  title: string;
+  meta?: ReactNode;
+  action?: ReactNode;
+}) {
   return (
-    <div className="rounded-lg border border-line bg-surface px-4 py-3">
-      <div className="eyebrow">{label}</div>
-      <div className="mt-1 font-mono text-lg tabular-nums text-ink">{value}</div>
+    <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 border-b border-border pb-2.5">
+      <div className="flex flex-wrap items-baseline gap-3">
+        <h2 className="eyebrow text-foreground">{title}</h2>
+        {meta ? <span className="text-xs text-muted-foreground">{meta}</span> : null}
+      </div>
+      {action}
     </div>
   );
 }
@@ -188,17 +202,16 @@ function WeekLinks({
   return (
     <div className="flex flex-wrap gap-1">
       {weeks.slice(0, 10).map((week) => (
-        <Link
+        <Button
           key={week}
-          href={`/leagues/${leagueId}/waivers?week=${week}`}
-          className={
-            week === weekNo
-              ? "rounded border border-accent bg-accent-soft px-1.5 py-0.5 font-mono text-[10px] text-accent-strong"
-              : "rounded border border-line px-1.5 py-0.5 font-mono text-[10px] text-ink-muted hover:border-line-strong hover:text-ink"
-          }
+          size="xs"
+          variant={week === weekNo ? "secondary" : "ghost"}
+          aria-current={week === weekNo ? "page" : undefined}
+          className="font-mono tabular-nums"
+          render={<Link href={`/leagues/${leagueId}/waivers?week=${week}`} />}
         >
           {week}
-        </Link>
+        </Button>
       ))}
     </div>
   );

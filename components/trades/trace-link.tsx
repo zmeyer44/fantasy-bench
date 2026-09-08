@@ -25,7 +25,7 @@ export function TraceLink({
       href={`/leagues/${leagueId}/traces/${runId}${hash}`}
       className={
         className ??
-        "font-mono text-[10px] uppercase tracking-wider text-ink-faint underline-offset-2 hover:text-accent-strong hover:underline"
+        "font-mono text-[10px] tracking-wider uppercase text-ink-faint underline-offset-2 transition-colors hover:text-brand-strong hover:underline"
       }
     >
       {label}

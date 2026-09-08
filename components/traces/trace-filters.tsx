@@ -3,7 +3,7 @@
 import { useRouter, useSearchParams } from "next/navigation";
 import { useTransition } from "react";
 
-import { Button, Input, Select } from "@/components/ui";
+import { Button, Input, NativeSelect, NativeSelectOption } from "@/components/ui";
 
 const WINDOW_TYPES = ["draft", "waiver", "trade", "lineup", "forum", "commissioner"] as const;
 const STATUSES = [
@@ -53,7 +53,7 @@ export function TraceFilters({
   );
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-2.5">
       <form
         onSubmit={(event) => {
           event.preventDefault();
@@ -72,14 +72,14 @@ export function TraceFilters({
           className="min-w-64 flex-1"
           aria-label="Search traces"
         />
-        <Button type="submit" size="sm" disabled={pending}>
+        <Button type="submit" variant="outline" disabled={pending}>
           Search
         </Button>
         {hasFilters ? (
           <Button
             type="button"
-            variant="secondary"
-            size="sm"
+            variant="ghost"
+            disabled={pending}
             onClick={() => startTransition(() => router.push(basePath))}
           >
             Clear
@@ -88,75 +88,75 @@ export function TraceFilters({
       </form>
 
       <div className="flex flex-wrap gap-2">
-        <Select
+        <NativeSelect
+          size="sm"
           aria-label="Team"
           value={value("team")}
           onChange={(event) => apply({ team: event.target.value })}
-          className="h-8 w-auto text-xs"
         >
-          <option value="">All teams</option>
+          <NativeSelectOption value="">All teams</NativeSelectOption>
           {teams.map((team) => (
-            <option key={team.id} value={team.id}>
+            <NativeSelectOption key={team.id} value={team.id}>
               {team.name}
-            </option>
+            </NativeSelectOption>
           ))}
-        </Select>
+        </NativeSelect>
 
-        <Select
+        <NativeSelect
+          size="sm"
           aria-label="Window type"
           value={value("window")}
           onChange={(event) => apply({ window: event.target.value })}
-          className="h-8 w-auto text-xs"
         >
-          <option value="">All windows</option>
+          <NativeSelectOption value="">All windows</NativeSelectOption>
           {WINDOW_TYPES.map((type) => (
-            <option key={type} value={type}>
+            <NativeSelectOption key={type} value={type}>
               {type}
-            </option>
+            </NativeSelectOption>
           ))}
-        </Select>
+        </NativeSelect>
 
-        <Select
+        <NativeSelect
+          size="sm"
           aria-label="Week"
           value={value("week")}
           onChange={(event) => apply({ week: event.target.value })}
-          className="h-8 w-auto text-xs"
         >
-          <option value="">All weeks</option>
+          <NativeSelectOption value="">All weeks</NativeSelectOption>
           {weeks.map((week) => (
-            <option key={week} value={String(week)}>
+            <NativeSelectOption key={week} value={String(week)}>
               Week {week}
-            </option>
+            </NativeSelectOption>
           ))}
-        </Select>
+        </NativeSelect>
 
-        <Select
+        <NativeSelect
+          size="sm"
           aria-label="Status"
           value={value("status")}
           onChange={(event) => apply({ status: event.target.value })}
-          className="h-8 w-auto text-xs"
         >
-          <option value="">Any status</option>
+          <NativeSelectOption value="">Any status</NativeSelectOption>
           {STATUSES.map((status) => (
-            <option key={status} value={status}>
+            <NativeSelectOption key={status} value={status}>
               {status.replace("_", " ")}
-            </option>
+            </NativeSelectOption>
           ))}
-        </Select>
+        </NativeSelect>
 
-        <Select
+        <NativeSelect
+          size="sm"
           aria-label="Model"
           value={value("model")}
           onChange={(event) => apply({ model: event.target.value })}
-          className="h-8 w-auto text-xs"
         >
-          <option value="">Any model</option>
+          <NativeSelectOption value="">Any model</NativeSelectOption>
           {models.map((model) => (
-            <option key={model.modelId} value={model.modelId}>
+            <NativeSelectOption key={model.modelId} value={model.modelId}>
               {model.label} ({model.runCount})
-            </option>
+            </NativeSelectOption>
           ))}
-        </Select>
+        </NativeSelect>
       </div>
     </div>
   );

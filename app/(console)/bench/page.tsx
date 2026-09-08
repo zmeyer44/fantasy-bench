@@ -1,14 +1,13 @@
 import type { Metadata } from "next";
 
 import {
-  Card,
   PageHeader,
-  TBody,
-  TD,
-  TH,
-  THead,
-  TR,
   Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
 } from "@/components/ui";
 import { api } from "@/convex/_generated/api";
 import { fetchAuthQuery } from "@/lib/convex/server";
@@ -32,39 +31,52 @@ export default async function BenchPage() {
         description="Cross-league leaderboards by model and by canonical config land once a season's runs exist. Until then: the pinned model catalog and its price book."
       />
 
-      <Card>
-        <Table>
-          <THead>
-            <TR>
-              <TH>Model</TH>
-              <TH>Provider</TH>
-              <TH numeric>Input $/M</TH>
-              <TH numeric>Output $/M</TH>
-              <TH numeric>Cached $/M</TH>
-              <TH>Reasoning</TH>
-            </TR>
-          </THead>
-          <TBody>
-            {prices.map((price) => (
-              <TR key={price.modelId}>
-                <TD className="font-mono text-xs">{price.modelId}</TD>
-                <TD className="text-ink-muted">{price.provider}</TD>
-                <TD numeric>{price.inputPerM.toFixed(2)}</TD>
-                <TD numeric>{price.outputPerM.toFixed(2)}</TD>
-                <TD numeric>
-                  {price.cachedInputPerM === null ? "—" : price.cachedInputPerM.toFixed(3)}
-                </TD>
-                <TD className="text-ink-muted">{price.supportsReasoning ? "yes" : "no"}</TD>
-              </TR>
-            ))}
-          </TBody>
-        </Table>
-      </Card>
+      <section className="space-y-4">
+        <div className="border-b border-border pb-3">
+          <h2 className="eyebrow text-foreground">Price book</h2>
+          <p className="mt-2 text-sm text-muted-foreground">
+            Dollars per million tokens, newest effective price per catalogued model.
+          </p>
+        </div>
 
-      <p className="text-xs text-ink-faint">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Model</TableHead>
+              <TableHead>Provider</TableHead>
+              <TableHead numeric>Input $/M</TableHead>
+              <TableHead numeric>Output $/M</TableHead>
+              <TableHead numeric>Cached $/M</TableHead>
+              <TableHead>Reasoning</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {prices.map((price) => (
+              <TableRow key={price.modelId}>
+                <TableCell className="font-mono text-xs text-foreground">{price.modelId}</TableCell>
+                <TableCell className="text-muted-foreground">{price.provider}</TableCell>
+                <TableCell numeric className="font-mono text-xs">
+                  {price.inputPerM.toFixed(2)}
+                </TableCell>
+                <TableCell numeric className="font-mono text-xs">
+                  {price.outputPerM.toFixed(2)}
+                </TableCell>
+                <TableCell numeric className="font-mono text-xs">
+                  {price.cachedInputPerM === null ? "—" : price.cachedInputPerM.toFixed(3)}
+                </TableCell>
+                <TableCell className="text-muted-foreground">
+                  {price.supportsReasoning ? "yes" : "no"}
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </section>
+
+      <p className="text-sm text-ink-faint">
         Prices are seeded estimates and are marked &ldquo;verify before production&rdquo; in
-        <code className="mx-1 font-mono">lib/models.ts</code>. Cost is computed from this table
-        unless the gateway reports a figure directly.
+        <code className="mx-1 font-mono text-xs text-muted-foreground">lib/models.ts</code>. Cost is
+        computed from this table unless the gateway reports a figure directly.
       </p>
     </div>
   );

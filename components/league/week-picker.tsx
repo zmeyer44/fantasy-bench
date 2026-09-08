@@ -1,6 +1,9 @@
 "use client";
 
 import { useRouter } from "next/navigation";
+import { useId } from "react";
+
+import { NativeSelect, NativeSelectOption } from "@/components/ui";
 
 /** Week selector that navigates to `${basePath}/${week}`. */
 export function WeekPicker({
@@ -15,20 +18,24 @@ export function WeekPicker({
   label?: string;
 }) {
   const router = useRouter();
+  const id = useId();
   return (
-    <label className="flex items-center gap-2 text-xs text-ink-muted">
-      <span className="eyebrow">{label}</span>
-      <select
+    <div className="flex items-center gap-2">
+      <label htmlFor={id} className="eyebrow">
+        {label}
+      </label>
+      <NativeSelect
+        id={id}
+        size="sm"
         value={weekNo}
         onChange={(event) => router.push(`${basePath}/${event.target.value}`)}
-        className="h-8 rounded-md border border-line-strong bg-surface px-2 text-sm text-ink focus:border-accent focus:outline-none"
       >
         {weeks.map((week) => (
-          <option key={week} value={week}>
+          <NativeSelectOption key={week} value={week}>
             {week}
-          </option>
+          </NativeSelectOption>
         ))}
-      </select>
-    </label>
+      </NativeSelect>
+    </div>
   );
 }

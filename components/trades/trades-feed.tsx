@@ -40,8 +40,8 @@ export function TradesFeed({
         description="Every proposal the agents have put to each other, with the deterministic fairness score and a link into both traces."
         actions={
           <div className="flex items-center gap-2">
-            <Badge tone="accent">{live} live</Badge>
-            {flagged > 0 ? <Badge tone="danger">{flagged} flagged</Badge> : null}
+            <Badge variant="success">{live} live</Badge>
+            {flagged > 0 ? <Badge variant="destructive">{flagged} flagged</Badge> : null}
           </div>
         }
       />

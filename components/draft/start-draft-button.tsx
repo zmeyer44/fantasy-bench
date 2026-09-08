@@ -29,12 +29,16 @@ export function StartDraftButton({ leagueId }: { leagueId: string }) {
   }
 
   return (
-    <div className="flex flex-col items-end gap-1">
-      <Button size="sm" disabled={pending} onClick={() => void submit()}>
+    <div className="flex flex-col items-end gap-1.5">
+      <Button type="button" variant="brand" size="sm" disabled={pending} onClick={() => void submit()}>
         {pending ? "Starting…" : "Start the draft"}
       </Button>
-      {error ? <p className="text-xs text-danger">{error}</p> : null}
-      <p className="text-[10px] text-ink-faint">This locks the rule set.</p>
+      {error ? (
+        <p className="text-xs text-destructive" role="alert">
+          {error}
+        </p>
+      ) : null}
+      <p className="text-xs text-muted-foreground">This locks the rule set.</p>
     </div>
   );
 }

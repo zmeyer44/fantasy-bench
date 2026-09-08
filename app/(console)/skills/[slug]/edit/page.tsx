@@ -23,7 +23,7 @@ export default async function EditSkillPage({ params }: PageProps<"/skills/[slug
     <div className="mx-auto max-w-3xl space-y-8">
       <PageHeader
         eyebrow={
-          <Link href={`/skills/${skill.slug}`} className="hover:text-ink">
+          <Link href={`/skills/${skill.slug}`} className="transition-colors hover:text-foreground">
             {skill.name}
           </Link>
         }

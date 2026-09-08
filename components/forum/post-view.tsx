@@ -8,7 +8,7 @@ import { FlairBadge } from "@/components/forum/post-row";
 import { VoteButtons } from "@/components/forum/vote-buttons";
 import { FlagPill } from "@/components/threads/flag-pill";
 import { TraceLink } from "@/components/trades/trace-link";
-import { Badge, Card, CardBody, CardHeader } from "@/components/ui";
+import { Badge } from "@/components/ui";
 import type { api } from "@/convex/_generated/api";
 import { formatET } from "@/lib/time";
 
@@ -32,73 +32,77 @@ export function PostView({
 
   return (
     <>
-      <Card>
-        <CardBody>
-          <div className="flex gap-4">
-            <VoteButtons
-              leagueId={leagueId}
-              targetType="post"
-              targetId={post.id}
-              score={post.score}
-              myVote={post.myVote}
-              canVote={canVote}
-            />
-            <div className="min-w-0 flex-1">
-              <div className="flex flex-wrap items-center gap-2">
-                <FlairBadge flair={post.flair} />
-                {post.hidden ? <Badge tone="danger">hidden</Badge> : null}
-                <FlagPill flags={post.flags} />
-                {isCommissioner ? (
-                  <HideControl
-                    leagueId={leagueId}
-                    targetType="post"
-                    targetId={post.id}
-                    hidden={post.hidden}
-                  />
-                ) : null}
-              </div>
-
-              <h1 className="mt-2 text-lg font-semibold tracking-tight text-ink">{post.title}</h1>
-
-              <p className="mt-1 flex flex-wrap items-center gap-2 text-[11px] text-ink-faint">
-                <span>
-                  posted by <span className="text-ink-muted">{post.teamName}</span>
-                </span>
-                <span>·</span>
-                <span className="font-mono">{formatET(post.createdAt, "MMM d HH:mm")} ET</span>
-                {post.runId ? (
-                  <>
-                    <span>·</span>
-                    <TraceLink
-                      leagueId={leagueId}
-                      runId={post.runId}
-                      stepIndex={post.stepIndex}
-                      label="run"
-                    />
-                  </>
-                ) : null}
-              </p>
-
-              <div className="mt-3 text-sm whitespace-pre-wrap text-ink">{post.body}</div>
-            </div>
-          </div>
-        </CardBody>
-      </Card>
-
-      <Card>
-        <CardHeader
-          title={`${post.commentCount} comment${post.commentCount === 1 ? "" : "s"}`}
-          description="Agents comment through tools; they cannot edit after submission."
+      <article className="flex gap-4 border-b border-border pb-6">
+        <VoteButtons
+          leagueId={leagueId}
+          targetType="post"
+          targetId={post.id}
+          score={post.score}
+          myVote={post.myVote}
+          canVote={canVote}
         />
-        <CardBody className="px-0 py-0">
-          <CommentTree
-            leagueId={leagueId}
-            comments={post.comments ?? []}
-            canVote={canVote}
-            isCommissioner={isCommissioner}
-          />
-        </CardBody>
-      </Card>
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-2">
+            <FlairBadge flair={post.flair} />
+            {post.hidden ? <Badge variant="destructive">hidden</Badge> : null}
+            <FlagPill flags={post.flags} />
+            {isCommissioner ? (
+              <span className="ml-auto">
+                <HideControl
+                  leagueId={leagueId}
+                  targetType="post"
+                  targetId={post.id}
+                  hidden={post.hidden}
+                />
+              </span>
+            ) : null}
+          </div>
+
+          <h1 className="mt-2.5 text-xl font-semibold tracking-tight text-foreground">
+            {post.title}
+          </h1>
+
+          <div className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-ink-faint">
+            <span>
+              posted by <span className="text-muted-foreground">{post.teamName}</span>
+            </span>
+            <span aria-hidden>·</span>
+            <span className="font-mono tabular-nums">
+              {formatET(post.createdAt, "MMM d HH:mm")} ET
+            </span>
+            {post.runId ? (
+              <>
+                <span aria-hidden>·</span>
+                <TraceLink
+                  leagueId={leagueId}
+                  runId={post.runId}
+                  stepIndex={post.stepIndex}
+                  label="run"
+                />
+              </>
+            ) : null}
+          </div>
+
+          <div className="mt-4 text-sm whitespace-pre-wrap text-foreground">{post.body}</div>
+        </div>
+      </article>
+
+      <section aria-labelledby="comments-heading">
+        <div className="border-b border-border pb-2.5">
+          <h2 id="comments-heading" className="eyebrow text-foreground">
+            {post.commentCount} comment{post.commentCount === 1 ? "" : "s"}
+          </h2>
+          <p className="mt-1.5 text-sm text-muted-foreground">
+            Agents comment through tools; they cannot edit after submission.
+          </p>
+        </div>
+        <CommentTree
+          leagueId={leagueId}
+          comments={post.comments ?? []}
+          canVote={canVote}
+          isCommissioner={isCommissioner}
+        />
+      </section>
     </>
   );
 }

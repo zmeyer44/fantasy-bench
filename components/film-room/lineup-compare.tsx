@@ -1,4 +1,14 @@
-import { cn } from "@/components/ui";
+import { formatSignedPoints } from "@/components/cost/format";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableFooter,
+  TableHead,
+  TableHeader,
+  TableRow,
+  cn,
+} from "@/components/ui";
 import type { api } from "@/convex/_generated/api";
 import type { FunctionReturnType } from "convex/server";
 
@@ -35,62 +45,85 @@ function pairRows(actual: Row[], optimal: Row[]): Array<{ actual: Row | null; op
   return out;
 }
 
-/** Side-by-side starting lineups: what the agent set vs what it should have set. */
+/** Colour a delta by direction: lime when the agent came out ahead, red when it didn't. */
+function deltaClass(delta: number): string {
+  if (Math.abs(delta) < 0.05) return "text-ink-faint";
+  return delta > 0 ? "text-brand" : "text-destructive";
+}
+
+/**
+ * Side-by-side starting lineups: what the agent set vs what it should have set.
+ *
+ * The two halves are the same shape and start on the same row, so a substitution
+ * reads as a horizontal jump rather than as two lists to diff by hand. The delta
+ * column carries the only colour in the table.
+ */
 export function LineupCompare({ efficiency }: { efficiency: FilmRoomEfficiency }) {
   const rows = pairRows(efficiency.actualSlots, efficiency.optimalSlots);
+  const totalDelta = efficiency.actual - efficiency.optimal;
 
   return (
-    <table className="w-full border-collapse text-sm">
-      <thead className="border-b border-line">
-        <tr>
-          <th className="eyebrow px-3 py-2 text-left">Slot</th>
-          <th className="eyebrow px-3 py-2 text-left">Started</th>
-          <th className="eyebrow px-3 py-2 text-right">Pts</th>
-          <th className="eyebrow px-3 py-2 text-left">Optimal</th>
-          <th className="eyebrow px-3 py-2 text-right">Pts</th>
-        </tr>
-      </thead>
-      <tbody className="divide-y divide-line">
+    <Table>
+      <TableHeader>
+        <TableRow>
+          <TableHead>Slot</TableHead>
+          <TableHead>Started</TableHead>
+          <TableHead numeric>Pts</TableHead>
+          <TableHead className="border-l border-border">Optimal</TableHead>
+          <TableHead numeric>Pts</TableHead>
+          <TableHead numeric>Δ</TableHead>
+        </TableRow>
+      </TableHeader>
+      <TableBody>
         {rows.map((row, i) => {
           const differs = (row.actual?.playerId ?? null) !== (row.optimal?.playerId ?? null);
+          const actualPts = row.actual?.points ?? 0;
+          const optimalPts = row.optimal?.points ?? 0;
+          const delta = actualPts - optimalPts;
           return (
-            <tr key={i} className={differs ? "bg-warning/5" : undefined}>
-              <td className="px-3 py-1.5 font-mono text-[11px] text-ink-faint">
+            <TableRow key={i}>
+              <TableCell className="font-mono text-[11px] tracking-wider text-ink-faint uppercase">
                 {row.actual?.slot ?? row.optimal?.slot}
-              </td>
-              <td className="px-3 py-1.5">{row.actual?.playerName ?? "—"}</td>
-              <td className="px-3 py-1.5 text-right font-mono tabular-nums">
-                {(row.actual?.points ?? 0).toFixed(1)}
-              </td>
-              <td
+              </TableCell>
+              <TableCell>{row.actual?.playerName ?? "—"}</TableCell>
+              <TableCell numeric className="font-mono text-xs">
+                {actualPts.toFixed(1)}
+              </TableCell>
+              <TableCell
                 className={cn(
-                  "px-3 py-1.5",
-                  differs ? "font-medium text-accent-strong" : "text-ink-muted",
+                  "border-l border-border",
+                  differs ? "font-medium text-foreground" : "text-muted-foreground",
                 )}
               >
                 {row.optimal?.playerName ?? "—"}
-              </td>
-              <td className="px-3 py-1.5 text-right font-mono tabular-nums">
-                {(row.optimal?.points ?? 0).toFixed(1)}
-              </td>
-            </tr>
+              </TableCell>
+              <TableCell numeric className="font-mono text-xs">
+                {optimalPts.toFixed(1)}
+              </TableCell>
+              <TableCell numeric className={cn("font-mono text-xs", deltaClass(delta))}>
+                {formatSignedPoints(delta)}
+              </TableCell>
+            </TableRow>
           );
         })}
-      </tbody>
-      <tfoot className="border-t border-line">
-        <tr>
-          <td className="px-3 py-2 font-medium" colSpan={2}>
+      </TableBody>
+      <TableFooter>
+        <TableRow>
+          <TableCell colSpan={2} className="font-medium">
             Total
-          </td>
-          <td className="px-3 py-2 text-right font-mono font-semibold tabular-nums">
+          </TableCell>
+          <TableCell numeric className="font-mono text-xs">
             {efficiency.actual.toFixed(2)}
-          </td>
-          <td />
-          <td className="px-3 py-2 text-right font-mono font-semibold tabular-nums text-accent-strong">
+          </TableCell>
+          <TableCell className="border-l border-border" />
+          <TableCell numeric className="font-mono text-xs">
             {efficiency.optimal.toFixed(2)}
-          </td>
-        </tr>
-      </tfoot>
-    </table>
+          </TableCell>
+          <TableCell numeric className={cn("font-mono text-xs", deltaClass(totalDelta))}>
+            {formatSignedPoints(totalDelta, 2)}
+          </TableCell>
+        </TableRow>
+      </TableFooter>
+    </Table>
   );
 }

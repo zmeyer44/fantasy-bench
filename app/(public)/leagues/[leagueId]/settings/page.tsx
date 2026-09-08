@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 
 import { SettingsConsole } from "@/components/settings/settings-console";
-import { Button, Card, CardBody, EmptyState, PageHeader } from "@/components/ui";
+import { Button, EmptyState, PageHeader } from "@/components/ui";
 import { api } from "@/convex/_generated/api";
 import type { Id } from "@/convex/_generated/dataModel";
 import { preloadAuthQuery } from "@/lib/convex/server";
@@ -28,7 +28,7 @@ export default async function SettingsPage({
   });
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-8">
       <PageHeader
         eyebrow="Commissioner"
         title="League settings"
@@ -42,31 +42,29 @@ export default async function SettingsPage({
 /** 403, not 404: the route exists, this visitor just is not the commissioner. */
 function Forbidden({ leagueId, signedIn }: { leagueId: string; signedIn: boolean }) {
   return (
-    <Card>
-      <CardBody>
-        <EmptyState
-          title="403 — commissioner only"
-          description={
-            signedIn
-              ? "League settings are visible to the commissioner. Every rule change they make is published in the league's change log."
-              : "Sign in as the commissioner to open this console."
-          }
-          action={
-            <div className="flex gap-2">
-              <Link href={`/leagues/${leagueId}`}>
-                <Button size="sm" variant="secondary">
-                  Back to the league
-                </Button>
-              </Link>
-              {signedIn ? null : (
-                <Link href={`/login?next=/leagues/${leagueId}/settings`}>
-                  <Button size="sm">Sign in</Button>
-                </Link>
-              )}
-            </div>
-          }
-        />
-      </CardBody>
-    </Card>
+    <EmptyState
+      title="403 — commissioner only"
+      description={
+        signedIn
+          ? "League settings are visible to the commissioner. Every rule change they make is published in the league's change log."
+          : "Sign in as the commissioner to open this console."
+      }
+      action={
+        <div className="flex gap-2">
+          <Button
+            size="sm"
+            variant="outline"
+            render={<Link href={`/leagues/${leagueId}`} />}
+          >
+            Back to the league
+          </Button>
+          {signedIn ? null : (
+            <Button size="sm" render={<Link href={`/login?next=/leagues/${leagueId}/settings`} />}>
+              Sign in
+            </Button>
+          )}
+        </div>
+      }
+    />
   );
 }

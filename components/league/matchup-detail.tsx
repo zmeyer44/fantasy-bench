@@ -3,19 +3,18 @@
 import Link from "next/link";
 import { usePreloadedQuery, type Preloaded } from "convex/react";
 
+import { OpponentTag, TeamLogo } from "@/components/nfl/team-logo";
 import {
   Badge,
-  Card,
-  CardBody,
-  CardFooter,
-  CardHeader,
   EmptyState,
-  TBody,
-  TD,
-  TH,
-  THead,
-  TR,
   Table,
+  TableBody,
+  TableCell,
+  TableFooter,
+  TableHead,
+  TableHeader,
+  TableRow,
+  cn,
 } from "@/components/ui";
 import type { api } from "@/convex/_generated/api";
 import type { FunctionReturnType } from "convex/server";
@@ -38,21 +37,26 @@ export function MatchupDetailView({
   if (!page) return <EmptyState title="Matchup not found" />;
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-wrap items-center justify-between gap-4 rounded-lg border border-line bg-surface px-4 py-4">
+    <div className="space-y-10">
+      {/* Scoreboard: a ruled strip across the page, not a box. */}
+      <div className="flex flex-wrap items-center justify-between gap-6 border-b border-border pb-5">
         <Score side={page.away} isFinal={page.isFinal} align="left" />
         <div className="text-center">
           <div className="eyebrow">Week {weekNo}</div>
-          <div className="mt-1">
-            {page.isFinal ? <Badge tone="neutral">final</Badge> : <Badge tone="accent">live</Badge>}
+          <div className="mt-2">
+            {page.isFinal ? (
+              <Badge variant="secondary">final</Badge>
+            ) : (
+              <Badge variant="success">live</Badge>
+            )}
           </div>
         </div>
         <Score side={page.home} isFinal={page.isFinal} align="right" />
       </div>
 
-      <div className="grid gap-6 lg:grid-cols-2">
-        <SideCard leagueId={leagueId} side={page.away} />
-        <SideCard leagueId={leagueId} side={page.home} />
+      <div className="grid gap-10 lg:grid-cols-2">
+        <SideLineup leagueId={leagueId} side={page.away} isFinal={page.isFinal} />
+        <SideLineup leagueId={leagueId} side={page.home} isFinal={page.isFinal} />
       </div>
     </div>
   );
@@ -70,127 +74,162 @@ function Score({
   const points = isFinal ? side.officialScore : side.liveTotal || side.officialScore;
   return (
     <div className={align === "right" ? "text-right" : "text-left"}>
-      <div className="text-sm font-medium text-ink">{side.teamName}</div>
-      <div className="font-mono text-[10px] text-ink-faint">
+      <div className="text-sm font-medium text-foreground">{side.teamName}</div>
+      <div className="mt-0.5 font-mono text-[10px] text-ink-faint">
         {side.record} · proj {side.projectedTotal.toFixed(1)}
       </div>
-      <div className="mt-1 font-mono text-2xl tabular-nums text-ink">{points.toFixed(1)}</div>
+      <div
+        className={cn(
+          "mt-1.5 font-mono text-3xl tracking-tight tabular-nums",
+          isFinal ? "text-foreground" : "text-brand",
+        )}
+      >
+        {points.toFixed(1)}
+      </div>
     </div>
   );
 }
 
-function SideCard({ leagueId, side }: { leagueId: string; side: MatchupTeamView }) {
+function SideLineup({
+  leagueId,
+  side,
+  isFinal,
+}: {
+  leagueId: string;
+  side: MatchupTeamView;
+  isFinal: boolean;
+}) {
   const starters = side.slots.filter((slot) => slot.starting);
   const bench = side.slots.filter((slot) => !slot.starting);
 
   return (
-    <Card>
-      <CardHeader
-        title={
-          <Link
-            href={`/leagues/${leagueId}/teams/${side.teamId}`}
-            className="hover:text-accent-strong"
-          >
-            {side.teamName}
-          </Link>
-        }
-        description={
-          side.lineupSource ? `Lineup set by ${side.lineupSource.replace("_", " ")}` : undefined
-        }
-        action={
-          side.rationale ? (
+    <section>
+      <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 border-b border-border pb-2.5">
+        <div className="flex flex-wrap items-baseline gap-3">
+          <h2 className="text-sm font-medium text-foreground">
             <Link
-              href={`/leagues/${leagueId}/traces/${side.rationale.runId}`}
-              className="text-xs text-ink-muted hover:text-accent-strong"
+              href={`/leagues/${leagueId}/teams/${side.teamId}`}
+              className="hover:text-brand-strong"
             >
-              Trace →
+              {side.teamName}
             </Link>
-          ) : null
-        }
-      />
+          </h2>
+          {side.lineupSource ? (
+            <span className="text-xs text-muted-foreground">
+              Lineup set by {side.lineupSource.replace("_", " ")}
+            </span>
+          ) : null}
+        </div>
+        {side.rationale ? (
+          <Link
+            href={`/leagues/${leagueId}/traces/${side.rationale.runId}`}
+            className="eyebrow transition-colors hover:text-foreground"
+          >
+            Trace →
+          </Link>
+        ) : null}
+      </div>
 
       {side.rationale?.excerpt ? (
-        <CardBody className="border-b border-line bg-surface-muted/50">
-          <p className="text-xs leading-relaxed text-ink-muted">
-            <span className="eyebrow mr-2">{side.rationale.windowLabel}</span>
-            {side.rationale.excerpt}
-          </p>
-        </CardBody>
+        <p className="mt-4 border-l-2 border-border pl-3 text-sm leading-relaxed text-muted-foreground">
+          <span className="eyebrow mr-2">{side.rationale.windowLabel}</span>
+          {side.rationale.excerpt}
+        </p>
       ) : null}
 
-      <SlotRows rows={starters} />
+      <SlotRows rows={starters} side={side} isFinal={isFinal} />
 
       {bench.length > 0 ? (
         <>
-          <div className="border-t border-line px-4 py-2">
-            <span className="eyebrow">Bench</span>
+          <div className="mt-8 border-b border-border pb-2.5">
+            <h3 className="eyebrow text-foreground">Bench</h3>
           </div>
           <SlotRows rows={bench} muted />
         </>
       ) : null}
-
-      <CardFooter className="flex justify-between">
-        <span>
-          Projected <span className="font-mono text-ink">{side.projectedTotal.toFixed(1)}</span>
-        </span>
-        <span>
-          Points <span className="font-mono text-ink">{side.liveTotal.toFixed(1)}</span>
-        </span>
-      </CardFooter>
-    </Card>
+    </section>
   );
 }
 
-function SlotRows({ rows, muted = false }: { rows: MatchupTeamView["slots"]; muted?: boolean }) {
+function SlotRows({
+  rows,
+  side,
+  isFinal,
+  muted = false,
+}: {
+  rows: MatchupTeamView["slots"];
+  side?: MatchupTeamView;
+  isFinal?: boolean;
+  muted?: boolean;
+}) {
   if (rows.length === 0) {
-    return (
-      <CardBody>
-        <p className="text-sm text-ink-muted">No lineup recorded.</p>
-      </CardBody>
-    );
+    return <p className="mt-4 text-sm text-muted-foreground">No lineup recorded.</p>;
   }
   return (
-    <Table>
-      <THead>
-        <TR>
-          <TH>Slot</TH>
-          <TH>Player</TH>
-          <TH>Kickoff</TH>
-          <TH numeric>Proj</TH>
-          <TH numeric>Pts</TH>
-        </TR>
-      </THead>
-      <TBody>
+    <Table className={muted ? "opacity-70" : undefined}>
+      <TableHeader>
+        <TableRow>
+          <TableHead className="w-12">Slot</TableHead>
+          <TableHead>Player</TableHead>
+          <TableHead>Kickoff</TableHead>
+          <TableHead numeric>Proj</TableHead>
+          <TableHead numeric>Pts</TableHead>
+        </TableRow>
+      </TableHeader>
+      <TableBody>
         {rows.map((slot, index) => (
-          <TR key={`${slot.slot}-${slot.playerId ?? index}`} className={muted ? "opacity-70" : ""}>
-            <TD className="font-mono text-[10px] uppercase text-ink-faint">{slot.slot}</TD>
-            <TD>
+          <TableRow key={`${slot.slot}-${slot.playerId ?? index}`}>
+            <TableCell className="font-mono text-[10px] uppercase text-ink-faint">
+              {slot.slot}
+            </TableCell>
+            <TableCell>
               {slot.playerName ? (
                 <span className="flex flex-wrap items-center gap-1.5">
-                  <span className="text-sm text-ink">{slot.playerName}</span>
+                  <TeamLogo team={slot.nflTeam} size={18} />
+                  <span className="text-sm text-foreground">{slot.playerName}</span>
                   <span className="font-mono text-[10px] text-ink-faint">
                     {slot.position}
                     {slot.nflTeam ? ` · ${slot.nflTeam}` : ""}
-                    {slot.opponent ? ` vs ${slot.opponent}` : ""}
                   </span>
-                  {slot.injuryStatus ? <Badge tone="danger">{slot.injuryStatus}</Badge> : null}
+                  {slot.opponent ? <OpponentTag opponent={slot.opponent} size={14} /> : null}
+                  {slot.injuryStatus ? (
+                    <Badge variant="destructive">{slot.injuryStatus}</Badge>
+                  ) : null}
                 </span>
               ) : (
                 <span className="text-sm text-ink-faint">— empty —</span>
               )}
-            </TD>
-            <TD className="font-mono text-[10px] text-ink-muted">
+            </TableCell>
+            <TableCell className="font-mono text-[10px] text-muted-foreground">
               {slot.kickoffAt ? formatET(slot.kickoffAt, "EEE HH:mm") : "—"}
-            </TD>
-            <TD numeric className="font-mono text-xs text-ink-muted">
+            </TableCell>
+            <TableCell numeric className="font-mono text-xs text-muted-foreground">
               {slot.projection?.toFixed(1) ?? "—"}
-            </TD>
-            <TD numeric className="font-mono text-xs text-ink">
+            </TableCell>
+            <TableCell numeric className="font-mono text-xs text-foreground">
               {slot.points?.toFixed(1) ?? "—"}
-            </TD>
-          </TR>
+            </TableCell>
+          </TableRow>
         ))}
-      </TBody>
+      </TableBody>
+      {side ? (
+        <TableFooter>
+          <TableRow>
+            <TableCell colSpan={3} className="eyebrow">
+              Total
+            </TableCell>
+            <TableCell numeric className="font-mono text-xs text-muted-foreground">
+              {side.projectedTotal.toFixed(1)}
+            </TableCell>
+            <TableCell
+              numeric
+              className={cn("font-mono text-xs", isFinal ? "text-foreground" : "text-brand")}
+            >
+              {side.liveTotal.toFixed(1)}
+            </TableCell>
+          </TableRow>
+        </TableFooter>
+      ) : null}
     </Table>
   );
 }

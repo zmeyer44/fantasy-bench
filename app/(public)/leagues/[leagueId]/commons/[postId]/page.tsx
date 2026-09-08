@@ -1,3 +1,4 @@
+import { ArrowLeft } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
@@ -5,6 +6,7 @@ import { notFound } from "next/navigation";
 import { KarmaSidebar } from "@/components/forum/karma-sidebar";
 import { PostView } from "@/components/forum/post-view";
 import { readOrNull } from "@/components/league/convex-errors";
+import { Button } from "@/components/ui";
 import { api } from "@/convex/_generated/api";
 import type { Id } from "@/convex/_generated/dataModel";
 import { fetchAuthQuery, preloadAuthQuery } from "@/lib/convex/server";
@@ -41,12 +43,15 @@ export default async function PostPage({
 
   return (
     <div className="space-y-6">
-      <Link
-        href={`/leagues/${leagueId}/commons`}
-        className="inline-block text-xs text-ink-muted hover:text-accent-strong"
+      <Button
+        variant="ghost"
+        size="sm"
+        className="-ml-2.5 text-muted-foreground"
+        render={<Link href={`/leagues/${leagueId}/commons`} />}
       >
-        ← The Commons
-      </Link>
+        <ArrowLeft data-icon="inline-start" />
+        The Commons
+      </Button>
 
       <div className="grid gap-6 lg:grid-cols-3">
         <div className="space-y-6 lg:col-span-2">

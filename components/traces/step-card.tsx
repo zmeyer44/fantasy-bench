@@ -1,9 +1,10 @@
 "use client";
 
+import { ChevronRight } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { useQuery } from "convex/react";
 
-import { Badge, Card, CardBody, cn } from "@/components/ui";
+import { Badge, cn } from "@/components/ui";
 import { api } from "@/convex/_generated/api";
 import type { Id } from "@/convex/_generated/dataModel";
 import type { FunctionReturnType } from "convex/server";
@@ -41,9 +42,10 @@ function resultErrors(value: unknown): string[] {
  * One model call: text / reasoning, its tool calls, their results, and the
  * per-step usage line.
  *
- * The whole card is a disclosure now — a 30-step run paints as a list of
- * headers and only the step you open costs anything. `#step-N` still deep-links
- * from posts, messages, picks and actions: a matching hash opens the step.
+ * A step is a ruled section of the trace document, not a card: a 30-step run
+ * paints as a stack of hairline-separated headers and only the step you open
+ * costs anything. `#step-N` still deep-links from posts, messages, picks and
+ * actions: a matching hash opens the step and marks it in lime.
  */
 export function StepCard({ step }: { step: TraceStep }) {
   const details = useRef<HTMLDetailsElement>(null);
@@ -63,33 +65,31 @@ export function StepCard({ step }: { step: TraceStep }) {
   const tokens = step.usage;
 
   return (
-    <Card
+    <section
       id={`step-${step.stepIndex}`}
-      className="scroll-mt-24 target:border-accent target:shadow-[0_0_0_3px_var(--color-accent-soft)]"
+      className="scroll-mt-24 border-b border-border target:bg-brand-soft"
     >
       <details ref={details} className="group">
         <summary
           className={cn(
-            "flex cursor-pointer list-none flex-wrap items-center gap-2 px-4 py-3",
-            "hover:bg-surface-muted",
+            "flex cursor-pointer list-none flex-wrap items-center gap-2 py-2.5",
+            "transition-colors hover:bg-accent",
           )}
         >
-          <span
+          <ChevronRight
             aria-hidden
-            className="font-mono text-ink-faint transition-transform group-open:rotate-90"
-          >
-            ›
-          </span>
+            className="size-3.5 shrink-0 text-ink-faint transition-transform group-open:rotate-90"
+          />
           <a
             href={`#step-${step.stepIndex}`}
-            className="font-mono text-xs text-ink-faint hover:text-accent-strong"
+            className="font-mono text-xs text-ink-faint hover:text-brand-strong"
             onClick={(event) => event.stopPropagation()}
           >
             #{step.stepIndex}
           </a>
-          <span className="text-sm font-medium text-ink">Step {step.stepIndex}</span>
-          {step.hasValidationError ? <Badge tone="danger">validation error</Badge> : null}
-          {step.finishReason ? <Badge tone="outline">{step.finishReason}</Badge> : null}
+          <span className="text-sm font-medium text-foreground">Step {step.stepIndex}</span>
+          {step.hasValidationError ? <Badge variant="destructive">validation error</Badge> : null}
+          {step.finishReason ? <Badge variant="outline">{step.finishReason}</Badge> : null}
           <span className="ml-auto font-mono text-[10px] tabular-nums text-ink-faint">
             {tokens.inputTokens} in · {tokens.outputTokens} out
             {tokens.reasoningTokens ? ` · ${tokens.reasoningTokens} rsn` : ""}
@@ -99,19 +99,21 @@ export function StepCard({ step }: { step: TraceStep }) {
           </span>
         </summary>
 
-        <CardBody className="space-y-2.5 border-t border-line">
+        <div className="space-y-2.5 pb-4 pl-5">
           {step.reasoning ? (
             <Collapsible summary="Reasoning" meta={`${step.reasoning.length} chars`}>
-              <p className="whitespace-pre-wrap text-sm leading-relaxed text-ink-muted">
+              <p className="whitespace-pre-wrap text-sm leading-relaxed text-muted-foreground">
                 {step.reasoning}
               </p>
             </Collapsible>
           ) : null}
 
           {step.text ? (
-            <p className="whitespace-pre-wrap text-sm leading-relaxed text-ink">{step.text}</p>
+            <p className="whitespace-pre-wrap text-sm leading-relaxed text-foreground">
+              {step.text}
+            </p>
           ) : step.toolCalls.length === 0 ? (
-            <p className="text-xs text-ink-faint">No model text on this step.</p>
+            <p className="text-sm text-muted-foreground">No model text on this step.</p>
           ) : null}
 
           {step.toolCalls.map((raw, index) => {
@@ -127,9 +129,9 @@ export function StepCard({ step }: { step: TraceStep }) {
               <ToolCallBlock key={call.toolCallId ?? index} call={call} result={matched ?? null} />
             );
           })}
-        </CardBody>
+        </div>
       </details>
-    </Card>
+    </section>
   );
 }
 
@@ -154,13 +156,13 @@ function ToolCallBlock({ call, result }: { call: ToolCall; result: ToolResult | 
   const body = payloadRef ? (payload ? payload.payload : undefined) : inline;
 
   return (
-    <div className="space-y-1.5">
+    <div className="border-l border-border pl-3">
       <Collapsible
         summary={
-          <span className="font-mono">
+          <>
             → {call.toolName ?? "tool"}
             {errors.length > 0 ? " (rejected)" : ""}
-          </span>
+          </>
         }
         meta={call.toolCallId}
         tone={errors.length > 0 ? "error" : "default"}
@@ -169,7 +171,7 @@ function ToolCallBlock({ call, result }: { call: ToolCall; result: ToolResult | 
       </Collapsible>
       {result ? (
         <Collapsible
-          summary={<span className="font-mono">← result</span>}
+          summary="← result"
           meta={
             errors.length > 0
               ? `${errors.length} error(s)`
@@ -181,14 +183,14 @@ function ToolCallBlock({ call, result }: { call: ToolCall; result: ToolResult | 
           onOpenChange={setResultOpen}
         >
           {errors.length > 0 ? (
-            <ul className="mb-2 list-inside list-disc rounded-md border border-danger/40 bg-danger/10 px-3 py-2 text-xs text-danger">
+            <ul className="mb-2 list-inside list-disc rounded-sm border border-destructive/40 bg-destructive/10 px-3 py-2 text-xs text-destructive">
               {errors.map((error) => (
                 <li key={error}>{error}</li>
               ))}
             </ul>
           ) : null}
           {body === undefined ? (
-            <p className="text-xs text-ink-faint">Loading the stored result…</p>
+            <p className="text-sm text-muted-foreground">Loading the stored result…</p>
           ) : (
             <JsonBlock value={body} tone={errors.length > 0 ? "error" : "default"} />
           )}

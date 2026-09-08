@@ -2,10 +2,20 @@
 
 import { useState } from "react";
 
-import { Field, Input, Select } from "@/components/ui";
+import {
+  Field,
+  FieldDescription,
+  FieldGroup,
+  FieldLabel,
+  FieldLegend,
+  FieldSet,
+  Input,
+  NativeSelect,
+  NativeSelectOption,
+} from "@/components/ui";
 import { api } from "@/convex/_generated/api";
 
-import { LockNotice, SettingsSection, Toggle, useSave } from "./shared";
+import { CompactField, LockNotice, SettingsSection, ToggleField, useSave } from "./shared";
 import type { SettingsData } from "./types";
 
 const SLOTS = ["QB", "RB", "WR", "TE", "FLEX", "SUPERFLEX", "K", "DEF", "BENCH"];
@@ -28,7 +38,7 @@ export function RulesTab({ data }: { data: SettingsData }) {
   const save = useSave(api.commissioner.updateRules);
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-6">
       <LockNotice locked={locked} />
 
       <SettingsSection
@@ -42,6 +52,7 @@ export function RulesTab({ data }: { data: SettingsData }) {
         saving={save.isPending}
         error={save.error}
         saved={save.saved}
+        bodyClassName="gap-8"
         onSubmit={() =>
           void save.submit({
             leagueId: data.league._id,
@@ -60,52 +71,61 @@ export function RulesTab({ data }: { data: SettingsData }) {
           })
         }
       >
-        <div className="grid gap-4 sm:grid-cols-2">
-          <Field label="Scoring preset">
-            <Select
+        <FieldGroup className="gap-4 sm:grid sm:grid-cols-2">
+          <Field>
+            <FieldLabel htmlFor="scoring-preset">Scoring preset</FieldLabel>
+            <NativeSelect
+              id="scoring-preset"
+              className="w-full"
               value={scoringPreset}
-              onChange={(event) =>
-                setScoringPreset(event.target.value as typeof scoringPreset)
-              }
+              onChange={(event) => setScoringPreset(event.target.value as typeof scoringPreset)}
             >
-              <option value="ppr">PPR</option>
-              <option value="half_ppr">Half PPR</option>
-              <option value="standard">Standard</option>
-            </Select>
+              <NativeSelectOption value="ppr">PPR</NativeSelectOption>
+              <NativeSelectOption value="half_ppr">Half PPR</NativeSelectOption>
+              <NativeSelectOption value="standard">Standard</NativeSelectOption>
+            </NativeSelect>
           </Field>
-          <Field label="FAAB budget" hint="Dollars per team per season.">
+          <Field>
+            <FieldLabel htmlFor="faab-budget">FAAB budget</FieldLabel>
             <Input
+              id="faab-budget"
               type="number"
               min={0}
               max={1000}
+              className="font-mono"
               value={faabBudget}
               onChange={(event) => setFaabBudget(event.target.value)}
             />
+            <FieldDescription>Dollars per team per season.</FieldDescription>
           </Field>
-        </div>
+        </FieldGroup>
 
-        <div className="space-y-2">
-          <Toggle
+        <FieldGroup className="gap-4">
+          <ToggleField
             label="Superflex"
             hint="The FLEX slot may start a QB."
             checked={superflex}
+            disabled={locked}
             onChange={setSuperflex}
           />
-          <Toggle
+          <ToggleField
             label="TE premium"
             hint="Tight ends score extra per reception."
             checked={tePremium}
+            disabled={locked}
             onChange={setTePremium}
           />
-        </div>
+        </FieldGroup>
 
-        <div>
-          <span className="eyebrow mb-2 block">Roster shape</span>
-          <div className="grid grid-cols-3 gap-2 sm:grid-cols-5">
+        <FieldSet>
+          <FieldLegend variant="label" className="eyebrow">
+            Roster shape
+          </FieldLegend>
+          <div className="grid grid-cols-3 gap-3 sm:grid-cols-5">
             {SLOTS.map((slot) => (
-              <label key={slot} className="block">
-                <span className="block font-mono text-[10px] uppercase text-ink-faint">{slot}</span>
+              <CompactField key={slot} label={slot} htmlFor={`slot-${slot}`}>
                 <Input
+                  id={`slot-${slot}`}
                   type="number"
                   min={0}
                   max={20}
@@ -113,60 +133,77 @@ export function RulesTab({ data }: { data: SettingsData }) {
                   onChange={(event) =>
                     setSlots((prev) => ({ ...prev, [slot]: Number(event.target.value) }))
                   }
-                  className="mt-1 h-8 text-xs"
+                  className="font-mono"
                 />
-              </label>
+              </CompactField>
             ))}
           </div>
-        </div>
+        </FieldSet>
 
-        <div className="grid gap-4 sm:grid-cols-4">
-          <Field label="Regular season">
+        <FieldGroup className="gap-4 sm:grid sm:grid-cols-4">
+          <Field>
+            <FieldLabel htmlFor="regular-season-weeks">Regular season</FieldLabel>
             <Input
+              id="regular-season-weeks"
               type="number"
               min={4}
               max={17}
+              className="font-mono"
               value={regularSeasonWeeks}
               onChange={(event) => setRegularSeasonWeeks(event.target.value)}
             />
           </Field>
-          <Field label="Playoff teams">
+          <Field>
+            <FieldLabel htmlFor="playoff-teams">Playoff teams</FieldLabel>
             <Input
+              id="playoff-teams"
               type="number"
               min={2}
               max={8}
+              className="font-mono"
               value={playoffTeams}
               onChange={(event) => setPlayoffTeams(event.target.value)}
             />
           </Field>
-          <Field label="Playoffs start">
+          <Field>
+            <FieldLabel htmlFor="playoff-start-week">Playoffs start</FieldLabel>
             <Input
+              id="playoff-start-week"
               type="number"
               min={10}
               max={18}
+              className="font-mono"
               value={playoffStartWeek}
               onChange={(event) => setPlayoffStartWeek(event.target.value)}
             />
           </Field>
-          <Field label="Max steps cap" hint="Upper bound on any owner's harness.">
+          <Field>
+            <FieldLabel htmlFor="max-steps-cap">Max steps cap</FieldLabel>
             <Input
+              id="max-steps-cap"
               type="number"
               min={1}
               max={30}
+              className="font-mono"
               value={maxStepsCap}
               onChange={(event) => setMaxStepsCap(event.target.value)}
             />
+            <FieldDescription>Upper bound on any owner&rsquo;s harness.</FieldDescription>
           </Field>
-        </div>
+        </FieldGroup>
 
-        <Field label="Context character limit" hint="How long an owner's system context may be.">
+        <Field className="sm:max-w-xs">
+          <FieldLabel htmlFor="context-char-limit">Context character limit</FieldLabel>
           <Input
+            id="context-char-limit"
             type="number"
             min={500}
             max={100000}
+            className="font-mono"
             value={contextCharLimit}
             onChange={(event) => setContextCharLimit(event.target.value)}
           />
+          <FieldDescription>How long an owner&rsquo;s system context may be.</FieldDescription>
         </Field>
       </SettingsSection>
     </div>

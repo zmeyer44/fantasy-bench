@@ -5,7 +5,7 @@ import { notFound } from "next/navigation";
 import { ForkSkillButton } from "@/components/config/fork-button";
 import { Markdown } from "@/components/config/markdown";
 import { readOrNull } from "@/components/league/convex-errors";
-import { Badge, Button, Card, CardBody, CardHeader, PageHeader } from "@/components/ui";
+import { Badge, Button, PageHeader } from "@/components/ui";
 import { api } from "@/convex/_generated/api";
 import { fetchAuthQuery } from "@/lib/convex/server";
 import { getViewer } from "@/lib/convex/viewer";
@@ -33,7 +33,7 @@ export default async function SkillPage({ params }: PageProps<"/skills/[slug]">)
     <div className="mx-auto max-w-3xl space-y-8">
       <PageHeader
         eyebrow={
-          <Link href="/skills" className="hover:text-ink">
+          <Link href="/skills" className="transition-colors hover:text-foreground">
             Library
           </Link>
         }
@@ -43,32 +43,32 @@ export default async function SkillPage({ params }: PageProps<"/skills/[slug]">)
           <div className="flex items-center gap-2">
             <ForkSkillButton slug={skill.slug} signedIn={Boolean(viewer)} />
             {isAuthor ? (
-              <Link href={`/skills/${skill.slug}/edit`}>
-                <Button size="sm">Edit</Button>
-              </Link>
+              <Button size="sm" render={<Link href={`/skills/${skill.slug}/edit`} />}>
+                Edit
+              </Button>
             ) : null}
           </div>
         }
       />
 
       <div className="flex flex-wrap items-center gap-2">
-        <Badge tone={skill.usageCount > 0 ? "accent" : "outline"}>
+        <Badge variant={skill.usageCount > 0 ? "success" : "outline"}>
           {skill.usageCount} current config{skill.usageCount === 1 ? "" : "s"}
         </Badge>
-        <Badge tone="outline">{skill.visibility}</Badge>
-        <Badge tone="outline">{skill.bodyMd.length.toLocaleString()} chars</Badge>
-        <span className="font-mono text-[11px] text-ink-faint">
+        <Badge variant="outline">{skill.visibility}</Badge>
+        <Badge variant="outline">{skill.bodyMd.length.toLocaleString()} chars</Badge>
+        <span className="font-mono text-xs text-ink-faint">
           by {skill.authorName ?? "platform"} · updated{" "}
           {formatET(skill.updatedAt, "MMM d, yyyy")}
         </span>
       </div>
 
       {skill.forkedFrom ? (
-        <p className="text-xs text-ink-muted">
+        <p className="text-sm text-muted-foreground">
           Forked from{" "}
           <Link
             href={`/skills/${skill.forkedFrom.slug}`}
-            className="text-accent-strong underline underline-offset-2"
+            className="text-foreground underline decoration-border underline-offset-4 transition-colors hover:decoration-brand"
           >
             {skill.forkedFrom.name}
           </Link>
@@ -76,39 +76,44 @@ export default async function SkillPage({ params }: PageProps<"/skills/[slug]">)
         </p>
       ) : null}
 
-      <Card>
-        <CardHeader
-          title="How to attach it"
-          description="Open your team's config editor, choose Skills → Attach from library, and search for this name."
-        />
-        <CardBody className="text-sm text-ink-muted">
-          Skills are attached by id, so if {skill.authorName ?? "the author"} edits this document
-          your agent reads the new text on its next run — no config version needed. Fork it if you
-          want a copy that only you can change.
-        </CardBody>
-      </Card>
+      <section className="space-y-3">
+        <div className="border-b border-border pb-3">
+          <h2 className="eyebrow text-foreground">How to attach it</h2>
+        </div>
+        <p className="text-sm text-muted-foreground">
+          Open your team&apos;s config editor, choose Skills → Attach from library, and search for
+          this name. Skills are attached by id, so if {skill.authorName ?? "the author"} edits this
+          document your agent reads the new text on its next run — no config version needed. Fork it
+          if you want a copy that only you can change.
+        </p>
+      </section>
 
-      <Card>
-        <CardBody>
-          <Markdown>{skill.bodyMd}</Markdown>
-        </CardBody>
-      </Card>
+      <section className="space-y-4">
+        <div className="border-b border-border pb-3">
+          <h2 className="eyebrow text-foreground">Body</h2>
+        </div>
+        <Markdown>{skill.bodyMd}</Markdown>
+      </section>
 
       {skill.forks.length > 0 ? (
-        <Card>
-          <CardHeader title={`${skill.forks.length} fork${skill.forks.length === 1 ? "" : "s"}`} />
-          <CardBody className="flex flex-wrap gap-2">
+        <section className="space-y-3">
+          <div className="border-b border-border pb-3">
+            <h2 className="eyebrow text-foreground">
+              {skill.forks.length} fork{skill.forks.length === 1 ? "" : "s"}
+            </h2>
+          </div>
+          <div className="flex flex-wrap gap-2">
             {skill.forks.map((fork) => (
               <Link
                 key={fork._id}
                 href={`/skills/${fork.slug}`}
-                className="rounded border border-line px-2 py-1 text-xs text-ink hover:bg-surface-muted"
+                className="rounded-sm border border-border px-2.5 py-1 text-sm text-foreground transition-colors hover:bg-accent"
               >
                 {fork.name}
               </Link>
             ))}
-          </CardBody>
-        </Card>
+          </div>
+        </section>
       ) : null}
     </div>
   );

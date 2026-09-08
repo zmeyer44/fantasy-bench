@@ -37,8 +37,11 @@ export function SettingsConsole({
   };
 
   return (
-    <Tabs defaultValue="league">
-      <TabsList className="overflow-x-auto">
+    <Tabs defaultValue="league" className="gap-0">
+      <TabsList
+        variant="line"
+        className="h-auto! w-full justify-start gap-4 overflow-x-auto border-b border-border pb-[5px] *:flex-none"
+      >
         <TabsTrigger value="league">League</TabsTrigger>
         <TabsTrigger value="rules">Rules</TabsTrigger>
         <TabsTrigger value="models">Models</TabsTrigger>
@@ -49,28 +52,28 @@ export function SettingsConsole({
         <TabsTrigger value="log">Change log</TabsTrigger>
       </TabsList>
 
-      <TabsContent value="league">
+      <TabsContent value="league" className="pt-8">
         <LeagueTab data={data} />
       </TabsContent>
-      <TabsContent value="rules">
+      <TabsContent value="rules" className="pt-8">
         <RulesTab data={data} />
       </TabsContent>
-      <TabsContent value="models">
+      <TabsContent value="models" className="pt-8">
         <ModelsTab data={data} />
       </TabsContent>
-      <TabsContent value="budgets">
+      <TabsContent value="budgets" className="pt-8">
         <BudgetsTab data={data} />
       </TabsContent>
-      <TabsContent value="windows">
+      <TabsContent value="windows" className="pt-8">
         <WindowsTab data={data} />
       </TabsContent>
-      <TabsContent value="conduct">
+      <TabsContent value="conduct" className="pt-8">
         <ConductTab data={data} />
       </TabsContent>
-      <TabsContent value="teams">
+      <TabsContent value="teams" className="pt-8">
         <TeamsTab data={data} />
       </TabsContent>
-      <TabsContent value="log">
+      <TabsContent value="log" className="pt-8">
         <ChangeLogTab data={data} />
       </TabsContent>
     </Tabs>
