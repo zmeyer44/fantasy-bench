@@ -17,11 +17,17 @@
     "db:seed-demo": "tsx --env-file-if-exists=.env.local scripts/seed-demo.ts",
     "ingest": "tsx --env-file-if-exists=.env.local scripts/ingest.ts",
     "db:reset": "tsx --env-file-if-exists=.env.local scripts/reset.ts && npm run db:migrate && npm run db:seed",
-    "smoke": "tsx --env-file-if-exists=.env.local scripts/smoke-e2e.ts"
+    "smoke": "tsx --env-file-if-exists=.env.local scripts/smoke-e2e.ts",
+    "test:convex": "vitest run --config vitest.convex.config.ts",
+    "convex:dev": "convex dev",
+    "convex:push": "convex dev --once"
   },
   "dependencies": {
     "@ai-sdk/gateway": "^4.0.75",
     "@ai-sdk/react": "^4.0.96",
+    "@auth/core": "^0.41.3",
+    "@convex-dev/auth": "^0.0.95",
+    "@convex-dev/workpool": "^0.4.11",
     "@date-fns/tz": "^1.5.0",
     "@tanstack/react-query": "^5.102.8",
     "@trpc/client": "^11.18.0",
@@ -43,11 +49,13 @@
     "zod": "^4.5.4"
   },
   "devDependencies": {
+    "@edge-runtime/vm": "^5.0.0",
     "@tailwindcss/postcss": "^4",
     "@types/diff": "^7.0.2",
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "convex-test": "^0.0.56",
     "dotenv": "^17.4.2",
     "drizzle-kit": "^0.31.10",
     "eslint": "^9",

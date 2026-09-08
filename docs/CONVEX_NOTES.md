@@ -692,3 +692,417 @@ Upload-URL POSTs have no size cap but a **2-minute timeout**; HTTP-action reques
 20. **Cron `crons.hourly/daily/weekly/monthly` take named UTC fields** (`hourUTC`, `minuteUTC`, `dayOfWeek`, `day`), all UTC; overlapping runs are **skipped**, not queued.
 21. **`convex-test` is a mock** in Edge Runtime — no limit enforcement, no crons, approximate text search — and components need explicit registration (`agentTest.register(t)`). There is no `@convex-dev/test` package.
 22. **External npm packages (`convex.json` → `node.externalPackages`) only work in the Node runtime**, and dynamic `import()`/`require()` is unsupported in the default runtime (langchain, sharp, pdf-parse, tiktoken all break there).
+
+---
+
+## 12. Convex Auth (`@convex-dev/auth`)
+
+Verified against the live docs at <https://labs.convex.dev/auth> on 2026-09-08, cross-checked against the installed `@convex-dev/auth@0.0.95` d.ts/dist in `node_modules`. Status per the docs: **beta / "early preview"** (<https://labs.convex.dev/auth>, <https://labs.convex.dev/auth/faq>).
+
+### 12.1 Install + setup CLI
+
+Source: <https://labs.convex.dev/auth/setup>, <https://labs.convex.dev/auth/setup/manual>, <https://labs.convex.dev/auth/production>
+
+```bash
+npm install @convex-dev/auth @auth/core@0.41.1   # docs pin @auth/core exactly
+npx @convex-dev/auth                              # dev deployment
+npx @convex-dev/auth --prod                       # production deployment
+```
+
+The CLI is **interactive** — it prompts for each value and asks for confirmation before overwriting an existing env var (verified in `dist/bin.cjs`; flags: `--variables <json>`, `--web-server-url <url>`, `--skip-git-check`, plus the standard `--prod` / `--url` / `--deployment-name` / `--preview-name` / `--admin-key`). It warns if you are not in a clean Git checkout. Steps it runs:
+
+1. `SITE_URL` → `npx convex env set SITE_URL …` (default `http://localhost:3000` for Next.js, `http://localhost:5173` for Vite; skipped for Expo).
+2. Generates an RS256 keypair with `jose` and sets `JWT_PRIVATE_KEY` (PKCS8, newlines replaced by spaces) and `JWKS`.
+3. Patches `convex/tsconfig.json` → `"moduleResolution": "Bundler"`, `"skipLibCheck": true`.
+4. Writes `convex/auth.config.ts`, `convex/auth.ts`, `convex/http.ts`.
+
+It does **not** touch `convex/schema.ts` or your frontend ("You're all set. Continue by configuring your schema and frontend.").
+
+Manual equivalent (<https://labs.convex.dev/auth/setup/manual>):
+
+```bash
+npx convex env set SITE_URL http://localhost:5173
+node generateKeys.mjs    # then: npx convex env set JWT_PRIVATE_KEY "…" ; npx convex env set JWKS '…'
+```
+
+```js
+// generateKeys.mjs  (verbatim from the manual-setup page)
+import { exportJWK, exportPKCS8, generateKeyPair } from "jose";
+
+const keys = await generateKeyPair("RS256", { extractable: true });
+const privateKey = await exportPKCS8(keys.privateKey);
+const publicKey = await exportJWK(keys.publicKey);
+const jwks = JSON.stringify({ keys: [{ use: "sig", ...publicKey }] });
+
+process.stdout.write(`JWT_PRIVATE_KEY="${privateKey.trimEnd().replace(/\n/g, " ")}"`);
+process.stdout.write("\n");
+process.stdout.write(`JWKS=${jwks}`);
+process.stdout.write("\n");
+```
+
+### 12.2 Schema — `authTables`
+
+Source: <https://labs.convex.dev/auth/setup>, <https://labs.convex.dev/auth/setup/schema>, <https://labs.convex.dev/auth/api_reference/server>
+
+```ts
+// convex/schema.ts
+import { defineSchema } from "convex/server";
+import { authTables } from "@convex-dev/auth/server";
+
+const schema = defineSchema({
+  ...authTables,
+  // Your other tables...
+});
+export default schema;
+```
+
+Seven tables: **`users`, `authSessions`, `authAccounts`, `authRefreshTokens`, `authVerificationCodes`, `authVerifiers`, `authRateLimits`.** Shapes and indexes (from the installed `dist/server/implementation/types.d.ts`; the docs page shows only the `users` table):
+
+| table | fields | indexes |
+|---|---|---|
+| `users` | all optional: `name`, `image`, `email`, `emailVerificationTime`, `phone`, `phoneVerificationTime`, `isAnonymous` | `email`, `phone` |
+| `authSessions` | `userId`, `expirationTime` | `userId` |
+| `authAccounts` | `userId`, `provider`, `providerAccountId`, `secret?`, `emailVerified?`, `phoneVerified?` | `userIdAndProvider`, `providerAndAccountId` |
+| `authRefreshTokens` | `sessionId`, `expirationTime`, `firstUsedTime?`, `parentRefreshTokenId?` | `sessionId`, `sessionIdAndParentRefreshTokenId` |
+| `authVerificationCodes` | `accountId`, `provider`, `code`, `expirationTime`, `verifier?`, `emailVerified?`, `phoneVerified?` | `accountId`, `code` |
+| `authVerifiers` | `sessionId?`, `signature?` (PKCE) | `signature` |
+| `authRateLimits` | `identifier`, `lastAttemptTime`, `attemptsLeft` | `identifier` |
+
+Extending `users` — inline the table instead of spreading it (<https://labs.convex.dev/auth/setup/schema>):
+
+```ts
+const schema = defineSchema({
+  ...authTables,
+  users: defineTable({
+    name: v.optional(v.string()),
+    image: v.optional(v.string()),
+    email: v.optional(v.string()),
+    emailVerificationTime: v.optional(v.number()),
+    phone: v.optional(v.string()),
+    phoneVerificationTime: v.optional(v.number()),
+    isAnonymous: v.optional(v.boolean()),
+    // + your own fields
+  }).index("email", ["email"]),
+});
+```
+The page says you may add optional fields and indexes freely; **required** fields are only safe if every auth method supplies them at sign-up. Customizing `authSessions` is "not recommended".
+
+### 12.3 `convexAuth` / http / auth.config
+
+Source: <https://labs.convex.dev/auth/setup/manual>, <https://labs.convex.dev/auth/api_reference/server>
+
+```ts
+function convexAuth(config: ConvexAuthConfig): {
+  auth: AuthHelper;
+  signIn: SignInAction;
+  signOut: SignOutAction;
+  store: StoreMutation;
+  isAuthenticated: IsAuthenticatedQuery;
+};
+```
+
+```ts
+// convex/auth.ts
+import { convexAuth } from "@convex-dev/auth/server";
+export const { auth, signIn, signOut, store, isAuthenticated } = convexAuth({
+  providers: [],
+});
+
+// convex/auth.config.ts
+export default {
+  providers: [{ domain: process.env.CONVEX_SITE_URL, applicationID: "convex" }],
+};
+
+// convex/http.ts
+import { httpRouter } from "convex/server";
+import { auth } from "./auth";
+const http = httpRouter();
+auth.addHttpRoutes(http);
+export default http;
+```
+All five exports must be public — the client calls `signIn`/`signOut` (actions), `store` (mutation) and `isAuthenticated` (query) by name.
+
+### 12.4 Password (and Anonymous) providers
+
+Source: <https://labs.convex.dev/auth/config/passwords>, <https://labs.convex.dev/auth/api_reference/providers/Anonymous>
+
+```ts
+import { Password } from "@convex-dev/auth/providers/Password";
+import { convexAuth } from "@convex-dev/auth/server";
+export const { auth, signIn, signOut, store, isAuthenticated } = convexAuth({
+  providers: [Password],
+});
+```
+
+Client flow — `flow` is a **form/param field**, not a separate provider:
+
+```tsx
+const { signIn } = useAuthActions();
+void signIn("password", { email, password, flow: "signUp" }); // or "signIn"
+// equivalently: pass a FormData with name="email" / name="password" / hidden name="flow"
+```
+
+Custom profile fields and password rules:
+
+```ts
+export default Password<DataModel>({
+  profile(params, ctx) {
+    return {
+      email: params.email as string,
+      name: params.name as string,
+      role: params.role as string,
+    };
+  },
+  validatePasswordRequirements: (password: string) => {
+    if (password.length < 8 || !/\d/.test(password) || !/[a-z]/.test(password) || !/[A-Z]/.test(password)) {
+      throw new ConvexError("Invalid password.");
+    }
+  },
+});
+```
+`profile()` doubles as input validation (the docs use `zod` + `ConvexError` for email). Optional email flows: `Password({ reset: ResendOTPPasswordReset })` and `Password({ verify: ResendOTP })` — both take an Email provider config.
+
+```ts
+import { Anonymous } from "@convex-dev/auth/providers/Anonymous";
+convexAuth({ providers: [Anonymous] });          // AnonymousConfig: { id?, profile?(params, ctx) }
+// sets users.isAnonymous; sign in with signIn("anonymous")
+```
+
+### 12.5 Next.js integration
+
+Source: <https://labs.convex.dev/auth/setup> (Next.js tab, mirrored at `docs/pages/setup.mdx`), <https://labs.convex.dev/auth/authz/nextjs>, <https://labs.convex.dev/auth/api_reference/nextjs>, <https://labs.convex.dev/auth/api_reference/nextjs/server>
+
+```tsx
+// app/layout.tsx  (server component)
+import { ConvexAuthNextjsServerProvider } from "@convex-dev/auth/nextjs/server";
+
+export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
+  return (
+    <ConvexAuthNextjsServerProvider>
+      <html lang="en"><body>{children}</body></html>
+    </ConvexAuthNextjsServerProvider>
+  );
+}
+```
+
+```tsx
+// app/ConvexClientProvider.tsx
+"use client";
+import { ConvexAuthNextjsProvider } from "@convex-dev/auth/nextjs";
+import { ConvexReactClient } from "convex/react";
+import { ReactNode } from "react";
+
+const convex = new ConvexReactClient(process.env.NEXT_PUBLIC_CONVEX_URL!);
+
+export function ConvexClientProvider({ children }: { children: ReactNode }) {
+  return <ConvexAuthNextjsProvider client={convex}>{children}</ConvexAuthNextjsProvider>;
+}
+```
+
+```ts
+// middleware.ts
+import {
+  convexAuthNextjsMiddleware,
+  createRouteMatcher,
+  nextjsMiddlewareRedirect,
+} from "@convex-dev/auth/nextjs/server";
+
+const isSignInPage = createRouteMatcher(["/signin"]);
+const isProtectedRoute = createRouteMatcher(["/product(.*)"]);
+
+export default convexAuthNextjsMiddleware(async (request, { convexAuth }) => {
+  if (isSignInPage(request) && (await convexAuth.isAuthenticated())) {
+    return nextjsMiddlewareRedirect(request, "/product");
+  }
+  if (isProtectedRoute(request) && !(await convexAuth.isAuthenticated())) {
+    return nextjsMiddlewareRedirect(request, "/signin");
+  }
+});
+
+export const config = { matcher: ["/((?!.*\\..*|_next).*)", "/", "/(api|trpc)(.*)"] };
+```
+
+Signatures (<https://labs.convex.dev/auth/api_reference/nextjs/server>):
+```ts
+ConvexAuthNextjsServerProvider(props: {
+  apiRoute?: string;                 // default "/api/auth"
+  storage?: "localStorage" | "inMemory";
+  storageNamespace?: string;         // defaults to NEXT_PUBLIC_CONVEX_URL
+  shouldHandleCode?: boolean | (() => boolean);
+  verbose?: boolean;
+  children: ReactNode;
+}): Promise<Element>;
+
+ConvexAuthNextjsProvider(props: { client: ConvexReactClient; children: ReactNode }): Element;
+
+convexAuthNextjsMiddleware(
+  handler?: (request, ctx) => NextMiddlewareResult | Promise<NextMiddlewareResult>,
+  options?: {
+    convexUrl?: string;
+    apiRoute?: string;
+    cookieConfig?: { maxAge?: number };
+    verbose?: boolean;
+    shouldHandleCode?: boolean | ((request) => boolean);
+  },
+): NextMiddleware;
+
+convexAuthNextjsToken(): Promise<string | undefined>;
+isAuthenticatedNextjs(options?: { convexUrl?: string }): Promise<boolean>;
+createRouteMatcher(routes: RouteMatcherParam): (req: NextRequest) => boolean;
+nextjsMiddlewareRedirect(request: NextRequest, route: string): NextResponse;
+```
+
+Server-side data with the token (<https://labs.convex.dev/auth/authz/nextjs>):
+
+```tsx
+import { convexAuthNextjsToken } from "@convex-dev/auth/nextjs/server";
+import { preloadQuery, fetchQuery, fetchMutation } from "convex/nextjs";
+
+const preloaded = await preloadQuery(api.tasks.list, { list: "default" },
+  { token: await convexAuthNextjsToken() });
+
+await fetchMutation(api.tasks.create, { text }, { token: await convexAuthNextjsToken() }); // in a Server Action
+```
+The docs warn: only queries are safe from Server Components / GET Route Handlers — "you **must not** perform any side-effects from the Next.js server on GET requests" (CSRF).
+
+Client hooks/components (<https://labs.convex.dev/auth/api_reference/react>, <https://labs.convex.dev/auth/authz>):
+
+```ts
+useAuthActions(): {
+  signIn(provider: string, params?: FormData | Record<string, Value>):
+    Promise<{ signingIn: boolean; redirect?: URL }>;
+  signOut(): Promise<void>;
+};
+useAuthToken(): string | null;   // for hand-rolled fetch to .convex.site HTTP actions
+```
+```tsx
+import { Authenticated, Unauthenticated, AuthLoading } from "convex/react"; // plus useConvexAuth()
+```
+`ConvexAuthProvider` (`@convex-dev/auth/react`) is the non-Next.js equivalent: `{ client, storage?, storageNamespace?, replaceURL?, shouldHandleCode?, children }`.
+
+**Next 16 `middleware.ts` → `proxy.ts`:** the Convex Auth docs still say `middleware.ts` and only `middleware.ts` — they have **not** been updated for Next 16. Next 16 deprecates the `middleware` file convention and renames it to `proxy` (`node_modules/next/dist/docs/01-app/03-api-reference/03-file-conventions/proxy.md`, `v16.0.0 | Middleware is deprecated and renamed to Proxy. Proxy defaults to the Node.js runtime`). `proxy.ts` accepts "a single function, either as a default export or named `proxy`", so `export default convexAuthNextjsMiddleware(...)` in `proxy.ts` is the Next-16 form; codemod: `npx @next/codemod@canary middleware-to-proxy .`. Nothing in `@convex-dev/auth@0.0.95` references the file name, so the rename is purely a Next-side concern.
+
+### 12.6 Server-side helpers in Convex functions
+
+Source: <https://labs.convex.dev/auth/authz>, <https://labs.convex.dev/auth/api_reference/server>
+
+```ts
+getAuthUserId(ctx: { auth: Auth }): Promise<Id<"users"> | null>;
+getAuthSessionId(ctx: { auth: Auth }): Promise<Id<"authSessions"> | null>;
+```
+
+```ts
+import { getAuthUserId } from "@convex-dev/auth/server";
+export const currentUser = query({
+  args: {},
+  handler: async (ctx) => {
+    const userId = await getAuthUserId(ctx);
+    if (userId === null) return null;
+    return await ctx.db.get(userId);   // in this repo's Convex: ctx.db.get("users", userId)
+  },
+});
+```
+
+`ctx.auth.getUserIdentity()` returns the normal `UserIdentity`, but **`subject` is `` `${userId}|${sessionId}` ``** — the JWT `sub` claim is built as `args.userId + TOKEN_SUB_CLAIM_DIVIDER + args.sessionId` with `TOKEN_SUB_CLAIM_DIVIDER = "|"` (`dist/server/implementation/tokens.js`, `utils.js`), and both helpers just `split("|")` it. `issuer` is `CONVEX_SITE_URL`, `applicationID`/aud is `"convex"`. Never use `identity.subject` directly as a user id.
+
+Other server exports (<https://labs.convex.dev/auth/api_reference/server>): `createAccount`, `retrieveAccount`, `modifyAccountCredentials`, `invalidateSessions({ userId, except? })`, `signInViaProvider`.
+
+### 12.7 Config: sessions, JWT, callbacks
+
+Source: <https://labs.convex.dev/auth/api_reference/server>, <https://labs.convex.dev/auth/advanced>, <https://labs.convex.dev/auth/security>
+
+```ts
+interface ConvexAuthConfig {
+  providers: AuthProviderConfig[];
+  theme?: Theme;
+  session?: {
+    totalDurationMs?: number;      // default 30 days
+    inactiveDurationMs?: number;   // default 30 days
+  };
+  jwt?: {
+    durationMs?: number;           // default 1 hour
+    customClaims?(ctx, args): Promise<Record<string, JSONValue>>;
+  };
+  signIn?: { maxFailedAttempsPerHour?: number }; // default 10 — note the library's typo "Attemps"
+  callbacks?: {
+    redirect?(params: { redirectTo: string }): Promise<string>;
+    createOrUpdateUser?(ctx: MutationCtx, args): Promise<Id<"users">>;
+    afterUserCreatedOrUpdated?(ctx: MutationCtx, args): Promise<void>;
+    beforeSessionCreation?(ctx: MutationCtx, args): Promise<void>;
+  };
+}
+```
+
+```ts
+convexAuth({
+  providers: [Password],
+  callbacks: {
+    // full control over the users row; args.type is
+    // "oauth" | "email" | "phone" | "credentials" | "verification",
+    // plus args.provider, args.existingUserId, args.profile
+    async createOrUpdateUser(ctx, args) {
+      if (args.existingUserId) return args.existingUserId;
+      return ctx.db.insert("users", { /* ... */ });
+    },
+    // preferred hook when you only need a side-effect
+    async afterUserCreatedOrUpdated(ctx, { userId }) {
+      await ctx.db.insert("someTable", { userId, data: "some data" });
+    },
+  },
+  jwt: {
+    customClaims: async (ctx, { userId }) => ({ role: "admin" }), // spread into the JWT payload
+  },
+});
+```
+Session durations can also be set as deployment env vars (`AUTH_SESSION_TOTAL_DURATION_MS`, `AUTH_SESSION_INACTIVE_DURATION_MS`); the config object wins. Refresh tokens are single-use with a 10-second reuse window and refresh-token-reuse detection: any invalid use invalidates the token and all descendants (<https://labs.convex.dev/auth/security>). Rotating `JWT_PRIVATE_KEY` invalidates access tokens, but live WebSocket connections stay authenticated until the current token expires (1 hour by default).
+
+### 12.8 Testing with `convex-test`
+
+Source: <https://docs.convex.dev/testing/convex-test>, plus the `subject` format from §12.6
+
+`convex-test`'s `t.withIdentity({ ... })` builds a `UserIdentity`; "if you don't provide them, `issuer`, `subject` and `tokenIdentifier` will be generated automatically". Convex Auth's helpers only read `subject`, so to make `getAuthUserId` resolve you must **supply `subject` yourself in the `"<userId>|<sessionId>"` form**:
+
+```ts
+const t = convexTest(schema);
+const userId = await t.run(async (ctx) => ctx.db.insert("users", { email: "a@b.com" }));
+const sessionId = await t.run(async (ctx) =>
+  ctx.db.insert("authSessions", { userId, expirationTime: Date.now() + 86_400_000 }));
+
+const asUser = t.withIdentity({ subject: `${userId}|${sessionId}` });
+await asUser.query(api.users.currentUser, {});
+```
+A bare `t.withIdentity({ name: "Sarah" })` gives an auto-generated `subject`, so `getAuthUserId` returns a garbage string that is not a real `Id<"users">` and `ctx.db.get` on it fails. If a function only needs `getAuthUserId`, the `authSessions` row is optional (`subject: \`${userId}|\``) — but create it if anything calls `getAuthSessionId`.
+
+### 12.9 Local deployments
+
+Convex Auth issues and verifies its own JWTs: `convex/auth.config.ts` points `domain` at `process.env.CONVEX_SITE_URL`, which the same deployment serves, so **password/anonymous sign-in works on a local or anonymous deployment** (`npx convex dev --local`) as long as `JWT_PRIVATE_KEY`, `JWKS` and `SITE_URL` are set on it — `npx @convex-dev/auth --url <local url>` / `--deployment-name` will do that. Set `SITE_URL` to your Next.js dev origin (`http://localhost:3000`). What does **not** work locally is anything needing an inbound public URL: the docs state local deployments have "no public URL … local deployments listen for HTTP requests on your own computer" (<https://docs.convex.dev/cli/local-deployments>), so OAuth provider callbacks and email-provider webhooks into `.convex.site` need a cloud dev deployment (or a tunnel). Env vars are per-deployment: switching between local and cloud means re-running the setup CLI.
+
+### 12.10 Debugging
+
+Source: <https://labs.convex.dev/auth/debugging>
+
+```ts
+new ConvexReactClient(process.env.NEXT_PUBLIC_CONVEX_URL!, { verbose: true });      // browser console
+export default convexAuthNextjsMiddleware(handler, { verbose: true });             // next dev terminal
+```
+```bash
+npx convex env set AUTH_LOG_LEVEL DEBUG   # Convex dashboard logs; logs tokens — debug only
+```
+When state gets wedged, clear localStorage / cookies / secure storage keys prefixed `__convexAuth` (`__Host-convexAuth` for Next.js). Actual cookie/storage keys in 0.0.95: `__convexAuthJWT`, `__convexAuthRefreshToken`, `__convexAuthOAuthVerifier`, `__convexAuthServerStateFetchTime`.
+
+### 12.11 Gotchas
+
+1. **Beta / early preview.** The docs say so on the landing page and in the FAQ, and explicitly still recommend Clerk/Auth0 for "featureful" auth (SSO, MFA). React-only client libraries — no Vue/Svelte/vanilla bindings.
+2. **`identity.subject` is `"<userId>|<sessionId>"`, not a user id.** Always go through `getAuthUserId` / `getAuthSessionId`. This is the single biggest difference from Clerk/Better Auth, and it is what makes naive `convex-test` identities fail.
+3. **The setup CLI does not write your schema or frontend.** You must add `...authTables` and the provider component yourself; forgetting `authTables` yields index-not-found errors at sign-in.
+4. **`@auth/core` is version-pinned** (`@auth/core@0.41.1` in the docs). It is a real dependency, not a peer nicety — provider configs are Auth.js types.
+5. **The CLI rewrites `convex/tsconfig.json`** (`moduleResolution: "Bundler"`, `skipLibCheck: true`). Without it, the provider imports don't typecheck.
+6. **`flow: "signUp" | "signIn"` is a parameter of the `password` provider**, not a distinct provider name, and it is easy to miss that `signIn(...)` takes `FormData` directly.
+7. **Extending `users` means inlining the whole table**, not spreading `authTables.users`; required custom fields break any provider that can't supply them.
+8. **Env vars are per-deployment.** `JWT_PRIVATE_KEY`, `JWKS`, `SITE_URL` must be set separately on dev, preview and prod (`npx @convex-dev/auth --prod`). A stale `SITE_URL` silently breaks magic links/OAuth redirects.
+9. **Next 16 renamed `middleware.ts` to `proxy.ts`; the Convex Auth docs have not caught up.** The library itself is filename-agnostic — `export default convexAuthNextjsMiddleware()` works from `proxy.ts`.
+10. **Server Components must not mutate.** `convexAuthNextjsToken()` + `fetchQuery`/`preloadQuery` only; mutations belong in Server Actions or POST Route Handlers.
+11. **`isAuthenticatedNextjs()` in a layout is a documented pitfall** — layouts don't re-render per navigation; do the check in middleware/proxy or the page.
+12. **`signIn` config key is misspelled in the library**: `maxFailedAttempsPerHour` (not `Attempts`).
+13. **Refresh-token reuse kills the whole session.** Two clients racing a refresh (e.g. a stale tab) can log the user out; the 10-second reuse window is the only slack.
+14. **`store` and `isAuthenticated` must stay exported and public** from `convex/auth.ts` — the client calls them by name.

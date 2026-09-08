@@ -14,12 +14,12 @@
  * - Documents stay small by design (< ~500 KB): snapshot payloads are chunked,
  *   large tool results are split into `run_step_payloads`, and the full per-run
  *   message array is never stored on `runs` (it is rebuilt from `run_steps`).
- * - Auth users live in the Better Auth component's tables. `users` is an app-side
- *   mirror keyed by the Better Auth subject id (`authId`) so we can look users up
- *   by email and reference them from league tables as plain strings.
+ * - Auth is Convex Auth (`@convex-dev/auth`): `authTables` are spread into the
+ *   schema and `users` is extended in place; app tables reference `v.id("users")`.
  *
  * Every index is justified in docs/migration-plan.md ("Index list").
  */
+import { authTables } from "@convex-dev/auth/server";
 import { defineSchema, defineTable } from "convex/server";
 import { v } from "convex/values";
 
@@ -217,18 +217,18 @@ export default defineSchema({
   // ---- identity -----------------------------------------------------------
 
   /**
-   * App-side mirror of Better Auth users (the auth tables themselves live in the
-   * Better Auth component). `authId` is `ctx.auth.getUserIdentity().subject`.
+   * Convex Auth tables (authSessions, authAccounts, authRefreshTokens,
+   * authVerificationCodes, authVerifiers, authRateLimits) plus our extended
+   * `users` table. `users` keeps Convex Auth's fields and indexes and adds ours.
+   * App tables reference users with `v.id("users")`.
    */
+  ...authTables,
   users: defineTable({
+    ...authTables.users.validator.fields,
     ...legacy,
-    authId: v.string(),
-    email: v.string(),
-    name: v.optional(v.string()),
-    image: v.optional(v.string()),
   })
-    .index("by_authId", ["authId"])
-    .index("by_email", ["email"]),
+    .index("email", ["email"])
+    .index("phone", ["phone"]),
 
   // ---- league core --------------------------------------------------------
 
@@ -236,7 +236,7 @@ export default defineSchema({
     ...legacy,
     name: v.string(),
     slug: v.string(),
-    commissionerUserId: v.string(),
+    commissionerUserId: v.id("users"),
     season: v.number(),
     teamCount: v.number(),
     isPublic: v.boolean(),
@@ -300,7 +300,7 @@ export default defineSchema({
   league_rule_changes: defineTable({
     ...legacy,
     leagueId: v.id("leagues"),
-    userId: v.optional(v.string()),
+    userId: v.optional(v.id("users")),
     field: v.string(),
     fromValue: v.optional(v.any()),
     toValue: v.optional(v.any()),
@@ -310,7 +310,7 @@ export default defineSchema({
   league_members: defineTable({
     ...legacy,
     leagueId: v.id("leagues"),
-    userId: v.string(),
+    userId: v.id("users"),
     role: leagueRole,
   })
     .index("by_leagueId_userId", ["leagueId", "userId"])
@@ -319,7 +319,7 @@ export default defineSchema({
   teams: defineTable({
     ...legacy,
     leagueId: v.id("leagues"),
-    ownerUserId: v.optional(v.string()),
+    ownerUserId: v.optional(v.id("users")),
     name: v.string(),
     abbreviation: v.string(),
     faabRemaining: v.number(),
@@ -549,7 +549,7 @@ export default defineSchema({
       description: v.optional(v.string()),
     }),
     enabled: v.boolean(),
-    createdByUserId: v.optional(v.string()),
+    createdByUserId: v.optional(v.id("users")),
   })
     .index("by_leagueId", ["leagueId"])
     .index("by_teamId", ["teamId"]),
@@ -623,7 +623,7 @@ export default defineSchema({
     modelId: v.string(),
     harness: harnessSettings,
     skillIds: v.array(v.id("skills")),
-    createdByUserId: v.optional(v.string()),
+    createdByUserId: v.optional(v.id("users")),
     appliedAt: v.optional(v.number()),
     changeSummary: v.optional(v.string()),
   })
@@ -632,7 +632,7 @@ export default defineSchema({
 
   skills: defineTable({
     ...legacy,
-    authorUserId: v.optional(v.string()),
+    authorUserId: v.optional(v.id("users")),
     name: v.string(),
     slug: v.string(),
     description: v.optional(v.string()),
@@ -996,7 +996,7 @@ export default defineSchema({
   trade_votes: defineTable({
     ...legacy,
     tradeId: v.id("trades"),
-    userId: v.string(),
+    userId: v.id("users"),
     vote: tradeVote,
   }).index("by_tradeId_userId", ["tradeId", "userId"]),
 
@@ -1077,7 +1077,7 @@ export default defineSchema({
     leagueId: v.id("leagues"),
     targetType: voteTargetType,
     targetId: v.string(),
-    voterUserId: v.optional(v.string()),
+    voterUserId: v.optional(v.id("users")),
     voterTeamId: v.optional(v.id("teams")),
     direction: v.number(),
   })
