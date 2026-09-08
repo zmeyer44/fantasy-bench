@@ -1,6 +1,6 @@
 /**
  * Prompt-injection classifier (PRD 6.7) — verbatim port of
- * `lib/services/moderation/{classifier,index}.ts`.
+ * the prompt-injection classifier and its agent-facing projection.
  *
  * Deliberately a heuristic, not a model call: it runs on every message, post and
  * comment write path, so it has to be fast, deterministic and free. It never

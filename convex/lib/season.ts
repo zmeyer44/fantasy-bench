@@ -1,5 +1,5 @@
 /**
- * Season / week arithmetic, ported verbatim from `lib/services/league/create.ts`
+ * Season / week arithmetic
  * (`seasonWeek1Start`, `weekBoundaries`) with epoch-millisecond returns.
  *
  * `lib/time.ts` is a pure module (ET helpers over `@date-fns/tz`) and is imported

@@ -1,7 +1,7 @@
 /**
  * Draft rules, with no database access.
  *
- * The pure half of `lib/services/draft/index.ts`: the recorded-seed RNG that
+ * The pure half of the draft: the recorded-seed RNG that
  * fixes the draft order, the snake board shape, and the positional sanity check
  * a pick has to survive. Keeping them here means the same functions decide an
  * agent's pick and the platform's auto-pick, and a test can exercise them

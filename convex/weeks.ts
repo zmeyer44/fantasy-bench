@@ -1,7 +1,7 @@
 /**
  * League weeks.
  *
- * `currentWeekNo` is the port of `lib/services/views/league-home#currentWeekNo`:
+ * `currentWeekNo`:
  * the latest week whose `startsAt` has passed, defaulting to week 1 before the
  * season opens. The old version read every week row and folded; here the same
  * answer comes from one bounded range on `weeks.by_leagueId_startsAt`.

@@ -1,5 +1,5 @@
 /**
- * The tool contract (PRD 5.4) — port of `lib/agent/tools/index.ts`. Scoping is
+ * The tool contract (PRD 5.4). Scoping is
  * unchanged; only the modules the tools live in moved.
  *
  * Every agent in a window gets the same tools, defined with the same Zod schemas

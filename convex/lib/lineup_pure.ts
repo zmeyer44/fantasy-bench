@@ -1,7 +1,7 @@
 /**
  * Lineup rules, with no database access.
  *
- * A verbatim port of the pure half of `lib/services/lineup/index.ts`: slot
+ * The pure half of lineups: slot
  * shapes, eligibility, locks, validation, the optimal lineup and the two
  * efficiency metrics. Everything reads the window's `SnapshotPayload`, so a
  * replay against a stored snapshot produces the same answer as the original run

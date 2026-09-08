@@ -1,5 +1,5 @@
 /**
- * Trades — read paths (PRD 5.6, port of `lib/services/trades`).
+ * Trades — read paths (PRD 5.6).
  *
  * `list` is the reactive negotiation feed, `get` is one proposal with its event
  * timeline, fairness breakdown and veto tally, and `listOpenForTeam` is what the
@@ -55,7 +55,6 @@ import {
   totalRosterCapacity,
   type ActionResult,
   type AgentCtx,
-  type EpochDates,
   type SocialRules,
 } from "./lib/social_pure";
 import {
@@ -69,44 +68,85 @@ import {
 import { tradeStatus, tradeVote } from "./schema";
 import { latestPayload, PROJECTION_SOURCES } from "./snapshot";
 
-import type { FairnessDetailV1 } from "../lib/services/trades/fairness";
-import type {
-  TradeDetail as PgTradeDetail,
-  TradeEventView as PgTradeEventView,
-  TradeVoteView as PgTradeVoteView,
-  VetoTally,
-} from "../lib/services/trades";
-import type {
-  TradePlayerRef,
-  TradeSummary as PgTradeSummary,
-} from "../lib/services/trades/summaries";
-
+import type { FairnessDetailV1 } from "./lib/fairness_pure";
 // ---------------------------------------------------------------------------
-// Return types — the old service types with epoch-ms dates
+// Return types (dates are epoch ms — docs/CONVEX_CONVENTIONS.md)
 // ---------------------------------------------------------------------------
 
-export type { TradePlayerRef, VetoTally };
+export type TradePlayerRef = {
+  playerId: string;
+  playerName?: string;
+  position?: string;
+  nflTeam?: string | null;
+};
 
-export type TradeSummary = EpochDates<
-  PgTradeSummary,
-  "createdAt" | "reviewEndsAt" | "resolvedAt"
->;
+export type VetoTally = {
+  vetoes: number;
+  approvals: number;
+  ownerCount: number;
+  /** Votes needed to block: strictly more than half the owners. */
+  threshold: number;
+  blocked: boolean;
+};
 
-export type TradeEventView = EpochDates<PgTradeEventView, "createdAt">;
-export type TradeVoteView = EpochDates<PgTradeVoteView, "createdAt">;
+export type TradeSummary = {
+  id: string;
+  status: string;
+  proposerTeamId: string;
+  recipientTeamId: string;
+  threadId: string | null;
+  give: TradePlayerRef[];
+  receive: TradePlayerRef[];
+  faab: number | null;
+  message: string | null;
+  fairnessScore: number | null;
+  flagged: boolean;
+  createdAt: number;
+  reviewEndsAt: number | null;
+  // ---- additive fields (the agent contract only requires the ones above) ----
+  leagueId: string;
+  weekNo: number | null;
+  windowId: string | null;
+  proposerTeamName: string;
+  recipientTeamName: string;
+  parentTradeId: string | null;
+  resolvedAt: number | null;
+  fairnessDetail: FairnessDetailV1 | null;
+  createdByRunId: string | null;
+};
+
+export type TradeEventView = {
+  id: string;
+  type: string;
+  fromStatus: string | null;
+  toStatus: string | null;
+  runId: string | null;
+  stepIndex: number | null;
+  actorTeamId: string | null;
+  actorTeamName: string | null;
+  payload: Record<string, unknown>;
+  createdAt: number;
+};
+
+export type TradeVoteView = {
+  userId: string;
+  vote: "veto" | "approve";
+  createdAt: number;
+};
 
 /**
- * `TradeDetail` minus the fields we retype, plus:
- * - `myVote`: the viewer's own veto vote (additive; the review panel needs it to
- *   render the toggle without scanning `votes`).
+ * A trade plus its working: the fairness detail, the timeline, the votes and
+ * `myVote` — the viewer's own veto vote (additive; the review panel needs it to
+ * render the toggle without scanning `votes`).
  */
-export type TradeDetail = TradeSummary &
-  Omit<PgTradeDetail, keyof PgTradeSummary | "events" | "votes" | "fairnessDetail"> & {
-    fairnessDetail: FairnessDetailV1 | null;
-    events: TradeEventView[];
-    votes: TradeVoteView[];
-    myVote: "veto" | "approve" | null;
-  };
+export type TradeDetail = TradeSummary & {
+  fairnessDetail: FairnessDetailV1 | null;
+  events: TradeEventView[];
+  votes: TradeVoteView[];
+  tally: VetoTally | null;
+  counterTradeIds: string[];
+  myVote: "veto" | "approve" | null;
+};
 
 // ---------------------------------------------------------------------------
 // Bounds
@@ -594,7 +634,7 @@ async function rosterPlayerIds(
 
 /**
  * Score a proposal (persisted or not) — the Convex half of
- * `lib/services/trades/fairness.scoreTrade`. The arithmetic and the
+ * `convex/lib/fairness_pure.ts#scoreTrade`. The arithmetic and the
  * `fairness_detail` v1 shape live in `lib/fairness_pure.ts`.
  */
 export async function scoreTrade(

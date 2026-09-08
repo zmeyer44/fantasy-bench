@@ -1,5 +1,5 @@
 /**
- * Draft tools (PRD 5.2) — port of `lib/agent/tools/draft.ts`.
+ * Draft tools (PRD 5.2).
  *
  * A snake draft exposes `make_draft_pick` for the team on the clock. An auction
  * exposes `submit_bid` every round (sealed simultaneous bids — open question 4)

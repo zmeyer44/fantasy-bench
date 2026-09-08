@@ -31,6 +31,7 @@ import type * as lib_lineup_pure from "../lib/lineup_pure.js";
 import type * as lib_moderation_pure from "../lib/moderation_pure.js";
 import type * as lib_pricing_pure from "../lib/pricing_pure.js";
 import type * as lib_scoring_pure from "../lib/scoring_pure.js";
+import type * as lib_scoring_table from "../lib/scoring_table.js";
 import type * as lib_season from "../lib/season.js";
 import type * as lib_seed_secret from "../lib/seed_secret.js";
 import type * as lib_social_pure from "../lib/social_pure.js";
@@ -111,6 +112,7 @@ declare const fullApi: ApiFromModules<{
   "lib/moderation_pure": typeof lib_moderation_pure;
   "lib/pricing_pure": typeof lib_pricing_pure;
   "lib/scoring_pure": typeof lib_scoring_pure;
+  "lib/scoring_table": typeof lib_scoring_table;
   "lib/season": typeof lib_season;
   "lib/seed_secret": typeof lib_seed_secret;
   "lib/social_pure": typeof lib_social_pure;

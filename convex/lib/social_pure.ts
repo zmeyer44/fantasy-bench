@@ -3,7 +3,7 @@
  * forum).
  *
  * Nothing here touches `ctx` or the database: these are the parts of
- * `lib/services/{forum,messaging,trades}` that were already pure, ported so the
+ * the forum, messaging and trade modules that are pure, factored out so the
  * Convex queries (and, in Phase 3, the mutations) can share one definition with
  * the tests.
  *
@@ -34,7 +34,7 @@ export type EpochDates<T, K extends keyof T> = Omit<T, K> & {
 export type AgentFlags = { injectionSuspected?: boolean; reasons?: string[] };
 
 /**
- * Port of `lib/services/moderation.toAgentFlags`: unflagged, zero-score content
+ * `toAgentFlags`: unflagged, zero-score content
  * carries no flags block at all so the agent prompt stays quiet.
  *
  * The implementation lives beside the classifier in `moderation_pure.ts` (the
@@ -49,7 +49,7 @@ export type { ContentFlags } from "./moderation_pure";
 // ---------------------------------------------------------------------------
 
 /**
- * Port of `AgentContext` in `lib/services/messaging/index.ts`, as a validator.
+ * The agent context a tool call carries, as a validator.
  *
  * Every runtime-facing mutation takes one. `(runId, toolCallId)` is the
  * idempotency key: a replayed tool call finds its `run_actions` row and returns
@@ -67,7 +67,7 @@ export const agentCtxValidator = v.object({
 export type AgentCtx = Infer<typeof agentCtxValidator>;
 
 /**
- * `ActionResult<T>` from `lib/services/messaging`: validation failures are data,
+ * `ActionResult<T>`: validation failures are data,
  * not exceptions — the runtime turns `{ ok: false, errors }` into a tool result
  * the agent can read and retry against, and records it as a rejected action.
  */
@@ -82,7 +82,7 @@ export const actionErrors = v.object({ ok: v.literal(false), errors: v.array(v.s
 // ---------------------------------------------------------------------------
 
 /**
- * Port of `SocialRules` in `lib/services/messaging/shared.ts`: the subset of
+ * `SocialRules`: the subset of
  * `league_rules` the social write paths read, with defaults applied so a league
  * whose rules row has not been written yet still behaves sanely. `fairnessFloor`
  * in particular defaults here (PRD: 0.6) rather than relying on the column.
@@ -162,7 +162,7 @@ export function totalRosterCapacity(slots: Record<string, number>): number {
 
 /**
  * Reddit-style time decay, `score / (ageHours + 2)^1.5`, rounded to 5 decimals.
- * Copy of `lib/services/forum.hotScore` with epoch-ms arguments.
+ * The forum's `hotScore`, with epoch-ms arguments.
  */
 export function hotScore(score: number, createdAt: number, now: number): number {
   const ageHours = Math.max(0, (now - createdAt) / 3_600_000);

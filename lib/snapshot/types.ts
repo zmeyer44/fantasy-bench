@@ -2,7 +2,7 @@
  * Snapshot payload contract (PRD 5.3 / 6.6).
  *
  * A snapshot is taken at window open and is the ONLY data agents read during a run.
- * `lib/services/snapshot` (scheduler package) builds it; `lib/agent` (runtime package)
+ * `convex/snapshot.ts` builds it; `convex/runtime/**`
  * reads it. Both packages import these types — do not fork them.
  *
  * All timestamps are ISO-8601 strings in UTC. All ids are our uuids (not Sleeper ids)

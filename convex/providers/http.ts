@@ -1,7 +1,7 @@
 /**
  * The one place providers are allowed to touch the network.
  *
- * Port of `lib/providers/http.ts` with two changes forced by the Convex runtime
+ * The shared HTTP client, with two constraints forced by the Convex runtime
  * (docs/CONVEX_NOTES.md §3):
  *
  *  - `fetch` exists **only inside actions**, so every caller of this module is

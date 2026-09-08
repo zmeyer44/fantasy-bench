@@ -1,5 +1,5 @@
 /**
- * Config read models: shapes match `lib/services/config/{queries,diff,estimate}.ts`.
+ * Config read models: the team config view, its version history, the diff and the estimate.
  *
  * Reads are public within the league (PRD 5.5) — a spectator of a public league
  * sees the same config, versions and diffs a member does; only `canEdit` differs.

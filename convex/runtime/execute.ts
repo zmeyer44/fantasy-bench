@@ -1,5 +1,5 @@
 /**
- * The executor (PRD 5.4, 6.3) — the port of `lib/agent/execute.ts` to a Convex
+ * The executor (PRD 5.4, 6.3) — the agent loop as a Convex
  * action on the Workpool.
  *
  * ## Runtime: the DEFAULT Convex runtime, not `"use node"`.
@@ -498,6 +498,9 @@ export const executeRun = internalAction({
     function makeOnStepEnd(modelId: string, offset: () => number) {
       return async (step: StepResult<ToolSet>) => {
         const stepIndex = step.stepNumber + offset();
+        console.log(
+          `[runtime] run ${runId} onStepEnd stepNumber=${step.stepNumber} offset=${offset()} stepIndex=${stepIndex} tools=${step.toolCalls.map((t) => t.toolName).join(",")} finish=${String(step.finishReason)}`,
+        );
         const usage = step.usage;
         const inputTokens = usage.inputTokens ?? 0;
         const outputTokens = usage.outputTokens ?? 0;
@@ -555,6 +558,7 @@ export const executeRun = internalAction({
      */
     function makePrepareStep(controller: AbortController) {
       return async ({ steps }: { steps: Array<StepResult<ToolSet>> }) => {
+        console.log(`[runtime] run ${runId} prepareStep stepsSoFar=${steps.length}`);
         const last = steps.at(-1);
         const projectedInput = last
           ? (last.usage.inputTokens ?? 0) + (last.usage.outputTokens ?? 0) + 500

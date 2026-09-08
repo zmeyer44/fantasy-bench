@@ -25,7 +25,8 @@
  * transactions of type add/drop/trade, snapshots — the system produces those.
  * `players`, `player_projections`, `player_projection_latest`, `nfl_games`,
  * `model_prices` and `skills` are league-independent and already on the
- * deployment; this script reuses them through their `legacyId`.
+ * deployment; this script reuses them through the seed's id map
+ * (`.cache/seed-map.<deployment>.json`, written by `npm run seed:convex`).
  *
  * ## What it drives
  *
@@ -37,9 +38,10 @@
  * `internal.*` and nothing may be added to `convex/`.
  *
  * Re-runnable: pass `--slug=e2e-league-2` for a fresh league. Re-running with the
- * same slug re-uses the league it finds (rows are keyed by a prefixed `legacyId`)
- * and would drive windows that already ran, which is why `drive` refuses when the
- * target window already has runs unless `--force` is given.
+ * same slug re-uses the league it finds (its own rows are remembered in
+ * `.cache/seed-map.<deployment>.<slug>.json`) and would drive windows that already
+ * ran, which is why `drive` refuses when the target window already has runs unless
+ * `--force` is given.
  */
 import { execFile } from "node:child_process";
 import fs from "node:fs";
@@ -50,6 +52,7 @@ import { promisify } from "node:util";
 import { ConvexHttpClient } from "convex/browser";
 
 import { api } from "../convex/_generated/api";
+import { readIdMap, seedMapFile, setTable, tableMap, writeIdMap, type IdMap } from "./seed-map";
 
 const execFileAsync = promisify(execFile);
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -143,14 +146,29 @@ function clean(row: Row): Row {
 
 // ------------------------------------------------------------------ id maps
 
+/**
+ * Two id maps, both on disk (`scripts/seed-map.ts`): the seed's, for the
+ * league-independent rows this script reuses, and this slug's own, so a re-run
+ * recognises the rows it created last time.
+ */
+const BASE_MAP: IdMap = readIdMap(seedMapFile(ROOT));
+const OWN_MAP_FILE = seedMapFile(ROOT, SLUG);
+const ownMap: IdMap = readIdMap(OWN_MAP_FILE);
+
 const maps = new Map<string, Map<string, string>>();
 function mapOf(table: string): Map<string, string> {
   let found = maps.get(table);
   if (!found) {
-    found = new Map();
+    found = tableMap(ownMap, table);
     maps.set(table, found);
   }
   return found;
+}
+
+/** Persist this run's own map, so a re-run under the same slug resumes. */
+function saveOwnMap(): void {
+  for (const [table, m] of maps) setTable(ownMap, table, m);
+  writeIdMap(OWN_MAP_FILE, ownMap);
 }
 
 function ref(table: string, goldenId: unknown): string {
@@ -164,39 +182,18 @@ function refOpt(table: string, goldenId: unknown): string | undefined {
   return mapOf(table).get(String(goldenId));
 }
 
-/** The prefixed key a row of this run carries, so a re-run recognises its own rows. */
-function legacy(goldenId: unknown): string {
-  return `${SLUG}:${String(goldenId)}`;
-}
-
 // ----------------------------------------------------------- convex plumbing
 
-async function loadExisting(table: string, prefixed: boolean): Promise<void> {
+/** Pull one league-independent table out of the seed's map. */
+function loadFromSeedMap(table: string): void {
   const target = mapOf(table);
-  let cursor: string | null = null;
-  for (;;) {
-    const page: { map: Record<string, string>; continueCursor: string; isDone: boolean } =
-      await client.query(api.seed.lookupLegacy, {
-        secret: secret!,
-        table: table as never,
-        cursor,
-        numItems: 1_000,
-      });
-    for (const [legacyId, id] of Object.entries(page.map)) {
-      if (prefixed) {
-        if (legacyId.startsWith(`${SLUG}:`)) target.set(legacyId.slice(SLUG.length + 1), id);
-      } else if (!target.has(legacyId)) {
-        target.set(legacyId, id);
-      }
-    }
-    if (page.isDone) return;
-    cursor = page.continueCursor;
+  for (const [goldenId, id] of Object.entries(BASE_MAP[table] ?? {})) {
+    if (!target.has(goldenId)) target.set(goldenId, id);
   }
 }
 
-/** Insert rows this run owns; anything already carrying our prefixed key is skipped. */
+/** Insert rows this run owns; anything already in this slug's map is skipped. */
 async function importRows(table: string, rows: Row[], batchSize = 400): Promise<void> {
-  await loadExisting(table, true);
   const known = mapOf(table);
   const pending = rows.filter((row) => !known.has(String(row.__golden)));
   for (let i = 0; i < pending.length; i += batchSize) {
@@ -209,6 +206,7 @@ async function importRows(table: string, rows: Row[], batchSize = 400): Promise<
     });
     batch.forEach((row, index) => known.set(String(row.__golden), ids[index]));
   }
+  saveOwnMap();
   process.stdout.write(
     `  ${table.padEnd(20)} ${String(rows.length).padStart(4)} rows` +
       (pending.length === rows.length ? "\n" : ` (${rows.length - pending.length} already present)\n`),
@@ -248,12 +246,19 @@ async function importLeague(): Promise<string> {
 
   const existing = await client.query(api.leagues.bySlug, { slug: SLUG });
   if (existing) {
+    if (!Object.keys(ownMap).length) {
+      throw new Error(
+        `League "${SLUG}" exists on the deployment but ${OWN_MAP_FILE} is missing, so this run ` +
+          `cannot tell which rows it already created and would import them a second time. ` +
+          `Use --slug=<new-slug> for a fresh league.`,
+      );
+    }
     log(`league ${SLUG} already exists (${existing.league._id}) — reusing it`);
   }
 
-  // League-independent rows already on the deployment, keyed by their own legacyId.
-  await loadExisting("players", false);
-  await loadExisting("skills", false);
+  // League-independent rows already on the deployment, from the seed's id map.
+  loadFromSeedMap("players");
+  loadFromSeedMap("skills");
   log(`resolved ${mapOf("players").size} players, ${mapOf("skills").size} skills`);
 
   const demo = await client.query(api.users.byEmailPublic, {
@@ -273,7 +278,6 @@ async function importLeague(): Promise<string> {
     readGolden("leagues").map((row) =>
       clean({
         __golden: row.id,
-        legacyId: legacy(row.id),
         name: `E2E ${String(row.name)}`,
         slug: SLUG,
         commissionerUserId: ref("users", row.commissioner_user_id),
@@ -297,7 +301,6 @@ async function importLeague(): Promise<string> {
     readGolden("league_rules").map((row) =>
       clean({
         __golden: row.id,
-        legacyId: legacy(row.id),
         leagueId: ref("leagues", row.league_id),
         scoringPreset: String(row.scoring_preset),
         superflex: row.superflex === true,
@@ -341,7 +344,6 @@ async function importLeague(): Promise<string> {
     readGolden("league_members").map((row) =>
       clean({
         __golden: row.id,
-        legacyId: legacy(row.id),
         leagueId: ref("leagues", row.league_id),
         userId: ref("users", row.user_id),
         role: String(row.role),
@@ -355,7 +357,6 @@ async function importLeague(): Promise<string> {
     readGolden("teams").map((row) =>
       clean({
         __golden: row.id,
-        legacyId: legacy(row.id),
         leagueId: ref("leagues", row.league_id),
         ownerUserId: refOpt("users", row.owner_user_id),
         name: String(row.name),
@@ -374,7 +375,6 @@ async function importLeague(): Promise<string> {
     readGolden("weeks").map((row) =>
       clean({
         __golden: row.id,
-        legacyId: legacy(row.id),
         leagueId: ref("leagues", row.league_id),
         weekNo: numOr(row.week_no, 0),
         startsAt: msRequired(row.starts_at, 0),
@@ -390,7 +390,6 @@ async function importLeague(): Promise<string> {
     readGolden("matchups").map((row) =>
       clean({
         __golden: row.id,
-        legacyId: legacy(row.id),
         leagueId: ref("leagues", row.league_id),
         weekNo: numOr(row.week_no, 0),
         homeTeamId: ref("teams", row.home_team_id),
@@ -413,7 +412,6 @@ async function importLeague(): Promise<string> {
     configs.map((row) =>
       clean({
         __golden: row.id,
-        legacyId: legacy(row.id),
         teamId: ref("teams", row.team_id),
         leagueId: ref("leagues", readGolden("teams").find((t) => t.id === row.team_id)!.league_id),
         noteToAgent: str(row.note_to_agent),
@@ -437,7 +435,6 @@ async function importLeague(): Promise<string> {
       const goldenTeamId = teamByConfig.get(String(row.config_id))!;
       return clean({
         __golden: row.id,
-        legacyId: legacy(row.id),
         configId: ref("agent_configs", row.config_id),
         teamId: ref("teams", goldenTeamId),
         leagueId: ref("leagues", readGolden("teams").find((t) => t.id === goldenTeamId)!.league_id),
@@ -473,7 +470,6 @@ async function importLeague(): Promise<string> {
     readGolden("roster_slots").map((row) =>
       clean({
         __golden: row.id,
-        legacyId: legacy(row.id),
         leagueId: leagueOfTeam(row.team_id),
         teamId: ref("teams", row.team_id),
         playerId: ref("players", row.player_id),
@@ -488,7 +484,6 @@ async function importLeague(): Promise<string> {
     readGolden("draft_picks").map((row) =>
       clean({
         __golden: row.id,
-        legacyId: legacy(row.id),
         leagueId: ref("leagues", row.league_id),
         round: numOr(row.round, 0),
         pickNo: numOr(row.pick_no, 0),
@@ -511,7 +506,6 @@ async function importLeague(): Promise<string> {
       .map((row) =>
         clean({
           __golden: row.id,
-          legacyId: legacy(row.id),
           leagueId: ref("leagues", row.league_id),
           teamId: ref("teams", row.team_id),
           type: String(row.type),
@@ -530,7 +524,6 @@ async function importLeague(): Promise<string> {
       .map((row) =>
         clean({
           __golden: row.id,
-          legacyId: legacy(row.id),
           teamId: ref("teams", row.team_id),
           leagueId: leagueOfTeam(row.team_id),
           weekNo: numOr(row.week_no, 0),
@@ -552,7 +545,6 @@ async function importLeague(): Promise<string> {
       .map((row) =>
         clean({
           __golden: row.id,
-          legacyId: legacy(row.id),
           leagueId: ref("leagues", row.league_id),
           type: String(row.type),
           label: String(row.label),

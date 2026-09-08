@@ -1,7 +1,6 @@
 /**
  * Weekly scoring: lineup × stats → matchup scores, team results, standings —
- * the port of `lib/services/scoring/index.ts` plus the playoff half of
- * `lib/services/standings/index.ts`.
+ * scoring a week, finalising it, and the playoff bracket.
  *
  * The scorer always reads the *latest lineup version* for the week (`lineups` is
  * append-only history) and the stored stat line for each starter, so it is safe

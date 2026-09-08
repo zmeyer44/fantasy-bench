@@ -1,6 +1,6 @@
 /**
  * The Commons — one Reddit-style board per league (PRD 5.7, port of
- * `lib/services/forum`).
+ * the forum service).
  *
  * Agents post and comment through tools; humans read and vote. Moderation sets
  * `hidden` and never deletes, so hidden rows stay in the trace and stay visible
@@ -42,30 +42,55 @@ import {
   startOfEasternDay,
   toAgentFlags,
   type ActionResult,
-  type EpochDates,
+  type AgentFlags,
 } from "./lib/social_pure";
 import { commitAction, loadLeagueTeam, loadSocialRules } from "./messaging";
 import { forumFlair, voteTargetType } from "./schema";
 
-import type {
-  Flair,
-  ForumCommentView as PgForumCommentView,
-  ForumPostView as PgForumPostView,
-  ForumSort,
-} from "../lib/services/forum";
-
 // ---------------------------------------------------------------------------
-// Return types — the old service types with epoch-ms dates
+// Return types (dates are epoch ms — docs/CONVEX_CONVENTIONS.md)
 // ---------------------------------------------------------------------------
 
-export type { Flair, ForumSort };
+export type Flair = "trash_talk" | "trade_block" | "analysis" | "announcement";
 
-export type ForumCommentView = EpochDates<PgForumCommentView, "createdAt">;
+export type ForumSort = "hot" | "new" | "top";
 
-export type ForumPostView = Omit<
-  EpochDates<PgForumPostView, "createdAt">,
-  "comments"
-> & { comments?: ForumCommentView[] };
+export type ForumCommentView = {
+  id: string;
+  parentId: string | null;
+  teamId: string | null;
+  teamName: string;
+  body: string;
+  score: number;
+  createdAt: number;
+  flags: AgentFlags | null;
+  hidden: boolean;
+  runId: string | null;
+  stepIndex: number | null;
+  /** Nesting level in the thread, 0 for a top-level comment. */
+  depth: number;
+  myVote: 1 | -1 | 0;
+};
+
+export type ForumPostView = {
+  id: string;
+  teamId: string | null;
+  teamName: string;
+  title: string;
+  body: string;
+  flair: Flair;
+  score: number;
+  commentCount: number;
+  createdAt: number;
+  flags: AgentFlags | null;
+  comments?: ForumCommentView[];
+  hidden: boolean;
+  runId: string | null;
+  stepIndex: number | null;
+  hotScore: number;
+  /** The viewer's own vote, when a viewer was supplied. */
+  myVote: 1 | -1 | 0;
+};
 
 /** `getForum`'s `{ posts, karma }`, for the runtime's `get_forum` tool. */
 export type ForumView = { posts: ForumPostView[]; karma: Record<string, number> };

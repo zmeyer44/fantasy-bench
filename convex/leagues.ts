@@ -1,7 +1,7 @@
 /**
  * League read models plus the create/join write paths.
  *
- * Ports `lib/trpc/routers/league.ts` + `lib/services/league/{queries,create}.ts`.
+ * League reads and creation.
  * `leagues.create` itself is a Phase 3 public mutation; Phase 2 exposes only the
  * internal builder so the seed and tests can make leagues.
  *
@@ -239,7 +239,7 @@ export function randomJoinCode(length = 8): string {
 
 /**
  * Mint a code for a league that has none, retrying on the (vanishingly
- * unlikely) collision. Port of `ensureJoinCode` in `lib/services/league/rules.ts`.
+ * unlikely) collision.
  */
 export async function mintJoinCode(ctx: MutationCtx): Promise<string> {
   for (let attempt = 0; attempt < 8; attempt++) {
@@ -297,7 +297,7 @@ type BuildLeagueArgs = {
 /**
  * Build a league skeleton: league, rules, commissioner membership, 17 weeks,
  * N unowned teams and one default agent config per team. Port of
- * `lib/services/league/create.ts`; no scheduling (Phase 5 owns windows).
+ * the league defaults in `convex/lib/defaults.ts`.
  */
 async function buildLeague(
   ctx: MutationCtx,
@@ -410,8 +410,7 @@ export const createLeague = internalMutation({
  * commissioner of a brand-new league skeleton and gets its invite code minted up
  * front, so the settings console can hand out a link immediately.
  *
- * Bounds mirror `createLeagueSchema` in `lib/trpc/routers/league.ts`; the tRPC
- * version returned the whole league row, the client only ever used id + slug.
+ * Returns id + slug: that is all the client has ever used.
  */
 export const create = mutation({
   args: {

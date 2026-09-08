@@ -54,18 +54,18 @@ function ms(value: unknown): number | undefined {
 
 /**
  * Insert the golden league exactly as `scripts/seed-convex.ts` does (epoch-ms
- * dates, camelCase fields, `legacyId` on every row) and return the id map.
+ * dates, camelCase fields) and return the id map — the same map that script
+ * persists to `.cache/seed-map.<deployment>.json`, since Convex rows carry no id
+ * of their own.
  */
 async function loadGolden(t: ReturnType<typeof newTest>) {
   return t.run(async (ctx) => {
     const userId = await ctx.db.insert("users", {
       name: String((goldenUser as Row).name),
       email: String((goldenUser as Row).email),
-      legacyId: String((goldenUser as Row).id),
     });
 
     const leagueId = await ctx.db.insert("leagues", {
-      legacyId: String(league.id),
       name: String(league.name),
       slug: String(league.slug),
       commissionerUserId: userId,
@@ -80,7 +80,6 @@ async function loadGolden(t: ReturnType<typeof newTest>) {
     });
 
     await ctx.db.insert("league_rules", {
-      legacyId: String(rules.id),
       leagueId,
       scoringPreset: "ppr",
       superflex: rules.superflex === true,
@@ -120,7 +119,6 @@ async function loadGolden(t: ReturnType<typeof newTest>) {
     });
 
     await ctx.db.insert("league_members", {
-      legacyId: String(member.id),
       leagueId,
       userId,
       role: "commissioner",
@@ -130,7 +128,6 @@ async function loadGolden(t: ReturnType<typeof newTest>) {
     const teamIds: Record<string, Id<"teams">> = {};
     for (const team of teams) {
       teamIds[String(team.id)] = await ctx.db.insert("teams", {
-          legacyId: String(team.id),
           leagueId,
           ownerUserId: team.owner_user_id ? userId : undefined,
           name: String(team.name),
@@ -146,7 +143,6 @@ async function loadGolden(t: ReturnType<typeof newTest>) {
     const configIds: Record<string, Id<"agent_configs">> = {};
     for (const config of configs) {
       configIds[String(config.id)] = await ctx.db.insert("agent_configs", {
-        legacyId: String(config.id),
         teamId: teamIds[String(config.team_id)],
         leagueId,
         createdAt: ms(config.created_at),
@@ -158,7 +154,6 @@ async function loadGolden(t: ReturnType<typeof newTest>) {
     const versionIds: Record<string, Id<"config_versions">> = {};
     for (const version of versions) {
       versionIds[String(version.id)] = await ctx.db.insert("config_versions", {
-        legacyId: String(version.id),
         configId: configIds[String(version.config_id)],
         teamId: teamIds[teamByConfig.get(String(version.config_id))!],
         leagueId,
@@ -201,7 +196,6 @@ describe("golden parity — leagues.get", () => {
     expect(view.league.name).toBe(league.name);
     expect(view.league.slug).toBe(league.slug);
     expect(view.league.season).toBe(league.season);
-    expect(view.league.legacyId).toBe(league.id);
     // Dates are epoch ms in Convex; the golden file has ISO strings.
     expect(view.league.createdAt).toBe(Date.parse(String(league.created_at)));
 
@@ -315,7 +309,7 @@ describe("seed guards", () => {
     ).rejects.toThrow();
   });
 
-  it("imports, looks up by legacy id, and clears a table", async () => {
+  it("imports rows, counts them, and clears the table", async () => {
     const t = newTest();
     vi.stubEnv("SEED_SECRET", SECRET);
     const { userId } = await loadGolden(t);
@@ -325,7 +319,6 @@ describe("seed guards", () => {
       table: "skills",
       rows: [
         {
-          legacyId: "legacy-skill-1",
           name: "Imported skill",
           slug: "imported-skill",
           bodyMd: "# Imported",
@@ -338,10 +331,6 @@ describe("seed guards", () => {
     });
     expect(ids).toHaveLength(1);
 
-    const lookup = await t.query(api.seed.lookupLegacy, { secret: SECRET, table: "skills" });
-    expect(lookup.map["legacy-skill-1"]).toBe(ids[0]);
-    expect(lookup.isDone).toBe(true);
-
     const count = await t.query(api.seed.tableCount, { secret: SECRET, table: "skills" });
     expect(count.count).toBe(1);
 
@@ -350,7 +339,7 @@ describe("seed guards", () => {
     expect((await t.query(api.seed.tableCount, { secret: SECRET, table: "skills" })).count).toBe(0);
   });
 
-  it("patches rows, including the demo user's legacyId", async () => {
+  it("patches rows, in the app tables and in `users`", async () => {
     const t = newTest();
     vi.stubEnv("SEED_SECRET", SECRET);
     const { userId, leagueId } = await loadGolden(t);
@@ -358,7 +347,7 @@ describe("seed guards", () => {
     await t.mutation(api.seed.patchBatch, {
       secret: SECRET,
       table: "users",
-      rows: [{ id: userId, patch: { legacyId: "patched-user" } }],
+      rows: [{ id: userId, patch: { name: "Patched Owner" } }],
     });
     await t.mutation(api.seed.patchBatch, {
       secret: SECRET,
@@ -370,7 +359,7 @@ describe("seed guards", () => {
       user: await ctx.db.get("users", userId),
       patchedLeague: await ctx.db.get("leagues", leagueId),
     }));
-    expect(user?.legacyId).toBe("patched-user");
+    expect(user?.name).toBe("Patched Owner");
     expect(patchedLeague?.joinCode).toBe("PATCHED1");
   });
 });

@@ -1,7 +1,7 @@
 /**
  * The normalized shapes every provider produces.
  *
- * Port of `lib/providers/types.ts`. The one difference: **every instant is
+ * The provider contract. The rule that holds everywhere: **every instant is
  * epoch milliseconds**, not a `Date` — per docs/CONVEX_CONVENTIONS.md dates are
  * epoch ms in the database and in function args and returns, and these shapes
  * cross an action → mutation boundary, where a `Date` is not a valid value.

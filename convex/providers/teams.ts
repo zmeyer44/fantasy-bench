@@ -1,5 +1,5 @@
 /**
- * Canonical NFL team abbreviations. Verbatim port of `lib/providers/teams.ts`
+ * Canonical NFL team abbreviations.
  * (pure string maps — nothing to change for the Convex runtime).
  *
  * Sleeper's abbreviations are the canonical ID space for the whole app

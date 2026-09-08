@@ -21,7 +21,10 @@
  *
  * **Resumable.** A league is finished when its `joinCode` starts with
  * `LOADTEST-DONE-`; `--from` skips by index and finished leagues are skipped
- * automatically.
+ * automatically. The shared player pool is remembered in
+ * `.cache/seed-map.<deployment>.loadtest.json` (`scripts/seed-map.ts`), which is
+ * what `--skip-players` reads and what `scripts/loadtest-run.ts` uses to find the
+ * config versions it re-pins to `mock/scripted`.
  *
  * **The deployment runs the real scheduler.** `convex/crons.ts` ticks every five
  * to fifteen minutes, and `season.tickAll` fans out over every `in_season` league,
@@ -58,6 +61,7 @@ import { fileURLToPath } from "node:url";
 import { ConvexHttpClient } from "convex/browser";
 
 import { api } from "../convex/_generated/api";
+import { readIdMap, seedMapFile, writeIdMap, type IdMap } from "./seed-map";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const GOLDEN = path.join(ROOT, "tests", "golden", "postgres-week1");
@@ -349,6 +353,19 @@ function numericStats(value: unknown): Record<string, number> {
 }
 
 /**
+ * The ids this seed has to remember across runs: the shared player pool, and the
+ * config versions `scripts/loadtest-run.ts` re-pins to `mock/scripted`. Convex
+ * rows carry no id of their own, so the map lives on disk (`scripts/seed-map.ts`).
+ */
+const MAP_FILE = seedMapFile(ROOT, "loadtest");
+const idMap: IdMap = readIdMap(MAP_FILE);
+
+function rememberIds(table: string, entries: Array<[string, string]>): void {
+  idMap[table] = { ...(idMap[table] ?? {}), ...Object.fromEntries(entries) };
+  writeIdMap(MAP_FILE, idMap);
+}
+
+/**
  * The player pool is global, so it is imported once and shared by all 50 leagues —
  * exactly as production works. Returns the Convex player ids in golden file order.
  */
@@ -357,26 +374,17 @@ async function ensurePlayers(): Promise<{ playerIds: string[]; positions: string
   const positions = golden.map((row) => String(row.position));
 
   if (SKIP_PLAYERS || (await countTable("players")) >= golden.length) {
-    const ids: string[] = [];
-    let cursor: string | null = null;
-    const byLegacy = new Map<string, string>();
-    for (;;) {
-      const page: { map: Record<string, string>; continueCursor: string; isDone: boolean } =
-        await client.query(api.seed.lookupLegacy, {
-          secret: secret!,
-          table: "players",
-          cursor,
-          numItems: 1_000,
-        });
-      for (const [legacyId, id] of Object.entries(page.map)) byLegacy.set(legacyId, id);
-      if (page.isDone) break;
-      cursor = page.continueCursor;
-    }
-    for (const row of golden) {
-      const id = byLegacy.get(String(row.id));
-      if (!id) throw new Error(`Player ${String(row.id)} is missing; drop --skip-players.`);
-      ids.push(id);
-    }
+    const known = idMap.players ?? {};
+    const ids = golden.map((row) => {
+      const id = known[String(row.id)];
+      if (!id) {
+        throw new Error(
+          `Player ${String(row.id)} is not in ${MAP_FILE}; drop --skip-players (or delete the ` +
+            `players table and re-seed) so the pool is imported and remembered.`,
+        );
+      }
+      return id;
+    });
     process.stdout.write(`  players                      ${ids.length} reused\n`);
     return { playerIds: ids, positions };
   }
@@ -386,7 +394,6 @@ async function ensurePlayers(): Promise<{ playerIds: string[]; positions: string
     golden.map((row) => {
       const externalIds = externalIdsOf(row.raw);
       return clean({
-        legacyId: String(row.id),
         sleeperId: String(row.sleeper_id),
         gsisId: str(row.gsis_id),
         espnId: externalIds.espn_id,
@@ -409,13 +416,13 @@ async function ensurePlayers(): Promise<{ playerIds: string[]; positions: string
     400,
   );
 
+  rememberIds("players", golden.map((row, index) => [String(row.id), playerIds[index]]));
   const byLegacy = new Map(golden.map((row, index) => [String(row.id), playerIds[index]]));
   const projections = readGolden("player_projections");
   await importRows(
     "player_projections",
     projections.map((row) =>
       clean({
-        legacyId: String(row.id),
         playerId: byLegacy.get(String(row.player_id))!,
         season: numOr(row.season, SEASON),
         week: numOr(row.week, 1),
@@ -461,7 +468,6 @@ async function ensurePlayers(): Promise<{ playerIds: string[]; positions: string
     "nfl_games",
     readGolden("nfl_games").map((row) =>
       clean({
-        legacyId: String(row.id),
         season: numOr(row.season, SEASON),
         week: numOr(row.week, 1),
         gameId: String(row.game_id),
@@ -572,7 +578,6 @@ async function seedLeague(index: number, userId: string, pool: Pool): Promise<vo
   // -- league core ---------------------------------------------------------
   const [leagueId] = await importRows("leagues", [
     clean({
-      legacyId: `${slug}:league`,
       name: `Load Test League ${index}`,
       slug,
       commissionerUserId: userId,
@@ -589,7 +594,6 @@ async function seedLeague(index: number, userId: string, pool: Pool): Promise<vo
 
   await importRows("league_rules", [
     clean({
-      legacyId: `${slug}:rules`,
       leagueId,
       scoringPreset: String(GOLDEN_RULES.scoring_preset),
       superflex: false,
@@ -625,14 +629,13 @@ async function seedLeague(index: number, userId: string, pool: Pool): Promise<vo
   ]);
 
   await importRows("league_members", [
-    { legacyId: `${slug}:member`, leagueId, userId, role: "commissioner", createdAt: SEASON_START },
+    { leagueId, userId, role: "commissioner", createdAt: SEASON_START },
   ]);
 
   const teamIds = await importRows(
     "teams",
     GOLDEN_TEAMS.map((row, t) =>
       clean({
-        legacyId: `${slug}:team:${t}`,
         leagueId,
         // The commissioner owns team 0 in every league, so owner-scoped reads have data.
         ownerUserId: t === 0 ? userId : undefined,
@@ -650,7 +653,6 @@ async function seedLeague(index: number, userId: string, pool: Pool): Promise<vo
   await importRows(
     "weeks",
     Array.from({ length: WEEKS }, (_, w) => ({
-      legacyId: `${slug}:week:${w + 1}`,
       leagueId,
       weekNo: w + 1,
       startsAt: weekStart(w + 1),
@@ -670,7 +672,6 @@ async function seedLeague(index: number, userId: string, pool: Pool): Promise<vo
     const final = weekStart(w + 1) <= now;
     for (const [home, away] of pairingsFor(w, TEAMS)) {
       matchupRows.push({
-        legacyId: `${slug}:matchup:${w}:${home}`,
         leagueId,
         weekNo: w,
         homeTeamId: teamIds[home],
@@ -685,7 +686,6 @@ async function seedLeague(index: number, userId: string, pool: Pool): Promise<vo
         [away, home],
       ]) {
         resultRows.push({
-          legacyId: `${slug}:result:${w}:${me}`,
           leagueId,
           teamId: teamIds[me],
           weekNo: w,
@@ -742,7 +742,6 @@ async function seedLeague(index: number, userId: string, pool: Pool): Promise<vo
     rosterByTeam.push(roster);
     roster.forEach((playerId, r) =>
       rosterRows.push({
-        legacyId: `${slug}:roster:${t}:${r}`,
         leagueId,
         teamId: teamIds[t],
         playerId,
@@ -757,7 +756,6 @@ async function seedLeague(index: number, userId: string, pool: Pool): Promise<vo
     "lineups",
     Array.from({ length: WEEKS }, (_, w) =>
       teamIds.map((teamId, t) => ({
-        legacyId: `${slug}:lineup:${w + 1}:${t}`,
         teamId,
         leagueId,
         weekNo: w + 1,
@@ -771,8 +769,7 @@ async function seedLeague(index: number, userId: string, pool: Pool): Promise<vo
   // -- agent configs --------------------------------------------------------
   const configIds = await importRows(
     "agent_configs",
-    teamIds.map((teamId, t) => ({
-      legacyId: `${slug}:config:${t}`,
+    teamIds.map((teamId) => ({
       teamId,
       leagueId,
       createdAt: SEASON_START - WEEK_MS,
@@ -782,7 +779,6 @@ async function seedLeague(index: number, userId: string, pool: Pool): Promise<vo
   const versionIds = await importRows(
     "config_versions",
     configIds.map((configId, t) => ({
-      legacyId: `${slug}:version:${t}`,
       configId,
       teamId: teamIds[t],
       leagueId,
@@ -799,6 +795,11 @@ async function seedLeague(index: number, userId: string, pool: Pool): Promise<vo
     "agent_configs",
     configIds.map((id, t) => ({ id, patch: { currentVersionId: versionIds[t] } })),
   );
+  // `scripts/loadtest-run.ts --patch-models` re-pins these to `mock/scripted`.
+  rememberIds(
+    "config_versions",
+    versionIds.map((id, t) => [`${slug}:version:${t}`, id]),
+  );
 
   // -- windows --------------------------------------------------------------
   const windowRows: Row[] = [];
@@ -806,7 +807,6 @@ async function seedLeague(index: number, userId: string, pool: Pool): Promise<vo
     WINDOW_PLAN.forEach((plan, p) => {
       const opensAt = weekStart(w) + p * 3 * 60 * 60 * 1000;
       windowRows.push({
-        legacyId: `${slug}:window:${w}:${p}`,
         leagueId,
         type: plan.type,
         label: plan.label,
@@ -889,7 +889,6 @@ async function seedLeague(index: number, userId: string, pool: Pool): Promise<vo
   const snapshotIds = await importRows(
     "snapshots",
     snapshotWindows.map((spec, s) => ({
-      legacyId: `${slug}:snapshot:${s}`,
       leagueId,
       windowId: windowAt(spec.weekNo, spec.plan),
       season: SEASON,
@@ -948,7 +947,6 @@ async function seedLeague(index: number, userId: string, pool: Pool): Promise<vo
         const startedAt = weekStart(w) + p * 3 * 60 * 60 * 1000 + t * 20_000;
         runRows.push(
           clean({
-            legacyId: `${slug}:run:${w}:${p}:${t}`,
             windowId: windowAt(w, p),
             leagueId,
             teamId: teamIds[t],
@@ -1016,7 +1014,6 @@ async function seedLeague(index: number, userId: string, pool: Pool): Promise<vo
       const outputTokens = 120 + Math.floor(rand() * 240);
       const costUsd = round8(0.001 + rand() * 0.005);
       stepRows.push({
-        legacyId: `${slug}:step:${r}:${s}`,
         runId,
         leagueId,
         stepIndex: s,
@@ -1043,7 +1040,6 @@ async function seedLeague(index: number, userId: string, pool: Pool): Promise<vo
         bytes: 512,
       });
       usageRows.push({
-        legacyId: `${slug}:usage:${r}:${s}`,
         runId,
         stepIndex: s,
         leagueId,
@@ -1064,7 +1060,6 @@ async function seedLeague(index: number, userId: string, pool: Pool): Promise<vo
       });
     }
     actionRows.push({
-      legacyId: `${slug}:action:${r}`,
       runId,
       leagueId,
       teamId: teamIds[spec.team],
@@ -1106,7 +1101,6 @@ async function seedLeague(index: number, userId: string, pool: Pool): Promise<vo
       overallNo += 1;
       pickRows.push(
         clean({
-          legacyId: `${slug}:pick:${overallNo}`,
           leagueId,
           round,
           pickNo: pickNo + 1,
@@ -1132,7 +1126,6 @@ async function seedLeague(index: number, userId: string, pool: Pool): Promise<vo
       const won = t < 2;
       claimRows.push(
         clean({
-          legacyId: `${slug}:claim:${w}:${t}`,
           leagueId,
           teamId: teamIds[t],
           windowId: windowAt(w, 4),
@@ -1148,7 +1141,6 @@ async function seedLeague(index: number, userId: string, pool: Pool): Promise<vo
       );
       transactionRows.push(
         clean({
-          legacyId: `${slug}:txn:${w}:${t}`,
           leagueId,
           teamId: teamIds[t],
           type: "add",
@@ -1171,7 +1163,6 @@ async function seedLeague(index: number, userId: string, pool: Pool): Promise<vo
       const b = (a + 1 + n) % TEAMS;
       threadSpecs.push({ weekNo: w, a, b: b === a ? (a + 1) % TEAMS : b });
       threadRows.push({
-        legacyId: `${slug}:thread:${w}:${n}`,
         leagueId,
         teamAId: teamIds[a],
         teamBId: teamIds[threadSpecs.at(-1)!.b],
@@ -1189,7 +1180,6 @@ async function seedLeague(index: number, userId: string, pool: Pool): Promise<vo
     const spec = threadSpecs[i];
     for (let m = 0; m < MESSAGES_PER_THREAD; m += 1) {
       messageRows.push({
-        legacyId: `${slug}:message:${i}:${m}`,
         threadId,
         leagueId,
         senderTeamId: teamIds[m % 2 === 0 ? spec.a : spec.b],
@@ -1210,7 +1200,6 @@ async function seedLeague(index: number, userId: string, pool: Pool): Promise<vo
       const settled = w < WEEKS;
       tradeRows.push(
         clean({
-          legacyId: `${slug}:trade:${w}:${n}`,
           leagueId,
           proposerTeamId: teamIds[spec.a],
           recipientTeamId: teamIds[spec.b],
@@ -1237,7 +1226,6 @@ async function seedLeague(index: number, userId: string, pool: Pool): Promise<vo
     "trade_events",
     tradeIds.flatMap((tradeId, i) => [
       {
-        legacyId: `${slug}:tradeevent:${i}:0`,
         tradeId,
         leagueId,
         type: "proposed",
@@ -1246,7 +1234,6 @@ async function seedLeague(index: number, userId: string, pool: Pool): Promise<vo
         payload: {},
       },
       {
-        legacyId: `${slug}:tradeevent:${i}:1`,
         tradeId,
         leagueId,
         type: "responded",
@@ -1266,7 +1253,6 @@ async function seedLeague(index: number, userId: string, pool: Pool): Promise<vo
       const team = (w * POSTS_PER_WEEK + n) % TEAMS;
       postSpecs.push({ weekNo: w, team });
       postRows.push({
-        legacyId: `${slug}:post:${w}:${n}`,
         leagueId,
         teamId: teamIds[team],
         title: `Week ${w} take #${n + 1}`,
@@ -1284,7 +1270,6 @@ async function seedLeague(index: number, userId: string, pool: Pool): Promise<vo
     "forum_comments",
     postIds.flatMap((postId, i) =>
       Array.from({ length: COMMENTS_PER_POST }, (_, c) => ({
-        legacyId: `${slug}:comment:${i}:${c}`,
         postId,
         leagueId,
         teamId: teamIds[(postSpecs[i].team + c + 1) % TEAMS],
@@ -1299,7 +1284,6 @@ async function seedLeague(index: number, userId: string, pool: Pool): Promise<vo
     "forum_votes",
     postIds.flatMap((postId, i) =>
       Array.from({ length: VOTES_PER_POST }, (_, vIndex) => ({
-        legacyId: `${slug}:vote:${i}:${vIndex}`,
         leagueId,
         targetType: "post",
         targetId: postId,

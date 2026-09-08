@@ -191,14 +191,44 @@ export const runBase = mutation({
 
 // ------------------------------------------------------------------ seed:reset
 
-/** Documents deleted per invocation; `reset` reschedules itself until the tables are empty. */
-const RESET_BATCH = 2_000;
-/** Documents deleted per `clearTable` call; the caller loops until `done`. */
-const DELETE_BATCH = 1_000;
+/**
+ * Deleting reads the row first, so a batch size is a **byte** budget, not a
+ * document budget (docs/verification/phase2.md §2.5: `DELETE_BATCH = 1000` on
+ * `snapshot_chunks`, whose documents are ~100 KB each, read ~100 MB against the
+ * 16 MiB limit and made the table unclearable).
+ *
+ * The tables below hold documents that are large by construction — snapshot
+ * sections, prompt sections, tool payloads, step text — so they are read 100 at
+ * a time, which caps one call at roughly 10 MB even at 100 KB a document.
+ * Everything else is small and rounded rows; 1 000 of those is well under a
+ * megabyte.
+ */
+const LARGE_DOCUMENT_TABLES = new Set<string>([
+  "snapshot_chunks",
+  "snapshot_digests",
+  "run_steps",
+  "run_step_payloads",
+  "run_search_docs",
+  "runs",
+]);
+const LARGE_BATCH = 100;
+const SMALL_BATCH = 1_000;
+
+/** Documents read (and deleted) in one call for `table`. */
+function deleteBatchFor(table: string): number {
+  return LARGE_DOCUMENT_TABLES.has(table) ? LARGE_BATCH : SMALL_BATCH;
+}
 
 /**
  * Wipe every app table. Dev only: it refuses unless `SEED_SECRET` is set on the
  * deployment, which is the marker for "this is a scratch deployment".
+ *
+ * One invocation walks the tables in order, skipping the empty ones (a `.take()`
+ * on an empty table reads nothing), and deletes **one batch of one table** — then
+ * reschedules itself. That is the whole read budget of a call: at most
+ * `deleteBatchFor(table)` documents, so at most ~10 MB even on `snapshot_chunks`.
+ * The tables therefore empty front to back, a batch per invocation, and no call
+ * can approach the 16 MiB read limit no matter how large the documents are.
  */
 export const reset = internalMutation({
   args: {},
@@ -208,20 +238,20 @@ export const reset = internalMutation({
       throw appError("FORBIDDEN", "seed:reset refuses to run without SEED_SECRET (dev only).");
     }
 
-    let deleted = 0;
     for (const table of APP_TABLES) {
-      if (deleted >= RESET_BATCH) break;
-      // Bounded: at most RESET_BATCH documents are read per table per invocation.
-      const rows = await ctx.db.query(table).take(RESET_BATCH - deleted);
-      for (const row of rows) {
-        await ctx.db.delete(table, row._id as Id<AppTable>);
-        deleted += 1;
-      }
+      const batch = deleteBatchFor(table);
+      // Bounded: at most `batch` documents are read, sized by how big this
+      // table's documents get so the bytes stay far below the read limit.
+      const rows = await ctx.db.query(table).take(batch);
+      if (rows.length === 0) continue;
+      for (const row of rows) await ctx.db.delete(table, row._id as Id<AppTable>);
+      // Something was deleted, so there may be more here or further down the
+      // list: come back rather than reading another table in this transaction.
+      await ctx.scheduler.runAfter(0, internal.seed.reset, {});
+      return { deleted: rows.length, done: false };
     }
 
-    const done = deleted < RESET_BATCH;
-    if (!done) await ctx.scheduler.runAfter(0, internal.seed.reset, {});
-    return { deleted, done };
+    return { deleted: 0, done: true };
   },
 });
 
@@ -238,7 +268,7 @@ export const reset = internalMutation({
  * allowlist, and the whole function is behind `SEED_SECRET`.
  *
  * Returns the new ids in input order so `scripts/seed-convex.ts` can build its
- * `legacyId -> Id<...>` map for the next table.
+ * golden-uuid -> `Id<...>` map for the next table.
  */
 export const importBatch = mutation({
   args: { secret: v.string(), table: v.string(), rows: v.array(v.any()) },
@@ -251,46 +281,6 @@ export const importBatch = mutation({
       ids.push(await insertRow(ctx, target, row as Record<string, unknown>));
     }
     return { ids };
-  },
-});
-
-/**
- * `legacyId -> _id` for one page of a table, so a re-run can skip rows it already
- * imported. No table has a `by_legacyId` index (legacyId is temporary and goes in
- * the cleanup phase), so the scan is paginated rather than collected: the caller
- * loops on `continueCursor` until `isDone`.
- *
- * `legacyIds`, when given, narrows the returned map — the scan is the same.
- */
-export const lookupLegacy = query({
-  args: {
-    secret: v.string(),
-    table: appTable,
-    legacyIds: v.optional(v.array(v.string())),
-    cursor: v.optional(v.union(v.string(), v.null())),
-    numItems: v.optional(v.number()),
-  },
-  returns: v.object({
-    map: v.record(v.string(), v.string()),
-    continueCursor: v.string(),
-    isDone: v.boolean(),
-  }),
-  handler: async (ctx: QueryCtx, args) => {
-    requireSeedSecret(args.secret);
-    const wanted = args.legacyIds ? new Set(args.legacyIds) : null;
-    const page = await ctx.db.query(args.table).paginate({
-      numItems: Math.min(args.numItems ?? 500, 1_000),
-      cursor: args.cursor ?? null,
-    });
-
-    const map: Record<string, string> = {};
-    for (const row of page.page) {
-      const legacyId = (row as { legacyId?: string }).legacyId;
-      if (!legacyId) continue;
-      if (wanted && !wanted.has(legacyId)) continue;
-      map[legacyId] = row._id;
-    }
-    return { map, continueCursor: page.continueCursor, isDone: page.isDone };
   },
 });
 
@@ -318,11 +308,12 @@ export const tableCount = query({
 });
 
 /**
- * Delete every document in one table, `DELETE_BATCH` at a time.
+ * Delete every document in one table, one byte-aware batch at a time
+ * (`deleteBatchFor`: 100 documents for the large tables, 1 000 for the rest).
  *
  * The derived tables (`snapshot_chunks`, the three rollups, `team_standings`,
- * `run_search_docs`, `player_projection_latest`) carry no `legacyId`, so the
- * importer cannot tell an already-imported row from a new one. It clears them
+ * `run_search_docs`, `player_projection_latest`) are not in the importer's id
+ * map, so it cannot tell an already-imported row from a new one. It clears them
  * before rewriting, which keeps `npm run seed:convex` idempotent end to end.
  *
  * Returns `done: false` while rows remain, so the caller loops.
@@ -333,10 +324,12 @@ export const clearTable = mutation({
   handler: async (ctx, { secret, table }) => {
     requireSeedSecret(secret);
     const target = assertTable(table);
-    // Bounded: at most DELETE_BATCH documents are read per call.
-    const rows = await ctx.db.query(target).take(DELETE_BATCH);
+    const batch = deleteBatchFor(target);
+    // Bounded: at most `batch` documents are read per call, sized by document
+    // size so the bytes stay far below the 16 MiB read limit.
+    const rows = await ctx.db.query(target).take(batch);
     for (const row of rows) await ctx.db.delete(target, row._id as Id<AppTable>);
-    return { deleted: rows.length, done: rows.length < DELETE_BATCH };
+    return { deleted: rows.length, done: rows.length < batch };
   },
 });
 
@@ -346,8 +339,8 @@ export const clearTable = mutation({
  * The golden dataset has two reference cycles that a single insert pass cannot
  * satisfy — `agent_configs.currentVersionId` <-> `config_versions.configId`, and
  * `windows.snapshotId` <-> `snapshots.windowId` — so the importer inserts the
- * first side without the pointer and fills it in here. It is also how the demo
- * user's `legacyId` gets stamped (`users` is not importable, only patchable).
+ * first side without the pointer and fills it in here. `users` is patchable but
+ * not importable, because the demo account is created through the password flow.
  *
  * `rows` is `{ id, patch }` pairs; `v.any()` for the same reason as `importBatch`.
  */

@@ -5,7 +5,7 @@
  * `leagues.joinByCode`, which lives in `convex/leagues.ts` because anyone signed
  * in may redeem a code.
  *
- * Two rules drive the write paths, ported from `lib/services/league/rules.ts`:
+ * Two rules drive the write paths:
  *
  *  1. **Immutability.** Once the draft begins (`league_rules.rulesLockedAt` is
  *     set, or the league has left `setup`), the rule set is frozen except for
@@ -82,7 +82,7 @@ function joinUrl(code: string): string {
 /**
  * The league's invite link.
  *
- * Deviation from `lib/services/league/rules.ts#inviteLink`: that function minted
+ * Deviation from the pre-Convex `inviteLink`: that function minted
  * a code on first read. A Convex query cannot write, so a league with no code
  * reports `null` and `commissioner.rotateJoinCode` (below) mints one.
  */
@@ -272,7 +272,7 @@ export const changeLog = query({
 
 /**
  * `RulesError` → a 400 whose message the settings form renders next to the
- * field, exactly as the `guard()` wrapper in `lib/trpc/routers/commissioner.ts`
+ * field, exactly as the pre-Convex `guard()` wrapper
  * did (`field: message`).
  */
 function rulesError(message: string, field?: string) {

@@ -1,7 +1,7 @@
 /**
  * Sleeper — the canonical ID space, the default projection source, and actual stats.
  *
- * Port of `lib/providers/sleeper.ts`. Endpoints and response shapes are verified
+ * The Sleeper provider. Endpoints and response shapes are verified
  * in docs/DATA_PROVIDERS.md. Two Convex-runtime differences:
  *
  *  - `effectiveAt` is epoch ms rather than a `Date` (it crosses an action →

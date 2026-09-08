@@ -8,13 +8,14 @@
  *
  *  (a) **Shape.** `assertSameKeys(expected, actual, path)` walks the expected
  *      skeleton — including the first element of every array — and requires the
- *      Convex value to have exactly the same key set at every level. The skeletons
- *      are pinned to the old return types at compile time: each one is written as
- *      `satisfies Shape<OldReturnType>`, with the old type imported **type-only**
- *      from `lib/services/*` or inferred from the tRPC routers with
- *      `inferRouterOutputs`, so a skeleton that drifts from the old type fails
- *      `npm run typecheck`. Epoch-ms numbers are accepted where the old shape had
- *      a `Date` (`docs/CONVEX_CONVENTIONS.md`: "Dates are epoch milliseconds").
+ *      Convex value to have exactly the same key set at every level. Each skeleton
+ *      is the literal key set the old tRPC procedure returned, transcribed here
+ *      when the shape was first checked. (Until the cleanup phase each one also
+ *      carried a `satisfies Shape<OldReturnType>` clause pinning it to the
+ *      Postgres-era service type at compile time; those types are deleted, so the
+ *      skeletons are now the record.) Epoch-ms numbers are accepted where the old
+ *      shape had a `Date` (`docs/CONVEX_CONVENTIONS.md`: "Dates are epoch
+ *      milliseconds").
  *
  *  (b) **Values.** A handful of checks per query read straight off the golden JSON
  *      (counts, names, a known lineup slot, a known trade status, a known post
@@ -44,43 +45,7 @@ import type { DataModel, Id, TableNames } from "./_generated/dataModel";
 import type { GenericMutationCtx } from "convex/server";
 import schema from "./schema";
 import { BUILTIN_SKILLS } from "./seed/skills";
-import type { League, LeagueMember, LeagueRules, Team } from "@/lib/db/types";
-import type { ModelCatalogEntry } from "@/lib/models";
 import { MODEL_CATALOG } from "@/lib/models";
-import type { ConfigDiff } from "@/lib/services/config/diff";
-import type { PromptEstimate } from "@/lib/services/config/estimate";
-import type {
-  ConfigVersionWithSkills,
-  EditLockStatus,
-  TeamConfigView,
-} from "@/lib/services/config/queries";
-import type {
-  BudgetStatus,
-  CostPerPoint,
-  CostPerWin,
-  ExpensiveRun,
-  ModelBenchmarkRow,
-  ModelSpendRow,
-  SpendTotals,
-  TeamSeasonSpend,
-  TeamSpendRow,
-  WeekSpendRow,
-} from "@/lib/services/cost";
-import type { ForumPostView, ForumView } from "@/lib/services/forum";
-import type { LeagueSummary } from "@/lib/services/league/queries";
-import type { InviteLink, LeagueRuleChange } from "@/lib/services/league/rules";
-import type { ThreadListItem, ThreadView } from "@/lib/services/messaging";
-import type { SkillDetail, SkillWithMeta } from "@/lib/services/skills";
-import type { TradeDetail } from "@/lib/services/trades";
-import type { TradeSummary } from "@/lib/services/trades/summaries";
-import type { DraftBoard } from "@/lib/services/views/draft";
-import type { LeagueHome, MatchupCard } from "@/lib/services/views/league-home";
-import type { MatchupPage } from "@/lib/services/views/matchup";
-import type { StandingsRow } from "@/lib/services/views/standings";
-import type { TeamCard, TeamPage } from "@/lib/services/views/team";
-import type { TraceDetail, TraceListResult } from "@/lib/services/views/traces";
-import type { WaiverWeekView } from "@/lib/services/views/waivers";
-import type { WindowSchedule, WindowView } from "@/lib/services/views/windows";
 
 const modules = import.meta.glob("./**/*.ts");
 
@@ -219,16 +184,16 @@ function mapOf(table: string): Map<string, string> {
   return m;
 }
 
-function ref(table: string, legacyId: unknown): string | undefined {
-  if (legacyId === null || legacyId === undefined) return undefined;
-  const found = mapOf(table).get(String(legacyId));
-  if (!found) throw new Error(`No imported ${table} row for legacy id ${String(legacyId)}`);
+function ref(table: string, goldenId: unknown): string | undefined {
+  if (goldenId === null || goldenId === undefined) return undefined;
+  const found = mapOf(table).get(String(goldenId));
+  if (!found) throw new Error(`No imported ${table} row for golden id ${String(goldenId)}`);
   return found;
 }
 
-function refOpt(table: string, legacyId: unknown): string | undefined {
-  if (legacyId === null || legacyId === undefined) return undefined;
-  return mapOf(table).get(String(legacyId));
+function refOpt(table: string, goldenId: unknown): string | undefined {
+  if (goldenId === null || goldenId === undefined) return undefined;
+  return mapOf(table).get(String(goldenId));
 }
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
@@ -389,7 +354,11 @@ function leagueOfTeam(legacyTeamId: string): string {
 // --------------------------------------------------------------- the importer
 
 /**
- * Insert one table's rows and record `legacyId -> _id`.
+ * Insert one table's rows and record `golden id -> _id`.
+ *
+ * Each row carries `__golden`, the golden uuid it came from — the local join key,
+ * never a column, so it is stripped before the insert (`scripts/seed-convex.ts`
+ * does the same, and persists its map to `.cache/seed-map.<deployment>.json`).
  *
  * `ctx.db.insert` is generic over 50 table names, so the row is cast at the
  * boundary exactly as `convex/seed.ts#insertRow` does; the real check is Convex's
@@ -398,9 +367,9 @@ function leagueOfTeam(legacyTeamId: string): string {
 async function insertRows(ctx: Ctx, table: TableNames, rows: Row[]): Promise<void> {
   const m = mapOf(table);
   for (const row of rows) {
-    const id = await ctx.db.insert(table, row as never);
-    const legacyId = row.legacyId;
-    if (typeof legacyId === "string") m.set(legacyId, id);
+    const { __golden: goldenId, ...doc } = row;
+    const id = await ctx.db.insert(table, doc as never);
+    if (typeof goldenId === "string") m.set(goldenId, id);
   }
 }
 
@@ -482,7 +451,6 @@ async function seedGolden(ctx: Ctx): Promise<{ demoUserId: string; sessionId: st
   const demoUserId = await ctx.db.insert("users", {
     email: String(goldenUser.email),
     name: String(goldenUser.name),
-    legacyId: legacyUserId,
   });
   mapOf("users").set(legacyUserId, demoUserId);
   const sessionId = await ctx.db.insert("authSessions", {
@@ -496,7 +464,7 @@ async function seedGolden(ctx: Ctx): Promise<{ demoUserId: string; sessionId: st
     "leagues",
     readGolden("leagues").map((row) =>
       clean({
-        legacyId: String(row.id),
+        __golden: String(row.id),
         name: String(row.name),
         slug: String(row.slug),
         commissionerUserId: ref("users", row.commissioner_user_id)!,
@@ -518,7 +486,7 @@ async function seedGolden(ctx: Ctx): Promise<{ demoUserId: string; sessionId: st
     "league_rules",
     readGolden("league_rules").map((row) =>
       clean({
-        legacyId: String(row.id),
+        __golden: String(row.id),
         leagueId: ref("leagues", row.league_id)!,
         scoringPreset: String(row.scoring_preset),
         superflex: row.superflex === true,
@@ -562,7 +530,7 @@ async function seedGolden(ctx: Ctx): Promise<{ demoUserId: string; sessionId: st
     "league_members",
     readGolden("league_members").map((row) =>
       clean({
-        legacyId: String(row.id),
+        __golden: String(row.id),
         leagueId: ref("leagues", row.league_id)!,
         userId: ref("users", row.user_id)!,
         role: String(row.role),
@@ -576,7 +544,7 @@ async function seedGolden(ctx: Ctx): Promise<{ demoUserId: string; sessionId: st
     "teams",
     readGolden("teams").map((row) =>
       clean({
-        legacyId: String(row.id),
+        __golden: String(row.id),
         leagueId: ref("leagues", row.league_id)!,
         ownerUserId: refOpt("users", row.owner_user_id),
         name: String(row.name),
@@ -595,7 +563,7 @@ async function seedGolden(ctx: Ctx): Promise<{ demoUserId: string; sessionId: st
     "weeks",
     readGolden("weeks").map((row) =>
       clean({
-        legacyId: String(row.id),
+        __golden: String(row.id),
         leagueId: ref("leagues", row.league_id)!,
         weekNo: numOr(row.week_no, 0),
         startsAt: msRequired(row.starts_at, 0),
@@ -611,7 +579,7 @@ async function seedGolden(ctx: Ctx): Promise<{ demoUserId: string; sessionId: st
     "matchups",
     readGolden("matchups").map((row) =>
       clean({
-        legacyId: String(row.id),
+        __golden: String(row.id),
         leagueId: ref("leagues", row.league_id)!,
         weekNo: numOr(row.week_no, 0),
         homeTeamId: ref("teams", row.home_team_id)!,
@@ -628,7 +596,7 @@ async function seedGolden(ctx: Ctx): Promise<{ demoUserId: string; sessionId: st
     "team_results",
     readGolden("team_results").map((row) =>
       clean({
-        legacyId: String(row.id),
+        __golden: String(row.id),
         leagueId: ref("leagues", row.league_id)!,
         teamId: ref("teams", row.team_id)!,
         weekNo: numOr(row.week_no, 0),
@@ -652,7 +620,7 @@ async function seedGolden(ctx: Ctx): Promise<{ demoUserId: string; sessionId: st
     players.map((row) => {
       const externalIds = externalIdsOf(row.raw);
       return clean({
-        legacyId: String(row.id),
+        __golden: String(row.id),
         sleeperId: String(row.sleeper_id),
         gsisId: str(row.gsis_id),
         espnId: externalIds.espn_id,
@@ -681,7 +649,7 @@ async function seedGolden(ctx: Ctx): Promise<{ demoUserId: string; sessionId: st
     "nfl_games",
     readGolden("nfl_games").map((row) =>
       clean({
-        legacyId: String(row.id),
+        __golden: String(row.id),
         season: numOr(row.season, 0),
         week: numOr(row.week, 0),
         gameId: String(row.game_id),
@@ -702,7 +670,7 @@ async function seedGolden(ctx: Ctx): Promise<{ demoUserId: string; sessionId: st
     "player_projections",
     projections.map((row) =>
       clean({
-        legacyId: String(row.id),
+        __golden: String(row.id),
         playerId: ref("players", row.player_id)!,
         season: numOr(row.season, 0),
         week: numOr(row.week, 0),
@@ -755,7 +723,6 @@ async function seedGolden(ctx: Ctx): Promise<{ demoUserId: string; sessionId: st
         "skills",
         existing,
         clean({
-          legacyId: String(row.id),
           authorUserId: refOpt("users", row.author_user_id),
           createdAt: ms(row.created_at),
         }) as never,
@@ -763,7 +730,7 @@ async function seedGolden(ctx: Ctx): Promise<{ demoUserId: string; sessionId: st
     } else {
       freshSkills.push(
         clean({
-          legacyId: String(row.id),
+          __golden: String(row.id),
           authorUserId: refOpt("users", row.author_user_id),
           name: String(row.name),
           slug,
@@ -792,7 +759,7 @@ async function seedGolden(ctx: Ctx): Promise<{ demoUserId: string; sessionId: st
     "agent_configs",
     configs.map((row) =>
       clean({
-        legacyId: String(row.id),
+        __golden: String(row.id),
         teamId: ref("teams", row.team_id)!,
         leagueId: ref("leagues", leagueOfTeam(String(row.team_id)))!,
         noteToAgent: str(row.note_to_agent),
@@ -817,7 +784,7 @@ async function seedGolden(ctx: Ctx): Promise<{ demoUserId: string; sessionId: st
       const legacyTeamId = teamByConfig.get(String(row.config_id));
       if (!legacyTeamId) throw new Error(`config_versions row ${String(row.id)} has no config`);
       return clean({
-        legacyId: String(row.id),
+        __golden: String(row.id),
         configId: ref("agent_configs", row.config_id)!,
         teamId: ref("teams", legacyTeamId)!,
         leagueId: ref("leagues", leagueOfTeam(legacyTeamId))!,
@@ -876,7 +843,7 @@ async function seedGolden(ctx: Ctx): Promise<{ demoUserId: string; sessionId: st
     "windows",
     goldenWindows.map((row) =>
       clean({
-        legacyId: String(row.id),
+        __golden: String(row.id),
         leagueId: ref("leagues", row.league_id)!,
         type: String(row.type),
         label: String(row.label),
@@ -902,7 +869,7 @@ async function seedGolden(ctx: Ctx): Promise<{ demoUserId: string; sessionId: st
       const snapPlayers = (payload.players ?? {}) as Record<string, unknown>;
       const playerCount = Object.keys(snapPlayers).length;
       return clean({
-        legacyId: String(row.id),
+        __golden: String(row.id),
         leagueId: ref("leagues", row.league_id)!,
         windowId: refOpt("windows", row.window_id),
         season: numOr(payload.season ?? row.season, 0),
@@ -992,7 +959,7 @@ async function seedGolden(ctx: Ctx): Promise<{ demoUserId: string; sessionId: st
       if (!window) throw new Error(`run ${String(row.id)} has no window`);
       const stepCount = numOr(row.step_count, 0);
       return clean({
-        legacyId: String(row.id),
+        __golden: String(row.id),
         windowId: ref("windows", row.window_id)!,
         leagueId: ref("leagues", row.league_id)!,
         teamId: refOpt("teams", row.team_id),
@@ -1046,7 +1013,7 @@ async function seedGolden(ctx: Ctx): Promise<{ demoUserId: string; sessionId: st
     });
 
     return clean({
-      legacyId: String(row.id),
+      __golden: String(row.id),
       runId,
       leagueId: ref("leagues", run.league_id)!,
       stepIndex,
@@ -1115,7 +1082,7 @@ async function seedGolden(ctx: Ctx): Promise<{ demoUserId: string; sessionId: st
 
     eventRows.push(
       clean({
-        legacyId: String(row.id),
+        __golden: String(row.id),
         runId: ref("runs", row.run_id)!,
         stepIndex: numOr(row.step_index, 0),
         leagueId: ref("leagues", row.league_id)!,
@@ -1212,7 +1179,7 @@ async function seedGolden(ctx: Ctx): Promise<{ demoUserId: string; sessionId: st
     "roster_slots",
     readGolden("roster_slots").map((row) =>
       clean({
-        legacyId: String(row.id),
+        __golden: String(row.id),
         leagueId: ref("leagues", leagueOfTeam(String(row.team_id)))!,
         teamId: ref("teams", row.team_id)!,
         playerId: ref("players", row.player_id)!,
@@ -1227,7 +1194,7 @@ async function seedGolden(ctx: Ctx): Promise<{ demoUserId: string; sessionId: st
     "lineups",
     readGolden("lineups").map((row) =>
       clean({
-        legacyId: String(row.id),
+        __golden: String(row.id),
         teamId: ref("teams", row.team_id)!,
         leagueId: ref("leagues", leagueOfTeam(String(row.team_id)))!,
         weekNo: numOr(row.week_no, 0),
@@ -1247,7 +1214,7 @@ async function seedGolden(ctx: Ctx): Promise<{ demoUserId: string; sessionId: st
     "draft_picks",
     readGolden("draft_picks").map((row) =>
       clean({
-        legacyId: String(row.id),
+        __golden: String(row.id),
         leagueId: ref("leagues", row.league_id)!,
         round: numOr(row.round, 0),
         pickNo: numOr(row.pick_no, 0),
@@ -1269,7 +1236,7 @@ async function seedGolden(ctx: Ctx): Promise<{ demoUserId: string; sessionId: st
     "waiver_claims",
     readGolden("waiver_claims").map((row) =>
       clean({
-        legacyId: String(row.id),
+        __golden: String(row.id),
         leagueId: ref("leagues", row.league_id)!,
         teamId: ref("teams", row.team_id)!,
         windowId: ref("windows", row.window_id)!,
@@ -1304,7 +1271,7 @@ async function seedGolden(ctx: Ctx): Promise<{ demoUserId: string; sessionId: st
     "threads",
     goldenThreads.map((row) =>
       clean({
-        legacyId: String(row.id),
+        __golden: String(row.id),
         leagueId: ref("leagues", row.league_id)!,
         teamAId: ref("teams", row.team_a_id)!,
         teamBId: ref("teams", row.team_b_id)!,
@@ -1323,7 +1290,7 @@ async function seedGolden(ctx: Ctx): Promise<{ demoUserId: string; sessionId: st
       const threadLeague = goldenThreads.find((t) => String(t.id) === String(row.thread_id))
         ?.league_id;
       return clean({
-        legacyId: String(row.id),
+        __golden: String(row.id),
         threadId: ref("threads", row.thread_id)!,
         leagueId: ref("leagues", threadLeague)!,
         senderTeamId: ref("teams", row.sender_team_id)!,
@@ -1350,7 +1317,7 @@ async function seedGolden(ctx: Ctx): Promise<{ demoUserId: string; sessionId: st
     "trades",
     goldenTrades.map((row) =>
       clean({
-        legacyId: String(row.id),
+        __golden: String(row.id),
         leagueId: ref("leagues", row.league_id)!,
         proposerTeamId: ref("teams", row.proposer_team_id)!,
         recipientTeamId: ref("teams", row.recipient_team_id)!,
@@ -1386,7 +1353,7 @@ async function seedGolden(ctx: Ctx): Promise<{ demoUserId: string; sessionId: st
     readGolden("trade_events").map((row) => {
       const trade = goldenTrades.find((t) => String(t.id) === String(row.trade_id));
       return clean({
-        legacyId: String(row.id),
+        __golden: String(row.id),
         tradeId: ref("trades", row.trade_id)!,
         leagueId: ref("leagues", trade?.league_id)!,
         type: String(row.type),
@@ -1405,7 +1372,7 @@ async function seedGolden(ctx: Ctx): Promise<{ demoUserId: string; sessionId: st
     "trade_votes",
     readGolden("trade_votes").map((row) =>
       clean({
-        legacyId: String(row.id),
+        __golden: String(row.id),
         tradeId: ref("trades", row.trade_id)!,
         userId: ref("users", row.user_id)!,
         vote: String(row.vote),
@@ -1418,7 +1385,7 @@ async function seedGolden(ctx: Ctx): Promise<{ demoUserId: string; sessionId: st
     "transactions",
     readGolden("transactions").map((row) =>
       clean({
-        legacyId: String(row.id),
+        __golden: String(row.id),
         leagueId: ref("leagues", row.league_id)!,
         teamId: ref("teams", row.team_id)!,
         type: String(row.type),
@@ -1437,7 +1404,7 @@ async function seedGolden(ctx: Ctx): Promise<{ demoUserId: string; sessionId: st
     "forum_posts",
     readGolden("forum_posts").map((row) =>
       clean({
-        legacyId: String(row.id),
+        __golden: String(row.id),
         leagueId: ref("leagues", row.league_id)!,
         teamId: refOpt("teams", row.team_id),
         runId: refOpt("runs", row.run_id),
@@ -1459,7 +1426,7 @@ async function seedGolden(ctx: Ctx): Promise<{ demoUserId: string; sessionId: st
     "forum_comments",
     readGolden("forum_comments").map((row) =>
       clean({
-        legacyId: String(row.id),
+        __golden: String(row.id),
         postId: ref("forum_posts", row.post_id)!,
         leagueId: ref("leagues", row.league_id)!,
         parentId: refOpt("forum_comments", row.parent_id),
@@ -1480,7 +1447,7 @@ async function seedGolden(ctx: Ctx): Promise<{ demoUserId: string; sessionId: st
     "forum_votes",
     readGolden("forum_votes").map((row) =>
       clean({
-        legacyId: String(row.id),
+        __golden: String(row.id),
         leagueId: ref("leagues", row.league_id)!,
         targetType: String(row.target_type),
         targetId: String(row.target_id),
@@ -1496,7 +1463,7 @@ async function seedGolden(ctx: Ctx): Promise<{ demoUserId: string; sessionId: st
     "league_rule_changes",
     readGolden("league_rule_changes").map((row) =>
       clean({
-        legacyId: String(row.id),
+        __golden: String(row.id),
         leagueId: ref("leagues", row.league_id)!,
         userId: refOpt("users", row.user_id),
         field: String(row.field),
@@ -1517,7 +1484,7 @@ async function seedGolden(ctx: Ctx): Promise<{ demoUserId: string; sessionId: st
       if (!run) throw new Error(`run_action ${String(row.id)} has no run`);
       const validation = (row.validation_result ?? {}) as Row;
       return clean({
-        legacyId: String(row.id),
+        __golden: String(row.id),
         runId: ref("runs", row.run_id)!,
         leagueId: ref("leagues", run.league_id)!,
         teamId: refOpt("teams", run.team_id),
@@ -1629,27 +1596,15 @@ beforeAll(async () => {
 // ------------------------------------------------------ shape assertion tools
 
 /**
- * A skeleton of an old return type.
+ * A skeleton of the shape a read must return.
  *
  * `0` means "a scalar; do not descend" and `"date"` means "the old shape had a
- * `Date` here, so the Convex value must be epoch ms (or null)". `Shape<T>` ties a
- * skeleton to the old TypeScript type: every key of `T` must appear, no extra key
- * may, and arrays are written as a one-element tuple describing their elements.
- * `0` is accepted at every level as an explicit "not checked further" escape.
+ * `Date` here, so the Convex value must be epoch ms (or null)". Arrays are
+ * written as a one-element tuple describing their elements; `0` is accepted at
+ * every level as an explicit "not checked further" escape.
  */
 const LEAF = 0;
 const DATE = "date";
-type Leaf = typeof LEAF;
-type DateLeaf = typeof DATE;
-
-type Shape<T> = Leaf | ShapeInner<NonNullable<T>>;
-type ShapeInner<T> = T extends Date
-  ? DateLeaf
-  : T extends readonly (infer E)[]
-    ? readonly [Shape<E>]
-    : T extends object
-      ? { [K in keyof Required<T>]: Shape<Required<T>[K]> }
-      : Leaf;
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -1760,16 +1715,15 @@ function phase2Deviation(...entries: string[]): string[] {
 
 /**
  * Convex's document envelope, mapped onto the old row shape: `_id` is the old
- * `id`, `_creationTime` is bookkeeping the old rows never had, and `legacyId` is
- * the migration join key (`docs/CONVEX_CONVENTIONS.md`) that goes away in the
- * cleanup phase. Everything else is compared as-is.
+ * `id` and `_creationTime` is bookkeeping the old rows never had. Everything else
+ * is compared as-is.
  */
 function normalize(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(normalize);
   if (!isPlainObject(value)) return value;
   const out: Record<string, unknown> = {};
   for (const [key, child] of Object.entries(value)) {
-    if (key === "_creationTime" || key === "legacyId") continue;
+    if (key === "_creationTime") continue;
     out[key === "_id" ? "id" : key] = normalize(child);
   }
   return out;
@@ -1796,88 +1750,6 @@ const PAGE = { numItems: 25, cursor: null };
 
 // =============================================================== league (§2.1)
 
-// ------------------------------------------------------------- old-type paths
-
-/**
- * The return type of every old tRPC procedure this file checks, keyed by
- * `router.procedure`.
- *
- * `lib/trpc/**` is deleted by package H as part of Phase 3, so `inferRouterOutputs`
- * is no longer available; the shapes are instead composed from the service types
- * the routers returned (`docs/migration-plan.md` §2.1 names the procedure → service
- * mapping). Every member is a **type-only** import — nothing here reaches Drizzle at
- * runtime. Procedures whose router built an object literal inline (`league.get`,
- * `config.get`/`versions`/`version`, `cost.*`, `commissioner.settings`, `forum.get`,
- * `forum.karma`) are spelled out here, from the router source at commit 98eef3a.
- */
-type Old = {
-  league: {
-    get: { league: League; teams: Team[]; membership: LeagueMember | null };
-    listMine: LeagueSummary[];
-  };
-  config: {
-    get: TeamConfigView & { lock: EditLockStatus; canEdit: boolean; viewerUserId: string | null };
-    versions: Pick<TeamConfigView, "config" | "team" | "versions">;
-    version: { version: ConfigVersionWithSkills; previous: ConfigVersionWithSkills | null };
-    diff: ConfigDiff;
-    lockStatus: EditLockStatus;
-    estimate: PromptEstimate;
-  };
-  skills: { list: SkillWithMeta[]; get: SkillDetail };
-  cost: {
-    team: {
-      week: SpendTotals & { teamId: string; weekNo: number };
-      season: TeamSeasonSpend;
-      costPerPoint: CostPerPoint;
-      costPerWin: CostPerWin;
-      budget: BudgetStatus;
-    };
-    league: {
-      totals: SpendTotals;
-      byTeam: TeamSpendRow[];
-      byModel: ModelSpendRow[];
-      expensive: ExpensiveRun[];
-      trend: WeekSpendRow[];
-    };
-    benchmark: ModelBenchmarkRow[];
-  };
-  views: {
-    home: LeagueHome | null;
-    standings: StandingsRow[];
-    teams: TeamCard[];
-    team: TeamPage | null;
-    matchups: MatchupCard[];
-    matchup: MatchupPage | null;
-    draftBoard: DraftBoard | null;
-    waivers: WaiverWeekView;
-    windowsForWeek: WindowView[];
-    windowSchedule: WindowSchedule;
-  };
-  traces: {
-    list: TraceListResult;
-    get: TraceDetail;
-    modelOptions: Array<{ modelId: string; label: string; runCount: number }>;
-  };
-  commissioner: {
-    settings: {
-      league: League;
-      rules: LeagueRules;
-      invite: InviteLink;
-      changes: Array<LeagueRuleChange & { userName: string | null }>;
-      modelsInUse: Array<{ modelId: string; teamCount: number }>;
-      catalog: readonly ModelCatalogEntry[];
-      locked: boolean;
-    };
-  };
-  trades: { list: TradeSummary[]; get: TradeDetail };
-  messaging: { listThreads: ThreadListItem[]; getThread: ThreadView };
-  forum: {
-    list: ForumView;
-    get: { post: ForumPostView; karma: ForumView["karma"] };
-    karma: Array<{ id: string; name: string; karma: number }>;
-  };
-};
-
 const LEAGUE_ROW = {
   id: LEAF,
   name: LEAF,
@@ -1892,7 +1764,7 @@ const LEAGUE_ROW = {
   joinCode: LEAF,
   createdAt: DATE,
   updatedAt: DATE,
-} as const satisfies Shape<Old["league"]["get"]["league"]>;
+} as const;
 
 const TEAM_ROW = {
   id: LEAF,
@@ -1905,7 +1777,7 @@ const TEAM_ROW = {
   waiverPriority: LEAF,
   karma: LEAF,
   createdAt: DATE,
-} as const satisfies Shape<Old["league"]["get"]["teams"][number]>;
+} as const;
 
 const MEMBER_ROW = {
   id: LEAF,
@@ -1913,13 +1785,13 @@ const MEMBER_ROW = {
   userId: LEAF,
   role: LEAF,
   createdAt: DATE,
-} as const satisfies Shape<NonNullable<Old["league"]["get"]["membership"]>>;
+} as const;
 
 const LEAGUE_GET = {
   league: LEAGUE_ROW,
   teams: [TEAM_ROW],
   membership: MEMBER_ROW,
-} as const satisfies Shape<Old["league"]["get"]>;
+} as const;
 
 describe("leagues.get (was league.get)", () => {
   test("shape and values, as the demo commissioner", async () => {
@@ -1972,7 +1844,7 @@ const LEAGUE_SUMMARY = {
   ...LEAGUE_ROW,
   role: LEAF,
   teamCountActual: LEAF,
-} as const satisfies Shape<Old["league"]["listMine"][number]>;
+} as const;
 
 describe("leagues.listMine (was league.listMine)", () => {
   test("shape and values", async () => {
@@ -2015,7 +1887,7 @@ const SKILL_ROW = {
   forkedFromSkillId: LEAF,
   createdAt: DATE,
   updatedAt: DATE,
-} as const satisfies Shape<ConfigVersionWithSkills["skills"][number]>;
+} as const;
 
 const VERSION_WITH_SKILLS = {
   id: LEAF,
@@ -2029,7 +1901,7 @@ const VERSION_WITH_SKILLS = {
   appliedAt: DATE,
   changeSummary: LEAF,
   skills: [SKILL_ROW],
-} as const satisfies Shape<NonNullable<Old["config"]["get"]["current"]>>;
+} as const;
 
 const VERSION_SUMMARY = {
   id: LEAF,
@@ -2048,13 +1920,13 @@ const VERSION_SUMMARY = {
   isPending: LEAF,
   changedThisWeek: LEAF,
   modelDisplayName: LEAF,
-} as const satisfies Shape<Old["config"]["versions"]["versions"][number]>;
+} as const;
 
 const LOCK_STATUS = {
   open: LEAF,
   nextChange: DATE,
   lock: { unlockDay: LEAF, unlockTime: LEAF, lockDay: LEAF, lockTime: LEAF },
-} as const satisfies Shape<Old["config"]["lockStatus"]>;
+} as const;
 
 const CONFIG_GET = {
   team: TEAM_ROW,
@@ -2075,7 +1947,7 @@ const CONFIG_GET = {
   lock: LOCK_STATUS,
   canEdit: LEAF,
   viewerUserId: LEAF,
-} as const satisfies Shape<Old["config"]["get"]>;
+} as const;
 
 describe("configs.* (was config.*)", () => {
   test("configs.get", async () => {
@@ -2203,7 +2075,7 @@ describe("configs.* (was config.*)", () => {
         changed: LEAF,
       },
       changed: LEAF,
-    } as const satisfies Shape<Old["config"]["diff"]>;
+    } as const;
     assertSameKeys(expected, normalize(actual), "config.diff");
 
     // Old: the harness diff is always the same five fields in this order.
@@ -2253,7 +2125,7 @@ describe("configs.* (was config.*)", () => {
         modelId: LEAF,
         modelKnown: LEAF,
       },
-    } as const satisfies Shape<Old["config"]["estimate"]>;
+    } as const;
     assertSameKeys(expected, normalize(actual), "config.estimate");
 
     // Old constants: BASE_PROMPT_TOKENS 2500, CHARS_PER_TOKEN 4, ASSUMED_STEPS 4.
@@ -2274,7 +2146,7 @@ const SKILL_WITH_META = {
   ...SKILL_ROW,
   authorName: LEAF,
   usageCount: LEAF,
-} as const satisfies Shape<Old["skills"]["list"][number]>;
+} as const;
 
 describe("skills.* (was skills.*)", () => {
   test("skills.list", async () => {
@@ -2305,7 +2177,7 @@ describe("skills.* (was skills.*)", () => {
       ...SKILL_WITH_META,
       forkedFrom: { id: LEAF, name: LEAF, slug: LEAF },
       forks: [{ id: LEAF, name: LEAF, slug: LEAF }],
-    } as const satisfies Shape<Old["skills"]["get"]>;
+    } as const;
     assertSameKeysExcept(
       expected,
       normalize(actual),
@@ -2370,7 +2242,7 @@ describe("ledger.* (was cost.*)", () => {
         overUsdCap: LEAF,
         rollup: { tokensUsed: LEAF, usdUsed: LEAF, runCount: LEAF },
       },
-    } as const satisfies Shape<Old["cost"]["team"]>;
+    } as const;
     assertSameKeys(expected, normalize(actual), "cost.team");
 
     // Golden: every run is `mock/scripted` at $0, and no game was scored.
@@ -2415,7 +2287,7 @@ describe("ledger.* (was cost.*)", () => {
         },
       ],
       trend: [{ ...SPEND_TOTALS, weekNo: LEAF }],
-    } as const satisfies Shape<Old["cost"]["league"]>;
+    } as const;
     assertSameKeys(expected, normalize(actual), "cost.league");
 
     expect(actual.byTeam).toHaveLength(12);
@@ -2442,7 +2314,7 @@ describe("ledger.* (was cost.*)", () => {
         costPerPoint: LEAF,
         costPerWin: LEAF,
       },
-    ] as const satisfies Shape<Old["cost"]["benchmark"]>;
+    ] as const;
     assertSameKeys(expected, normalize(actual), "cost.benchmark");
 
     expect(actual).toHaveLength(1);
@@ -2469,7 +2341,7 @@ const WINDOW_VIEW = {
   runCount: LEAF,
   countdown: LEAF,
   phase: LEAF,
-} as const satisfies Shape<Old["views"]["windowsForWeek"][number]>;
+} as const;
 
 const STANDINGS_ROW = {
   rank: LEAF,
@@ -2487,7 +2359,7 @@ const STANDINGS_ROW = {
   faabRemaining: LEAF,
   modelId: LEAF,
   configVersionNo: LEAF,
-} as const satisfies Shape<Old["views"]["standings"][number]>;
+} as const;
 
 const MATCHUP_SIDE = {
   teamId: LEAF,
@@ -2504,7 +2376,7 @@ const MATCHUP_CARD = {
   isFinal: LEAF,
   home: MATCHUP_SIDE,
   away: MATCHUP_SIDE,
-} as const satisfies Shape<Old["views"]["matchups"][number]>;
+} as const;
 
 const TRACE_LIST_ITEM = {
   id: LEAF,
@@ -2532,7 +2404,7 @@ const TRACE_LIST_ITEM = {
   configVersionNo: LEAF,
   fallbackKind: LEAF,
   createdAt: DATE,
-} as const satisfies Shape<Old["traces"]["list"]["items"][number]>;
+} as const;
 
 describe("views.* (was views.*)", () => {
   test("views.home", async () => {
@@ -2599,7 +2471,7 @@ describe("views.* (was views.*)", () => {
         totalPicks: LEAF,
       },
       snapshotTakenAt: DATE,
-    } as const satisfies Shape<Old["views"]["home"]>;
+    } as const;
     assertSameKeysExcept(expected, normalize(actual), "views.home", [
       // `windows.terminalRunCount` is a denormalized counter the write paths keep
       // (`docs/CONVEX_CONVENTIONS.md`, "Counters every write path must maintain");
@@ -2653,7 +2525,7 @@ describe("views.* (was views.*)", () => {
         modelLabel: LEAF,
         configVersionNo: LEAF,
       },
-    ] as const satisfies Shape<Old["views"]["teams"]>;
+    ] as const;
     assertSameKeys(expected, normalize(actual), "views.teams");
 
     expect(actual).toHaveLength(12);
@@ -2732,7 +2604,7 @@ describe("views.* (was views.*)", () => {
       recentRuns: [TRACE_LIST_ITEM],
       cost: { seasonUsd: LEAF, weekUsd: LEAF, seasonTokens: LEAF, runCount: LEAF },
       snapshotTakenAt: DATE,
-    } as const satisfies Shape<Old["views"]["team"]>;
+    } as const;
     assertSameKeys(expected, normalize(actual), "views.team");
 
     expect(actual?.team.name).toBe("Regression to the Mean");
@@ -2803,7 +2675,7 @@ describe("views.* (was views.*)", () => {
       isFinal: LEAF,
       home: side,
       away: side,
-    } as const satisfies Shape<Old["views"]["matchup"]>;
+    } as const;
     assertSameKeys(expected, normalize(actual), "views.matchup");
 
     expect(actual?.weekNo).toBe(1);
@@ -2852,7 +2724,7 @@ describe("views.* (was views.*)", () => {
       picksMade: LEAF,
       totalPicks: LEAF,
       runningCostUsd: LEAF,
-    } as const satisfies Shape<Old["views"]["draftBoard"]>;
+    } as const;
     assertSameKeys(expected, normalize(actual), "views.draftBoard");
 
     expect(actual?.picks).toHaveLength(180);
@@ -2895,7 +2767,7 @@ describe("views.* (was views.*)", () => {
         { teamId: LEAF, teamName: LEAF, abbreviation: LEAF, remaining: LEAF, spent: LEAF },
       ],
       window: { id: LEAF, opensAt: DATE, closesAt: DATE, status: LEAF },
-    } as const satisfies Shape<Old["views"]["waivers"]>;
+    } as const;
     assertSameKeys(expected, normalize(actual), "views.waivers");
 
     expect(actual.results).toHaveLength(24);
@@ -2929,7 +2801,7 @@ describe("views.* (was views.*)", () => {
       open: [WINDOW_VIEW],
       upcoming: [WINDOW_VIEW],
       next: WINDOW_VIEW,
-    } as const satisfies Shape<Old["views"]["windowSchedule"]>;
+    } as const;
     assertSameKeysExcept(expected, normalize(actual), "views.windowSchedule", [
       ...additiveColumn(
         "views.windowSchedule.open[0].terminalRunCount",
@@ -3083,7 +2955,7 @@ describe("runs.* (was traces.*)", () => {
           gatewayCostUsd: LEAF,
         },
       ],
-    } as const satisfies Shape<Old["traces"]["get"]>;
+    } as const;
     assertSameKeysExcept(expected, normalize(actual), "traces.get", [
       // DEVIATION (Phase 2, documented): `traces.get` inlined every step, action and
       // usage event into one payload. `runs.get` returns the run header only —
@@ -3121,7 +2993,7 @@ describe("runs.* (was traces.*)", () => {
         costUsd: LEAF,
         createdAt: DATE,
         hasValidationError: LEAF,
-      } as const satisfies Shape<Old["traces"]["get"]["steps"][number]>,
+      } as const,
       normalize(steps.page[0]),
       "traces.get.steps[0]",
       // `run_steps.gatewayCostUsd` is carried on the step in Convex; the old trace
@@ -3136,9 +3008,7 @@ describe("runs.* (was traces.*)", () => {
   test("runs.modelOptions", async () => {
     const actual = await asDemo().query(api.runs.modelOptions, { leagueId: fx.leagueId });
     assertSameKeys(
-      [{ modelId: LEAF, label: LEAF, runCount: LEAF }] as const satisfies Shape<
-        Old["traces"]["modelOptions"]
-      >,
+      [{ modelId: LEAF, label: LEAF, runCount: LEAF }] as const,
       normalize(actual),
       "traces.modelOptions",
     );
@@ -3202,7 +3072,7 @@ describe("commissioner.* (was commissioner.*)", () => {
       note: LEAF,
       createdAt: DATE,
       userName: LEAF,
-    } as const satisfies Shape<Old["commissioner"]["settings"]["changes"][number]>;
+    } as const;
     const expected = {
       league: LEAGUE_ROW,
       rules: LEAF,
@@ -3222,7 +3092,7 @@ describe("commissioner.* (was commissioner.*)", () => {
         },
       ],
       locked: LEAF,
-    } as const satisfies Shape<Old["commissioner"]["settings"]>;
+    } as const;
     assertSameKeysExcept(expected, normalize(actual), "commissioner.settings", [
       ...optionalUnset("commissioner.settings.league.joinCode"),
       // The settings page renders team cards from the same read.
@@ -3300,7 +3170,7 @@ const TRADE_SUMMARY = {
   resolvedAt: LEAF,
   fairnessDetail: LEAF,
   createdByRunId: LEAF,
-} as const satisfies Shape<Old["trades"]["list"][number]>;
+} as const;
 
 describe("trades.* (was trades.*)", () => {
   test("trades.list", async () => {
@@ -3358,7 +3228,7 @@ describe("trades.* (was trades.*)", () => {
         blocked: LEAF,
       },
       counterTradeIds: [LEAF],
-    } as const satisfies Shape<Old["trades"]["get"]>;
+    } as const;
     assertSameKeysExcept(expected, normalize(actual), "trades.get", [
       // The viewer's own veto/approve vote, so the negotiation feed can render its
       // button state without a second round trip.
@@ -3407,7 +3277,7 @@ const THREAD_LIST_ITEM = {
   lastMessage: THREAD_MESSAGE,
   delayed: LEAF,
   revealAt: LEAF,
-} as const satisfies Shape<Old["messaging"]["listThreads"][number]>;
+} as const;
 
 describe("messaging.* (was messaging.*)", () => {
   test("messaging.listThreads", async () => {
@@ -3477,7 +3347,7 @@ const FORUM_POST = {
   stepIndex: LEAF,
   hotScore: LEAF,
   myVote: LEAF,
-} as const satisfies Shape<Old["forum"]["list"]["posts"][number]>;
+} as const;
 
 describe("forum.* (was forum.*)", () => {
   test("forum.list", async () => {
@@ -3558,7 +3428,7 @@ describe("forum.* (was forum.*)", () => {
       },
       // `Record<teamId, karma>`; not descended into.
       karma: LEAF,
-    } as const satisfies Shape<Old["forum"]["get"]>;
+    } as const;
     assertSameKeys(expected, normalize(actual), "forum.get");
 
     expect(actual.post.id).toBe(postId);
@@ -3570,7 +3440,7 @@ describe("forum.* (was forum.*)", () => {
   test("forum.karma", async () => {
     const actual = await asDemo().query(api.forum.karma, { leagueId: fx.leagueId });
     assertSameKeysExcept(
-      [{ id: LEAF, name: LEAF, karma: LEAF }] as const satisfies Shape<Old["forum"]["karma"]>,
+      [{ id: LEAF, name: LEAF, karma: LEAF }] as const,
       normalize(actual),
       "forum.karma",
       [

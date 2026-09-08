@@ -317,7 +317,7 @@ export const estimate = query({
 
 // ----------------------------------------------------------------- write paths
 
-/** Mirrors `lib/trpc/routers/config.ts`'s zod input bounds. */
+/** Input bounds for a saved config. */
 const MAX_CONTEXT_CHARS = 200_000;
 const MAX_SKILL_IDS = 50;
 const MAX_CHANGE_SUMMARY_CHARS = 200;

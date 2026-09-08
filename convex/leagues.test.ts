@@ -1,5 +1,5 @@
 /**
- * League read/write parity + the authorization ladder (`lib/trpc/init.ts`).
+ * League read/write parity + the authorization ladder (`convex/lib/auth.ts`).
  *
  * The ladder under test: a public league is readable signed out (spectators),
  * a private league is UNAUTHORIZED signed out and FORBIDDEN for a signed-in

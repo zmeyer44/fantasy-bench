@@ -1,5 +1,5 @@
 /**
- * Trace read models (PRD §5.8) — the port of `lib/services/views/traces.ts`.
+ * Trace read models (PRD §5.8).
  *
  * Three things changed shape:
  *
@@ -19,7 +19,6 @@ import { type WorkId } from "@convex-dev/workpool";
 import { paginationOptsValidator } from "convex/server";
 import { v } from "convex/values";
 
-import type { TraceListItem as LegacyListItem } from "../lib/services/views/traces";
 import { internal } from "./_generated/api";
 import type { DataModel, Doc, Id } from "./_generated/dataModel";
 import {
@@ -47,17 +46,32 @@ const MAX_STEPS_PER_RUN = 64;
 const MAX_ACTIONS_PER_RUN = 200;
 const MAX_PAYLOADS_PER_RUN = 300;
 
-/** `TraceListItem` with Convex ids and epoch-ms dates. */
-export type RunListItem = Omit<
-  LegacyListItem,
-  "id" | "leagueId" | "teamId" | "windowId" | "startedAt" | "finishedAt" | "createdAt"
-> & {
+/** One row of the trace list (dates are epoch ms). */
+export type RunListItem = {
   id: Id<"runs">;
   leagueId: Id<"leagues">;
   teamId: Id<"teams"> | null;
+  teamName: string | null;
+  teamAbbreviation: string | null;
   windowId: Id<"windows">;
+  windowLabel: string;
+  windowLabelText: string;
+  windowType: Doc<"windows">["type"];
+  weekNo: number | null;
+  roundNo: number;
+  modelId: string;
+  modelLabel: string;
+  status: Doc<"runs">["status"];
+  outcome: string | null;
+  rationale: string | null;
+  costUsd: number;
+  stepCount: number;
+  actionCount: number;
   startedAt: number | null;
   finishedAt: number | null;
+  durationMs: number | null;
+  configVersionNo: number | null;
+  fallbackKind: string | null;
   createdAt: number;
 };
 
@@ -1520,3 +1534,4 @@ export const cancelForWindow = internalMutation({
     return { cancelled };
   },
 });
+

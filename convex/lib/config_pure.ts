@@ -1,8 +1,8 @@
 /**
- * Pure config logic, copied out of `lib/services/config/{harness,queries,diff,estimate,save}.ts`.
+ * Pure config logic: harness parsing, diffing, prompt estimation and the note block.
  *
- * Those modules import Drizzle, so nothing under `lib/services/config` may be
- * imported at runtime from Convex. The `diff` npm package and `lib/models.ts` /
+ * No Convex context and no database: `convex/configs.ts` does the reads and
+ * hands the results in. The `diff` npm package and `lib/models.ts` /
  * `lib/time.ts` are pure and are imported directly.
  *
  * Dates here are epoch milliseconds (`EditLockStatus.nextChange`), not `Date`.
@@ -375,7 +375,7 @@ export const ASSUMED_STEPS = 4;
 /** Roughly one token per four characters of English prose / markdown. */
 export const CHARS_PER_TOKEN = 4;
 
-/** Copied from `lib/agent/prompt.ts` — crude, but crude *consistently*. */
+/** The same estimator the prompt builder uses — crude, but crude *consistently*. */
 export function estimateTokens(text: string): number {
   return Math.ceil(text.length / CHARS_PER_TOKEN);
 }
@@ -558,7 +558,7 @@ export function validateAgainstRules(ctx: ValidationContext): ConfigIssue[] {
 /**
  * Fill defaults then coerce, but do NOT clamp — out-of-range values must surface
  * as validation issues from `validateAgainstRules` rather than being silently
- * fixed. Port of `parseHarnessStrictly` in `lib/services/config/save.ts`.
+ * fixed.
  */
 export function parseHarnessStrictly(partial: Partial<HarnessSettings>): HarnessSettings {
   const base = parseHarness({});
@@ -573,7 +573,7 @@ export function parseHarnessStrictly(partial: Partial<HarnessSettings>): Harness
 
 /**
  * The heading the owner's note-to-agent is folded into on save (PRD 5.5).
- * Byte-identical to `noteBlock` in `lib/services/config/save.ts`.
+ * The note block appended to a config version's system prompt.
  */
 export function noteBlock(note: string, nowMs: number): string {
   return `## Note from my owner (${formatET(new Date(nowMs), "MMM d, yyyy")})\n\n${note}`;

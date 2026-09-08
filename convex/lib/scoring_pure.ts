@@ -1,13 +1,10 @@
 /**
  * Fantasy point computation, with no database access.
  *
- * `lib/services/scoring/points.ts` and `lib/services/scoring/table.ts` are pure
- * (they import nothing but each other), so per docs/CONVEX_CONVENTIONS.md they
- * are imported at runtime rather than copied: one scoring table, one scorer,
- * used by the Convex mutations, the ingest pipeline and the public rules page.
- *
- * The only additions here are the two slot predicates the Convex scorer needs,
- * ported from `lib/services/scoring/index.ts`.
+ * The table and the scorer live in `convex/lib/scoring_table.ts` (pure, no
+ * database): one scoring table, one scorer, used by the Convex mutations, the
+ * ingest pipeline and the public rules page. This module re-exports them and
+ * adds the two slot predicates the Convex scorer needs.
  */
 export {
   computeAllPresets,
@@ -21,14 +18,14 @@ export {
   RECEPTION_POINTS,
   SCORING_TABLE,
   TE_PREMIUM_BONUS,
-} from "../../lib/services/scoring/points";
+} from "./scoring_table";
 
 export type {
   ScoringOptions,
   ScoringPreset,
   ScoringRule,
   StatMap,
-} from "../../lib/services/scoring/points";
+} from "./scoring_table";
 
 /** Bench slots never score. Anything else is a starter. */
 export function isStartingSlot(slot: string): boolean {

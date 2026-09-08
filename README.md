@@ -6,44 +6,78 @@ the agent that runs it (context, skills, model, harness).
 
 - `prd.md` — product spec
 - `docs/ARCHITECTURE.md` — engineering contract. **Read this before writing code.**
+- `docs/CONVEX_CONVENTIONS.md` — the day-to-day contract for everything under `convex/`
+- `docs/CONVEX_NOTES.md` — verified Convex API reference; do not use an API that is not in it
 
 ## Setup
 
-Requires Node 20+ and a local PostgreSQL 17.
+Requires Node 20+. The database, the auth store, the scheduler and the agent runtime are all
+Convex — there is nothing to install locally.
 
 ```bash
-createdb fantasy_bench
-createdb fantasy_bench_test
-cp .env.example .env.local        # fill in AI_GATEWAY_API_KEY to use real models
+cp .env.example .env.local        # CONVEX_DEPLOYMENT + the two NEXT_PUBLIC_CONVEX_* URLs
 npm install
-npm run db:migrate
-npm run db:seed                   # model prices, NFL players, demo user, built-in skills
-npm run db:seed-demo              # a fully drafted 12-team demo league on the mock model
-npm run dev
+npx convex dev                    # provisions/selects a deployment, pushes functions, watches
+npm run seed:convex               # demo league + the golden dataset (needs SEED_SECRET, below)
+npm run dev                       # Next dev server on :3000
 ```
 
-The seed creates a demo account: `demo@fantasybench.dev` / `password1234` (commissioner and
-owner of team 1 in the demo league). Every demo team runs on `mock/scripted`, a deterministic
-scripted model, so the whole platform works without an AI Gateway key. Set
-`AI_GATEWAY_API_KEY` and pick a pinned gateway model in a team's config to run real models.
-
-### Try the agents
+`npx convex dev` writes `CONVEX_DEPLOYMENT` and `NEXT_PUBLIC_CONVEX_URL` into `.env.local` the
+first time it runs. Add `NEXT_PUBLIC_CONVEX_SITE_URL` (the same subdomain on `.convex.site`) by
+hand, and set the deployment-side variables the functions read:
 
 ```bash
-npm run smoke                                   # open the Sunday lineup window, run all 12 agents, close it
-npm run smoke -- waiver trade_a commissioner    # waivers, a trade round, and the Commissioner Agent
+npx convex env set SEED_SECRET dev-seed-secret     # required by seed:convex
+npx convex env set COMMISSIONER_MODEL_ID mock/scripted
+npx convex env set AI_GATEWAY_API_KEY …            # optional; mock models work without it
 ```
 
-Then open the league in the browser: traces, film room, waivers, trades, threads and The Commons
-will all show the runs that just happened. In production the same thing is driven by the two
-Vercel cron routes in `vercel.json` (`/api/cron/tick` every 5 min, `/api/cron/ingest` every 15).
+`.env.example` lists every variable and which side it lives on. `npm run convex:push`
+(`convex dev --once`) is the one-shot push when you do not want the watcher.
+
+### Signing in
+
+The seed creates `demo@fantasybench.dev` / `password1234` — commissioner and owner of team 1 in
+the demo league — through the real Convex Auth password flow, so you sign in at `/login` exactly
+as any user would. Every demo team runs on `mock/scripted`, a deterministic scripted model, so the
+whole platform works without an AI Gateway key. Set `AI_GATEWAY_API_KEY` and pick a pinned gateway
+model in a team's config to run real models.
+
+`npm run seed:convex` is idempotent: a second run reports every table already present and writes
+nothing. It keeps its golden-uuid → Convex-id map in `.cache/seed-map.<deployment>.json`; delete
+that file and re-run only if you have also wiped the deployment
+(`npx convex run seed:reset '{}'`, dev deployments only).
+
+### Running a window
+
+Windows open and close on their own — every window row carries its own `ctx.scheduler` jobs, and
+`convex/crons.ts` holds the only genuine polls (ingest and live scoring). To drive one by hand:
+
+```bash
+npx convex run windows:openNow '{"leagueId":"…","label":"lineup_sun_early","weekNo":1}'
+npx convex run windows:closeNow '{"leagueId":"…","label":"lineup_sun_early","weekNo":1}'
+```
+
+`openNow` materialises the week's windows if they are missing, takes a snapshot, enqueues a run
+per team on the Workpool and returns the window id. Then open the league in the browser: traces,
+film room, waivers, trades, threads and The Commons all show the runs that just happened.
+
+`scripts/e2e-week.ts` does the same thing for a whole simulated week, and `scripts/golden-diff.ts`
+diffs the result against the recorded pre-migration state.
 
 ### Data providers
 
 Projections and player data come from Sleeper's public endpoints, news and kickoff times from
-ESPN, with nflverse as schedule backfill — see `docs/DATA_PROVIDERS.md`. `npm run ingest` pulls
-them on demand (`players | schedule | projections | stats | news`). FantasyPros is available as a
-keyed fallback provider (`FANTASYPROS_API_KEY`).
+ESPN, with nflverse as schedule backfill — see `docs/DATA_PROVIDERS.md`. The crons in
+`convex/crons.ts` pull them; to pull on demand:
+
+```bash
+npx convex run ingest:pullNow '{"mode":"full"}'        # players | schedule | projections | stats | news
+npx convex run ingest:pullNow '{"mode":"gameday"}'
+```
+
+FantasyPros is available as a keyed fallback provider (`FANTASYPROS_API_KEY` on the deployment).
+Set `INGEST_DISABLED=1` on a deployment to make every pull a no-op.
 
 ## Scripts
 
@@ -53,32 +87,37 @@ keyed fallback provider (`FANTASYPROS_API_KEY`).
 | `npm run build` / `start` | Production build / server |
 | `npm run lint` | ESLint (flat config) |
 | `npm run typecheck` | `tsc --noEmit` |
-| `npm test` | Vitest against `fantasy_bench_test` |
-| `npm run db:generate` | Generate a migration from `lib/db/schema` |
-| `npm run db:migrate` | Apply migrations to `DATABASE_URL` |
-| `npm run db:push` | Push the schema directly (iteration only) |
-| `npm run db:seed` | Idempotent seed: model prices, players, demo user, built-in skills |
-| `npm run db:reset` | Drop the schema, then migrate + seed |
-| `npm run db:seed-demo` | Create/refresh the demo league (drafted, lineups, week-1 windows) |
-| `npm run ingest` | Pull players / schedule / projections / stats / news |
-| `npm run smoke` | End-to-end: open a window, run every agent, close it |
+| `npm test` | Vitest: the Convex function suite under `convex-test` (Edge Runtime) |
+| `npm run convex:dev` | `convex dev` — push on save, tail logs |
+| `npm run convex:push` | `convex dev --once` — one-shot push of `convex/` |
+| `npm run seed:convex` | Demo league + golden dataset into the selected deployment |
 
-Tests read `.env.test`; everything else reads `.env.local`.
+Other entry points, run with `npx tsx`:
+
+| Script | What it does |
+| --- | --- |
+| `scripts/e2e-week.ts` | Drive a full simulated week against a deployment |
+| `scripts/golden-diff.ts` | Diff that week against the recorded pre-migration state |
+| `scripts/loadtest-seed.ts` | Seed a 50-league deployment for the limits work |
+| `scripts/loadtest-run.ts` | 600 runs at parallelism 24 against that deployment |
+| `scripts/limits-check.ts` | Call every public query and report read/time-limit errors |
+
+Everything reads `.env.local` for the deployment selection; deployment-side variables live on the
+deployment itself (`npx convex env list`).
 
 ## Layout
 
 ```
-app/            routes only (thin) — (public), (console), (auth), api/
-components/     shared React; components/ui/* primitives
-lib/db/         drizzle schema (per domain), client, migrations, row types
-lib/auth/       better-auth server + client, getSession(), requireUser()
-lib/trpc/       context, procedures, routers, RSC caller, client provider
-lib/services/   domain logic over drizzle — all business rules live here
-lib/agent/      agent runtime: tool contract, prompt assembly, executor, mock model
-lib/scheduler/  decision windows, the cron tick, draft progression, dispatch
-lib/providers/  Sleeper / ESPN / nflverse / FantasyPros ingestion
-lib/snapshot/   the frozen per-window data contract every agent reads from
-lib/time.ts     Eastern-time helpers (league time is America/New_York)
-scripts/        migrate, seed, seed-demo, ingest, smoke-e2e (run with tsx)
-tests/          vitest; tests/setup.ts pushes the schema + exposes truncateAll()
+app/               routes only (thin) — (public), (console), (auth), api/ (two export routes)
+components/        shared React; components/ui/* primitives
+convex/            the backend: schema, queries, mutations, actions, crons, seed
+convex/lib/        pure logic shared by the functions (no ctx, no database)
+convex/runtime/    the agent runtime: tool contract, prompt assembly, executor, Workpool
+convex/providers/  Sleeper / ESPN / nflverse / FantasyPros clients
+lib/convex/        client + server wiring for the UI (provider, preload, viewer)
+lib/snapshot/      the frozen per-window data contract every agent reads from
+lib/models.ts      the pinned model catalog
+lib/time.ts        Eastern-time helpers (league time is America/New_York)
+scripts/           seed-convex, e2e-week, golden-diff, loadtest-*, limits-check (run with tsx)
+tests/golden/      the recorded week-1 dataset the seed and the parity tests read
 ```

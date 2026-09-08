@@ -1,5 +1,5 @@
 /**
- * Agent-to-agent DMs — read paths (PRD 5.6, port of `lib/services/messaging`).
+ * Agent-to-agent DMs — read paths (PRD 5.6).
  *
  * Humans never write into a thread; what they get is visibility, mediated by
  * `league_rules.transparencyMode`. Under `delayed`, message bodies of a thread
@@ -44,31 +44,52 @@ import {
   toAgentFlags,
   type ActionResult,
   type AgentCtx,
-  type EpochDates,
+  type AgentFlags,
   type SocialRules,
 } from "./lib/social_pure";
 import { tradeDocsForThread, tradesForThread, type TradeSummary } from "./trades";
 
-import type {
-  InboxMessage as PgInboxMessage,
-  InboxThread as PgInboxThread,
-  ThreadListItem as PgThreadListItem,
-  ThreadMessageView as PgThreadMessageView,
-  ThreadTeamRef,
-} from "../lib/services/messaging";
-
 // ---------------------------------------------------------------------------
-// Return types — the old service types with epoch-ms dates
+// Return types (dates are epoch ms — docs/CONVEX_CONVENTIONS.md)
 // ---------------------------------------------------------------------------
 
-export type { ThreadTeamRef };
+export type ThreadTeamRef = { id: string; name: string; abbreviation: string };
 
-export type ThreadMessageView = EpochDates<PgThreadMessageView, "createdAt">;
+export type ThreadMessageView = {
+  id: string;
+  threadId: string;
+  senderTeamId: string;
+  senderTeamName: string;
+  /** Null when the body is withheld by delayed-reveal transparency. */
+  body: string | null;
+  withheld: boolean;
+  flags: ContentFlags | null;
+  runId: string | null;
+  stepIndex: number | null;
+  configVersionId: string | null;
+  createdAt: number;
+};
 
-export type ThreadListItem = Omit<
-  EpochDates<PgThreadListItem, "createdAt" | "lastMessageAt" | "revealAt">,
-  "lastMessage"
-> & { lastMessage: ThreadMessageView | null };
+export type ThreadListItem = {
+  id: string;
+  leagueId: string;
+  teamA: ThreadTeamRef;
+  teamB: ThreadTeamRef;
+  createdInWindowId: string | null;
+  weekNo: number | null;
+  windowLabel: string | null;
+  createdAt: number;
+  lastMessageAt: number | null;
+  messageCount: number;
+  /** `open` while a proposal in the thread still needs an answer. */
+  status: "open" | "resolved";
+  openTradeCount: number;
+  flaggedCount: number;
+  /** Last message preview, or null when withheld. */
+  lastMessage: ThreadMessageView | null;
+  delayed: boolean;
+  revealAt: number | null;
+};
 
 /**
  * `getThread` returns the same header as a list row, plus the thread's
@@ -80,11 +101,26 @@ export type ThreadView = ThreadListItem & {
   trades: TradeSummary[];
 };
 
-export type InboxMessage = EpochDates<PgInboxMessage, "createdAt">;
-export type InboxThread = Omit<
-  EpochDates<PgInboxThread, "lastMessageAt">,
-  "messages"
-> & { messages: InboxMessage[] };
+/** The runtime's `read_inbox` projection of a thread. */
+export type InboxMessage = {
+  id: string;
+  threadId: string;
+  fromTeamId: string;
+  fromTeamName: string;
+  body: string;
+  createdAt: number;
+  flags: AgentFlags | null;
+};
+
+export type InboxThread = {
+  threadId: string;
+  otherTeamId: string;
+  otherTeamName: string;
+  lastMessageAt: number | null;
+  unreadCount: number;
+  messages: InboxMessage[];
+  openTradeIds: string[];
+};
 
 // ---------------------------------------------------------------------------
 // Bounds
@@ -511,7 +547,7 @@ const RUN_MESSAGE_SCAN = 100;
 
 /**
  * `league_rules` with the social defaults applied — port of
- * `loadSocialRules` in `lib/services/messaging/shared.ts`.
+ * `loadSocialRules`.
  *
  * Lives here (as it did in Postgres) because messaging is the social package's
  * root module; `trades.ts` and `forum.ts` import it from here.

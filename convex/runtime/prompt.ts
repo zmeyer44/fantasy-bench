@@ -1,5 +1,5 @@
 /**
- * Prompt assembly (PRD 5.4 step 2) — port of `lib/agent/prompt.ts`, byte-for-byte
+ * Prompt assembly (PRD 5.4 step 2) — byte-for-byte
  * identical output for the same inputs.
  *
  * Deterministic given (config version, snapshot, inbox, forum digest, window):

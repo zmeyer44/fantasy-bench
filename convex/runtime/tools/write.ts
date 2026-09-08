@@ -1,5 +1,5 @@
 /**
- * Write tools (PRD 5.4) — port of `lib/agent/tools/write.ts`.
+ * Write tools (PRD 5.4).
  *
  * Each one: validate against the snapshot → replay-check `(runId, toolCallId)` →
  * commit through the owning **internal mutation** → return a structured

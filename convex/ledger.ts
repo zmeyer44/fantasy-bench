@@ -1,5 +1,5 @@
 /**
- * Cost dashboards (PRD §5.9) — the read half of `lib/services/cost/index.ts`.
+ * Cost dashboards (PRD §5.9) — the read half of the ledger.
  *
  * Every figure here used to be a `SUM` over `usage_events` (aggregations A1–A15
  * in the migration plan). None of them are computed at query time any more:
@@ -572,7 +572,7 @@ export const modelPrices = query({
 // ===========================================================================
 
 /**
- * Price in effect for `modelId` at `at`, the port of `lib/agent/model.ts`'s
+ * Price in effect for `modelId` at `at`, the same lookup as the runtime's
  * `getModelPrice`: the newest `model_prices` row with `effectiveFrom <= at`,
  * else the catalog, else a zero price (an unknown model must never abort a run).
  */

@@ -2,7 +2,7 @@
  * ESPN's undocumented site API: true UTC kickoffs (our player lock times),
  * the league-wide injury report, and news.
  *
- * Port of `lib/providers/espn.ts`; instants are epoch milliseconds (see
+ * The ESPN provider; instants are epoch milliseconds (see
  * `./types`), and the article `raw` blob is dropped — `news_items` stores a
  * headline, a body and a url, and a Convex document is capped at 1 MiB.
  *

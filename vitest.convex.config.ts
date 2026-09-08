@@ -2,8 +2,11 @@ import path from "node:path";
 import { defineConfig } from "vitest/config";
 
 /**
- * Convex function tests run with `convex-test` in the Edge Runtime, separately from
- * the Postgres-backed suite in vitest.config.ts. `npm run test:convex`.
+ * The test suite: Convex functions under `convex-test`, in the Edge Runtime
+ * (`docs/CONVEX_NOTES.md` §9). `npm test`.
+ *
+ * The `@` alias resolves the few pure modules the functions share with the UI
+ * (`lib/models.ts`, `lib/time.ts`, `lib/snapshot/types.ts`).
  */
 export default defineConfig({
   resolve: { alias: { "@": path.resolve(process.cwd()) } },

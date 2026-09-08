@@ -2,9 +2,9 @@
  * Fantasy Bench — Convex schema (migration Phase 1 artifact).
  *
  * Conventions
- * - Convex `_id` replaces every Postgres primary key. `legacyId` is kept on every
- *   table during the migration so seed/parity tests can cross-reference rows; it is
- *   removed in the cleanup phase.
+ * - Convex `_id` replaces every primary key. Rows carry no id of their own; the
+ *   golden importer keeps its uuid -> id map outside the database
+ *   (`.cache/seed-map.<deployment>.json`).
  * - Foreign keys are `v.id("table")`. There are no joins: each read path fetches by
  *   id or uses an index named `by_<field>_<field>` that matches its access pattern.
  * - Timestamps are epoch milliseconds (`v.number()`). Convex has no Date type.
@@ -217,8 +217,6 @@ const rollupCounters = {
   updatedAt: v.number(),
 };
 
-const legacy = { legacyId: v.optional(v.string()) };
-
 // ---------------------------------------------------------------------------
 // Schema
 // ---------------------------------------------------------------------------
@@ -235,7 +233,6 @@ export default defineSchema({
   ...authTables,
   users: defineTable({
     ...authTables.users.validator.fields,
-    ...legacy,
   })
     .index("email", ["email"])
     .index("phone", ["phone"]),
@@ -243,7 +240,6 @@ export default defineSchema({
   // ---- league core --------------------------------------------------------
 
   leagues: defineTable({
-    ...legacy,
     name: v.string(),
     slug: v.string(),
     commissionerUserId: v.id("users"),
@@ -276,7 +272,6 @@ export default defineSchema({
    * rules edit.
    */
   league_rules: defineTable({
-    ...legacy,
     leagueId: v.id("leagues"),
     scoringPreset: scoringPreset,
     superflex: v.boolean(),
@@ -314,7 +309,6 @@ export default defineSchema({
   }).index("by_leagueId", ["leagueId"]),
 
   league_rule_changes: defineTable({
-    ...legacy,
     leagueId: v.id("leagues"),
     userId: v.optional(v.id("users")),
     field: v.string(),
@@ -326,7 +320,6 @@ export default defineSchema({
   }).index("by_leagueId", ["leagueId"]),
 
   league_members: defineTable({
-    ...legacy,
     leagueId: v.id("leagues"),
     userId: v.id("users"),
     role: leagueRole,
@@ -337,7 +330,6 @@ export default defineSchema({
     .index("by_userId", ["userId"]),
 
   teams: defineTable({
-    ...legacy,
     leagueId: v.id("leagues"),
     ownerUserId: v.optional(v.id("users")),
     name: v.string(),
@@ -354,7 +346,6 @@ export default defineSchema({
     .index("by_ownerUserId", ["ownerUserId"]),
 
   weeks: defineTable({
-    ...legacy,
     leagueId: v.id("leagues"),
     weekNo: v.number(),
     startsAt: v.number(),
@@ -369,7 +360,6 @@ export default defineSchema({
     .index("by_leagueId_startsAt", ["leagueId", "startsAt"]),
 
   matchups: defineTable({
-    ...legacy,
     leagueId: v.id("leagues"),
     weekNo: v.number(),
     homeTeamId: v.id("teams"),
@@ -384,7 +374,6 @@ export default defineSchema({
 
   /** Per-team weekly result; season totals live on `team_standings`. */
   team_results: defineTable({
-    ...legacy,
     leagueId: v.id("leagues"),
     teamId: v.id("teams"),
     weekNo: v.number(),
@@ -419,7 +408,6 @@ export default defineSchema({
   // ---- players & NFL data -------------------------------------------------
 
   players: defineTable({
-    ...legacy,
     sleeperId: v.string(),
     gsisId: v.optional(v.string()),
     espnId: v.optional(v.string()),
@@ -456,7 +444,6 @@ export default defineSchema({
     .searchIndex("search_fullName", { searchField: "fullName", filterFields: ["position"] }),
 
   nfl_games: defineTable({
-    ...legacy,
     season: v.number(),
     week: v.number(),
     gameId: v.string(),
@@ -472,7 +459,6 @@ export default defineSchema({
     .index("by_season_week", ["season", "week"]),
 
   player_stats_weekly: defineTable({
-    ...legacy,
     playerId: v.id("players"),
     season: v.number(),
     week: v.number(),
@@ -488,7 +474,6 @@ export default defineSchema({
 
   /** Append-only projection vintages (PRD 6.5: snapshots pin a vintage). */
   player_projections: defineTable({
-    ...legacy,
     playerId: v.id("players"),
     season: v.number(),
     week: v.number(),
@@ -528,7 +513,6 @@ export default defineSchema({
     ]),
 
   news_items: defineTable({
-    ...legacy,
     playerId: v.optional(v.id("players")),
     source: v.string(),
     headline: v.string(),
@@ -543,7 +527,6 @@ export default defineSchema({
     .index("by_dedupeKey", ["dedupeKey"]),
 
   injury_designations: defineTable({
-    ...legacy,
     playerId: v.id("players"),
     season: v.number(),
     week: v.number(),
@@ -566,7 +549,6 @@ export default defineSchema({
   }).index("by_season_week_playerId", ["season", "week", "playerId"]),
 
   custom_providers: defineTable({
-    ...legacy,
     leagueId: v.optional(v.id("leagues")),
     teamId: v.optional(v.id("teams")),
     name: v.string(),
@@ -588,7 +570,6 @@ export default defineSchema({
   // ---- rosters & lineups ---------------------------------------------------
 
   roster_slots: defineTable({
-    ...legacy,
     leagueId: v.id("leagues"),
     teamId: v.id("teams"),
     playerId: v.id("players"),
@@ -601,7 +582,6 @@ export default defineSchema({
 
   /** Versioned, append-only. The live lineup is the highest version for (team, week). */
   lineups: defineTable({
-    ...legacy,
     teamId: v.id("teams"),
     leagueId: v.id("leagues"),
     weekNo: v.number(),
@@ -614,7 +594,6 @@ export default defineSchema({
     .index("by_setByRunId", ["setByRunId"]),
 
   transactions: defineTable({
-    ...legacy,
     leagueId: v.id("leagues"),
     teamId: v.id("teams"),
     type: transactionType,
@@ -633,7 +612,6 @@ export default defineSchema({
   // ---- agent configuration -----------------------------------------------
 
   agent_configs: defineTable({
-    ...legacy,
     teamId: v.id("teams"),
     leagueId: v.id("leagues"),
     currentVersionId: v.optional(v.id("config_versions")),
@@ -648,7 +626,6 @@ export default defineSchema({
 
   /** IMMUTABLE after insert (only `appliedAt` is stamped once by applyPending). */
   config_versions: defineTable({
-    ...legacy,
     configId: v.id("agent_configs"),
     teamId: v.id("teams"),
     leagueId: v.id("leagues"),
@@ -670,7 +647,6 @@ export default defineSchema({
     .index("by_leagueId", ["leagueId"]),
 
   skills: defineTable({
-    ...legacy,
     authorUserId: v.optional(v.id("users")),
     name: v.string(),
     slug: v.string(),
@@ -692,7 +668,6 @@ export default defineSchema({
   // ---- windows, snapshots, runs -------------------------------------------
 
   windows: defineTable({
-    ...legacy,
     leagueId: v.id("leagues"),
     type: windowType,
     label: v.string(),
@@ -736,7 +711,6 @@ export default defineSchema({
    * `snapshot_digests`. Nothing large lives on this document.
    */
   snapshots: defineTable({
-    ...legacy,
     leagueId: v.id("leagues"),
     windowId: v.optional(v.id("windows")),
     season: v.number(),
@@ -789,7 +763,6 @@ export default defineSchema({
   }).index("by_snapshotId_kind_part", ["snapshotId", "kind", "part"]),
 
   runs: defineTable({
-    ...legacy,
     windowId: v.id("windows"),
     leagueId: v.id("leagues"),
     teamId: v.optional(v.id("teams")),
@@ -841,7 +814,6 @@ export default defineSchema({
 
   /** One document per model call. Append-only. */
   run_steps: defineTable({
-    ...legacy,
     runId: v.id("runs"),
     leagueId: v.id("leagues"),
     stepIndex: v.number(),
@@ -879,7 +851,6 @@ export default defineSchema({
 
   /** Idempotency + audit ledger for write tools. Unique per (runId, toolCallId). */
   run_actions: defineTable({
-    ...legacy,
     runId: v.id("runs"),
     leagueId: v.id("leagues"),
     teamId: v.optional(v.id("teams")),
@@ -919,7 +890,6 @@ export default defineSchema({
   // ---- transactions: waivers, draft, trades -------------------------------
 
   waiver_claims: defineTable({
-    ...legacy,
     leagueId: v.id("leagues"),
     teamId: v.id("teams"),
     windowId: v.id("windows"),
@@ -939,7 +909,6 @@ export default defineSchema({
     .index("by_leagueId_weekNo", ["leagueId", "weekNo"]),
 
   draft_picks: defineTable({
-    ...legacy,
     leagueId: v.id("leagues"),
     round: v.number(),
     pickNo: v.number(),
@@ -958,7 +927,6 @@ export default defineSchema({
     .index("by_leagueId_playerId", ["leagueId", "playerId"]),
 
   auction_nominations: defineTable({
-    ...legacy,
     leagueId: v.id("leagues"),
     lotNo: v.number(),
     nominatingTeamId: v.id("teams"),
@@ -982,7 +950,6 @@ export default defineSchema({
     .index("by_leagueId_status", ["leagueId", "status"]),
 
   auction_bids: defineTable({
-    ...legacy,
     nominationId: v.id("auction_nominations"),
     leagueId: v.id("leagues"),
     teamId: v.id("teams"),
@@ -992,7 +959,6 @@ export default defineSchema({
   }).index("by_nominationId_teamId", ["nominationId", "teamId"]),
 
   trades: defineTable({
-    ...legacy,
     leagueId: v.id("leagues"),
     proposerTeamId: v.id("teams"),
     recipientTeamId: v.id("teams"),
@@ -1010,7 +976,7 @@ export default defineSchema({
       }),
     ),
     fairnessScore: v.optional(v.number()),
-    fairnessDetail: v.optional(v.any()), // documented: FairnessDetailV1 (lib/services/trades/fairness.ts)
+    fairnessDetail: v.optional(v.any()), // documented: FairnessDetailV1 (convex/lib/fairness_pure.ts)
     flagged: v.boolean(),
     reviewEndsAt: v.optional(v.number()),
     resolvedAt: v.optional(v.number()),
@@ -1033,7 +999,6 @@ export default defineSchema({
     .index("by_parentTradeId", ["parentTradeId"]),
 
   trade_events: defineTable({
-    ...legacy,
     tradeId: v.id("trades"),
     leagueId: v.id("leagues"),
     type: v.string(),
@@ -1046,7 +1011,6 @@ export default defineSchema({
   }).index("by_tradeId", ["tradeId"]),
 
   trade_votes: defineTable({
-    ...legacy,
     tradeId: v.id("trades"),
     userId: v.id("users"),
     vote: tradeVote,
@@ -1055,7 +1019,6 @@ export default defineSchema({
   // ---- messaging & forum ----------------------------------------------------
 
   threads: defineTable({
-    ...legacy,
     leagueId: v.id("leagues"),
     /** Canonical pair: teamAId < teamBId (string compare of ids), enforced in the mutation. */
     teamAId: v.id("teams"),
@@ -1077,7 +1040,6 @@ export default defineSchema({
     .index("by_teamBId", ["teamBId"]),
 
   messages: defineTable({
-    ...legacy,
     threadId: v.id("threads"),
     leagueId: v.id("leagues"),
     senderTeamId: v.id("teams"),
@@ -1094,7 +1056,6 @@ export default defineSchema({
     .index("by_runId", ["runId"]),
 
   forum_posts: defineTable({
-    ...legacy,
     leagueId: v.id("leagues"),
     teamId: v.optional(v.id("teams")),
     runId: v.optional(v.id("runs")),
@@ -1115,7 +1076,6 @@ export default defineSchema({
     .index("by_teamId_createdAt", ["teamId", "createdAt"]),
 
   forum_comments: defineTable({
-    ...legacy,
     postId: v.id("forum_posts"),
     leagueId: v.id("leagues"),
     parentId: v.optional(v.id("forum_comments")),
@@ -1132,7 +1092,6 @@ export default defineSchema({
     .index("by_teamId_createdAt", ["teamId", "createdAt"]),
 
   forum_votes: defineTable({
-    ...legacy,
     leagueId: v.id("leagues"),
     targetType: voteTargetType,
     targetId: v.string(),
@@ -1147,7 +1106,6 @@ export default defineSchema({
 
   /** Append-only. Written ONLY by internal.ledger.recordStep. */
   usage_events: defineTable({
-    ...legacy,
     runId: v.id("runs"),
     stepIndex: v.number(),
     leagueId: v.id("leagues"),
@@ -1175,7 +1133,6 @@ export default defineSchema({
     .index("by_leagueId_season_weekNo", ["leagueId", "season", "weekNo"]),
 
   model_prices: defineTable({
-    ...legacy,
     modelId: v.string(),
     provider: v.string(),
     displayName: v.string(),
@@ -1188,7 +1145,6 @@ export default defineSchema({
   }).index("by_modelId_effectiveFrom", ["modelId", "effectiveFrom"]),
 
   budgets: defineTable({
-    ...legacy,
     leagueId: v.id("leagues"),
     teamId: v.optional(v.id("teams")),
     period: budgetPeriod,

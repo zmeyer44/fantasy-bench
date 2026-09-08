@@ -320,13 +320,6 @@ function recipes(samples: Sample[]): Map<string, Call[]> {
   put("seed.js:tableCount", [
     { label: "run_steps", args: { secret: secret ?? "", table: "run_steps" }, cursorArg: true },
   ]);
-  put("seed.js:lookupLegacy", [
-    {
-      label: "runs",
-      args: { secret: secret ?? "", table: "runs", numItems: 1_000 },
-      cursorArg: true,
-    },
-  ]);
 
   // --- league reads -------------------------------------------------------
   put("leagues.js:bySlug", per((s) => ({ label: s.slug, args: { slug: s.slug } })));

@@ -52,6 +52,7 @@ import { promisify } from "node:util";
 import { ConvexHttpClient } from "convex/browser";
 
 import { api } from "../convex/_generated/api";
+import { readIdMap, seedMapFile } from "./seed-map";
 
 const execFileAsync = promisify(execFile);
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -253,19 +254,10 @@ async function tableCount(table: string): Promise<number> {
  * its own fixture on a scratch deployment.)
  */
 async function patchModels(): Promise<void> {
-  const ids: string[] = [];
-  let cursor: string | null = null;
-  for (;;) {
-    const page: { map: Record<string, string>; continueCursor: string; isDone: boolean } =
-      await client.query(api.seed.lookupLegacy, {
-        secret: secret!,
-        table: "config_versions",
-        cursor,
-        numItems: 1_000,
-      });
-    ids.push(...Object.values(page.map));
-    if (page.isDone) break;
-    cursor = page.continueCursor;
+  const file = seedMapFile(ROOT, "loadtest");
+  const ids = Object.values(readIdMap(file).config_versions ?? {});
+  if (!ids.length) {
+    throw new Error(`${file} lists no config_versions; re-run scripts/loadtest-seed.ts first.`);
   }
   log(`patching ${ids.length} config_versions to mock/scripted`);
   for (let i = 0; i < ids.length; i += 200) {

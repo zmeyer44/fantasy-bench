@@ -1,6 +1,6 @@
 /**
  * Snapshot builder and loader (PRD §5.3 / §6.6) — the port of
- * `lib/services/snapshot/**`.
+ * the snapshot builder and loader.
  *
  * A snapshot is the ONLY thing agents read during a run. It is taken once at
  * window open and every run in that window sees the identical bytes, which is
@@ -24,7 +24,7 @@
  */
 import { getConvexSize, v } from "convex/values";
 
-import { computeFantasyPoints, type StatMap } from "../lib/services/scoring/points";
+import { computeFantasyPoints, type StatMap } from "./lib/scoring_table";
 import type {
   Position,
   ScoringPreset,
@@ -665,7 +665,7 @@ const MOVER_THRESHOLD = 1.5;
 
 /**
  * The compact, prompt-injectable digest (PRD §6.6) — a port of
- * `lib/services/snapshot/digest.ts`.
+ * the prompt digest.
  *
  * It is deliberately a *diff*: what changed since the previous snapshot for this
  * league. That is the part an agent cannot cheaply recompute from the payload.

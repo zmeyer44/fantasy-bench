@@ -1,5 +1,5 @@
 /**
- * Lineups — the write half of `lib/services/lineup/index.ts` (PRD §5.4).
+ * Lineups — validation, commit and the safety autopilot (PRD §5.4).
  *
  * `lineups` is append-only versioned history: the live lineup for a team-week is
  * the highest `version` on `by_teamId_weekNo_version`, and nothing is ever

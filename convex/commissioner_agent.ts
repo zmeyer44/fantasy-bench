@@ -1,5 +1,5 @@
 /**
- * The Commissioner Agent (PRD 5.10) — port of `lib/services/commissioner-agent`.
+ * The Commissioner Agent (PRD 5.10).
  *
  * A platform-run agent with a fixed, public config and its own trace history.
  * It has no roster tools and no DM access; its only outputs are forum
@@ -47,7 +47,7 @@ import {
 import { stepUsage } from "./schema";
 
 // ---------------------------------------------------------------------------
-// Config (port of `lib/services/commissioner-agent/config.ts`)
+// Config
 // ---------------------------------------------------------------------------
 
 export const COMMISSIONER_CONTEXT_MD = `# Fantasy Bench — League Commissioner
@@ -229,7 +229,7 @@ export function normalizeUsage(usage: unknown): CommissionerUsage {
 }
 
 // ---------------------------------------------------------------------------
-// Run plumbing (port of `lib/services/commissioner-agent/trace.ts`)
+// Run plumbing
 // ---------------------------------------------------------------------------
 
 /**

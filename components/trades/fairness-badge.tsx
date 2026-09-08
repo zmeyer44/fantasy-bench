@@ -1,7 +1,7 @@
 import { Badge } from "@/components/ui";
 
 /**
- * The fairness number is deterministic (lib/services/trades/fairness.ts), so the
+ * The fairness number is deterministic (`convex/lib/fairness_pure.ts`), so the
  * badge is purely a reading of it: green above the floor, amber approaching it,
  * red below.
  */

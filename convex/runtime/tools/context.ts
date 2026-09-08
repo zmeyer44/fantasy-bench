@@ -1,6 +1,6 @@
 /**
  * The per-run context every tool closes over, plus the write-tool idempotency
- * wrapper (port of `lib/agent/tools/context.ts`).
+ * wrapper.
  *
  * Tools are built fresh for each run by `buildTools(ctx)` and capture this object
  * in a closure. That is deliberately not the AI SDK's `toolsContext` mechanism:

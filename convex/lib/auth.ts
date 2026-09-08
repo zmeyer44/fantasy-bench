@@ -1,7 +1,6 @@
 /**
- * Authorization helpers — a one-to-one port of the tRPC procedure ladder in
- * lib/trpc/init.ts (publicProcedure → protectedProcedure → leagueReadProcedure →
- * leagueMemberProcedure → commissionerProcedure).
+ * Authorization helpers — the access ladder every function goes through
+ * (any viewer → signed in → league read → league member → commissioner).
  *
  * - Spectators are read-only; public leagues are readable without a session.
  * - Owners may edit only their own team's config; commissioners administer only

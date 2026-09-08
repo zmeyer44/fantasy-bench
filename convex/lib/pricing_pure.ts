@@ -1,8 +1,8 @@
 /**
  * Ledger arithmetic (PRD §5.9), with no database in it.
  *
- * This is the port of the pure half of `lib/services/ledger/index.ts` plus
- * `getModelPrice`'s catalog fallback from `lib/agent/model.ts`. The database
+ * This is the pure half of the ledger plus `getModelPrice`'s catalog
+ * fallback. The database
  * half — resolving the effective `model_prices` row and folding the result into
  * the three rollup tables — lives in `convex/ledger.ts`; everything here is a
  * function of its arguments so the cost math can be unit-tested and reused by

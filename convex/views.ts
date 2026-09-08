@@ -1,5 +1,5 @@
 /**
- * Public read models (PRD §5.11) — the port of `lib/services/views/*`.
+ * Public read models (PRD §5.11).
  *
  * Everything is readable by league members and, for public leagues, by anyone
  * (spectator mode): `requireLeagueRead` reproduces `leagueReadProcedure`.
@@ -14,9 +14,6 @@
 import { v } from "convex/values";
 
 import type { LineupSlot, SnapshotPlayer } from "../lib/snapshot/types";
-import type { MatchupCard, MatchupSide, SpendRow } from "../lib/services/views/league-home";
-import type { StandingsRow } from "../lib/services/views/standings";
-import type { TeamCard } from "../lib/services/views/team";
 import type { Doc, Id } from "./_generated/dataModel";
 import { query, type QueryCtx } from "./_generated/server";
 import { requireLeagueRead } from "./lib/auth";
@@ -42,6 +39,73 @@ import { windowSchedule, type WindowSchedule } from "./windows";
 /** Weeks a rollup scan covers: 0 (draft / commissioner) through the playoffs. */
 const MAX_WEEK = 22;
 const RECENT_RUNS = 10;
+
+// ---------------------------------------------------------------------------
+// Row types shared by the league views
+// ---------------------------------------------------------------------------
+
+export type StandingsRow = {
+  rank: number;
+  teamId: string;
+  teamName: string;
+  abbreviation: string;
+  ownerUserId: string | null;
+  wins: number;
+  losses: number;
+  ties: number;
+  pointsFor: number;
+  pointsAgainst: number;
+  streak: string;
+  karma: number;
+  faabRemaining: number;
+  modelId: string | null;
+  configVersionNo: number | null;
+};
+
+export type TeamCard = {
+  id: string;
+  name: string;
+  abbreviation: string;
+  ownerUserId: string | null;
+  ownerName: string | null;
+  record: string;
+  rank: number;
+  pointsFor: number;
+  karma: number;
+  faabRemaining: number;
+  modelId: string | null;
+  modelLabel: string;
+  configVersionNo: number | null;
+};
+
+export type MatchupSide = {
+  teamId: string;
+  teamName: string;
+  abbreviation: string;
+  /** Official score when final, else the live sum from the snapshot. */
+  score: number;
+  live: boolean;
+  record: string;
+};
+
+export type MatchupCard = {
+  id: string;
+  weekNo: number;
+  isFinal: boolean;
+  home: MatchupSide;
+  away: MatchupSide;
+};
+
+export type SpendRow = {
+  teamId: string;
+  teamName: string;
+  abbreviation: string;
+  usdUsed: number;
+  tokensUsed: number;
+  runCount: number;
+  modelId: string | null;
+  modelLabel: string;
+};
 
 // ------------------------------------------------------------- standings
 

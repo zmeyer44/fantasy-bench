@@ -1,5 +1,23 @@
 # Data providers — research & decisions (verified live 2026-09-08)
 
+## Where this lives
+
+The provider clients are `convex/providers/{sleeper,espn,nflverse,fantasypros}.ts` behind the
+contract in `convex/providers/types.ts`; every instant they return is epoch milliseconds. The one
+entry point that pulls is **`internal.ingest.pull`** (an `internalAction`, in `convex/ingest.ts`) —
+`{ mode: "full" | "regular" | "gameday", season?, week?, now? }`, where `mode` selects the plan
+(`planFor`). `internal.ingest.tick` is what `convex/crons.ts` calls: it evaluates the Eastern-time
+guard and schedules `pull`. To pull by hand:
+
+```bash
+npx convex run ingest:pullNow '{"mode":"full"}'
+```
+
+`INGEST_DISABLED=1` on a deployment mutes every scheduled pull. `FANTASYPROS_API_KEY` enables the
+fallback projection provider. Recorded responses for every endpoint below live in
+`convex/providers/fixtures/` and back `convex/providers.test.ts`, so the parsers are tested with no
+network.
+
 ## Decision
 
 - **Default projections:** Sleeper undocumented projections endpoint (Rotowire-sourced). Free, keyless,
@@ -51,14 +69,17 @@ Do not use `?company=sportradar` (sparse).
 
 ## Normalized mapping → `player_projections`
 
-| column | from |
+| field | from |
 |---|---|
 | source | `'sleeper_rotowire'` |
-| player_id | lookup `players.sleeper_id = row.player_id` (DEF: team abbrev) |
+| playerId | lookup `players.by_sleeperId = row.player_id` (DEF: team abbrev) |
 | season, week | same |
-| projected_points_ppr / half / std | `stats.pts_ppr` / `stats.pts_half_ppr` / `stats.pts_std` |
-| stats (jsonb) | whole `stats` minus `adp_dd_ppr`, `pos_adp_dd_ppr` (+ `team`, `opponent`, `game_id`) |
-| effective_at | `new Date(last_modified)` |
+| projectedPointsPpr / Half / Std | `stats.pts_ppr` / `stats.pts_half_ppr` / `stats.pts_std` |
+| stats | whole `stats` minus `adp_dd_ppr`, `pos_adp_dd_ppr` (+ `team`, `opponent`, `game_id`) |
+| effectiveAt | `last_modified` (epoch ms, verbatim) |
+
+`player_projection_latest` carries the newest `effectiveAt` per player-week; an unchanged feed
+writes nothing.
 
 FantasyPros maps identically: `points_ppr`/`points_half`/`points` → the three columns, `stats[]` → jsonb.
 

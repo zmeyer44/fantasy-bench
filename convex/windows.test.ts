@@ -1,21 +1,19 @@
 /**
  * Window templates and materialisation.
  *
- * The templates are a port, so the first job of this file is parity: the Convex
- * ET helpers must produce the same instants as `lib/time.ts` + `lib/scheduler`,
- * including across the DST switch, where every window has to keep its Eastern
- * wall-clock time while its UTC offset moves.
+ * The first job of this file is the ET arithmetic: the Convex helpers must agree
+ * with `lib/time.ts` instant for instant, including across the DST switch, where
+ * every window has to keep its Eastern wall-clock time while its UTC offset
+ * moves. The pinned ISO instants below were recorded from the pre-Convex
+ * resolver, so they also fix the templates' absolute output.
  */
 import { convexTest } from "convex-test";
 import { describe, expect, test } from "vitest";
 
-import {
-  DEFAULT_SUBMISSION_LEAD_MINUTES,
-  resolveWindowsForWeek as legacyResolve,
-} from "../lib/scheduler/templates";
 import { fromET, minuteOfWeekET as legacyMinuteOfWeek, nextWeekdayAtET as legacyNext } from "../lib/time";
 import { api, internal } from "./_generated/api";
 import {
+  DEFAULT_SUBMISSION_LEAD_MINUTES,
   DEFAULT_WINDOW_TEMPLATES,
   dayBucketFor,
   etInstant,
@@ -214,22 +212,6 @@ describe("DST week", () => {
     expect(new Date(byLabel(windows, "lineup_mnf").opensAt).toISOString()).toBe(
       "2026-11-02T21:00:00.000Z",
     );
-  });
-
-  test("matches the Postgres-era resolver exactly, both weeks", () => {
-    for (const anchor of [SEPTEMBER_ANCHOR, DST_ANCHOR]) {
-      const ours = resolveWindowsForWeek(anchor);
-      const legacy = legacyResolve(new Date(anchor));
-      expect(ours).toHaveLength(legacy.length);
-      for (let i = 0; i < ours.length; i++) {
-        expect([ours[i].label, ours[i].roundNo, ours[i].opensAt, ours[i].closesAt]).toEqual([
-          legacy[i].label,
-          legacy[i].roundNo,
-          legacy[i].opensAt.getTime(),
-          legacy[i].closesAt.getTime(),
-        ]);
-      }
-    }
   });
 });
 

@@ -1,5 +1,5 @@
 /**
- * The live draft board (PRD §5.2) — the port of `lib/services/views/draft.ts`.
+ * The live draft board (PRD §5.2).
  *
  * Reactive by construction: the page subscribes to this query, which replaces
  * the old 15-second `draft-refresher` poll. Every read is one bounded index
@@ -202,8 +202,8 @@ export const board = query({
 });
 
 // ---------------------------------------------------------------------------
-// Write paths — the port of `lib/services/draft/index.ts` plus the state-machine
-// half of `lib/scheduler/draft-progression.ts` (PRD §5.2).
+// Write paths — picks, nominations, bids and lot resolution, plus the
+// state-machine half of the draft (PRD §5.2).
 //
 // The whole board is materialised up front, so "who is on the clock" is a query
 // and the live page renders before a single pick is made. Window scheduling is

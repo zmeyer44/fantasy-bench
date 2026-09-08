@@ -1,5 +1,5 @@
 import { TBody, TD, TH, THead, TR, Table } from "@/components/ui";
-import type { FairnessDetailV1 } from "@/lib/services/trades/fairness";
+import type { FairnessDetailV1 } from "@/convex/lib/fairness_pure";
 
 /**
  * The published fairness working. Everything here is deterministic; the

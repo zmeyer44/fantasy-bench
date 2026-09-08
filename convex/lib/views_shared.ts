@@ -1,6 +1,6 @@
 /**
  * Shared, pure helpers for the read models — the port of
- * `lib/services/views/shared.ts` (package B).
+ * the league view queries.
  *
  * Nothing here touches the database: the Convex read paths do their own bounded
  * index reads and then decorate the rows with these functions, exactly as the

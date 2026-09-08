@@ -6,7 +6,7 @@
  *
  * `profile()` is where the sign-up params become the `users` document. It doubles
  * as input validation, so it is the only place that decides which params reach the
- * row: everything else on `users` (legacyId, createdAt) is seed-only.
+ * row: everything else on `users` is Convex Auth's own.
  *
  * Note for callers: `identity.subject` is `"<userId>|<sessionId>"`, never a user id.
  * Always resolve the viewer through `convex/lib/auth.ts` (`getAuthUserId`).

@@ -116,7 +116,7 @@ export async function rescheduleWindow(
 
 /**
  * The pick-clock deadlines for a draft window (port of
- * `lib/scheduler/draft-progression#pickDeadlines`): a 4-minute clock cannot
+ * `draft_progression.pickDeadlines`): a 4-minute clock cannot
  * carry the 10-minute submission lead the weekly windows use, so the lead is a
  * quarter of the clock, capped at a minute.
  */

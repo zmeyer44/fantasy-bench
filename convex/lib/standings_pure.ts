@@ -2,8 +2,8 @@
  * Standings ordering, with no database access.
  *
  * Two orderings exist in the old code and both are kept, because both are
- * observable: `compareStandings` (lib/services/standings) ranks the snapshot and
- * the waiver order; `compareViewRows` (lib/services/views/standings) ranks the
+ * observable: `compareStandings` ranks the standings snapshot and
+ * the waiver order; `compareViewRows` ranks the
  * standings page. They differ on ties and losses.
  */
 export type StandingLike = {
@@ -14,7 +14,7 @@ export type StandingLike = {
   pointsFor: number;
 };
 
-/** lib/services/standings: win pct (ties = ½), then PF, then fewer losses, then name. */
+/** Standings order: win pct (ties = ½), then PF, then fewer losses, then name. */
 export function compareStandings(a: StandingLike, b: StandingLike): number {
   const aPct = a.wins + a.ties * 0.5;
   const bPct = b.wins + b.ties * 0.5;
@@ -24,7 +24,7 @@ export function compareStandings(a: StandingLike, b: StandingLike): number {
   return a.teamName.localeCompare(b.teamName);
 }
 
-/** lib/services/views/standings: wins, then PF, then name. */
+/** Standings-page order: wins, then PF, then name. */
 export function compareViewRows(a: StandingLike, b: StandingLike): number {
   if (a.wins !== b.wins) return b.wins - a.wins;
   if (a.pointsFor !== b.pointsFor) return b.pointsFor - a.pointsFor;
@@ -63,7 +63,7 @@ export function streakOf(
 // ------------------------------------------------------------------ schedule
 
 /**
- * Circle-method round robin (port of `lib/services/standings#roundRobinRounds`).
+ * Circle-method round robin.
  *
  * With an odd team count one team sits each round (a bye), which the caller sees
  * as "fewer matchups that week". Home/away alternates by round so home games

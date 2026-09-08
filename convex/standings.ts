@@ -1,6 +1,6 @@
 /**
  * Schedule generation and standings-derived orderings — the port of the
- * database half of `lib/services/standings/index.ts`.
+ * database half of the standings.
  *
  * The standings themselves are *not* computed here: migration plan §2.6 retires
  * the query-time fold over `team_results` in favour of the `team_standings`

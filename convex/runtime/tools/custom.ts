@@ -1,5 +1,5 @@
 /**
- * Custom provider tools (PRD open question 5) — port of `lib/agent/tools/custom.ts`.
+ * Custom provider tools (PRD open question 5).
  *
  * Unchanged except for where the provider rows come from: they are loaded once
  * by `internal.runtime.load.runContext` and handed to the tools on `ctx`. The

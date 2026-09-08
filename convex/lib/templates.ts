@@ -1,5 +1,5 @@
 /**
- * Decision-window templates (PRD §5.3) — a port of `lib/scheduler/templates.ts`
+ * Decision-window templates (PRD §5.3)
  * with Dates replaced by epoch milliseconds.
  *
  * Templates are declared in **Eastern wall-clock time**; instants are derived

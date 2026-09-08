@@ -1,5 +1,5 @@
 /**
- * Waiver outcomes (PRD §5.3) — the port of `lib/services/views/waivers.ts`.
+ * Waiver outcomes (PRD §5.3).
  *
  * `waiver_claims.by_leagueId_weekNo` is the only index this needs: one league
  * week holds at most `teams × 10` claims, and the league-wide figures
@@ -157,7 +157,7 @@ export const results = query({
 
 // ---------------------------------------------------------------------------
 // Write paths (PRD §5.4 write tools, §6.2 processing) — the port of
-// `lib/services/waivers/index.ts`.
+// the runtime's waiver tools.
 //
 // `submit` and `drop` are agent write tools: they validate against the window's
 // snapshot and return a structured error the agent can retry against, never a

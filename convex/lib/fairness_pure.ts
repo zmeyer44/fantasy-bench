@@ -1,6 +1,6 @@
 /**
  * Deterministic trade fairness (PRD 5.6) — the pure half of
- * `lib/services/trades/fairness.ts`.
+ * the deterministic half of `convex/trades.ts`.
  *
  * The number is computed here and only here. The Commissioner Agent may attach
  * a one-paragraph narrative to `fairnessDetail.narrative`, but it never moves
@@ -23,10 +23,7 @@
  * Everything below is pure: `convex/trades.ts` does the reads (snapshot payload,
  * `player_projection_latest`, `roster_slots`) and hands the results in.
  */
-import type { FairnessDetailV1 } from "../../lib/services/trades/fairness";
 import type { SocialRules } from "./social_pure";
-
-export type { FairnessDetailV1 };
 
 /** PRD default; used when `league_rules.fairnessFloor` is null. */
 export const DEFAULT_FAIRNESS_FLOOR = 0.6;
@@ -70,6 +67,36 @@ export type PlayerValuation = {
   rosterFit: number;
   value: number;
   toTeamId: string;
+};
+
+/**
+ * The published fairness working, stored on `trades.fairnessDetail`
+ * (a documented `v.any()` in `convex/schema.ts`) and rendered by
+ * `components/trades/fairness-breakdown.tsx`.
+ *
+ * The open index signature is deliberate: older rows may carry fields this
+ * version no longer writes, and the UI reads only what it knows.
+ */
+export type FairnessDetailV1 = {
+  version: 1;
+  method: "ros_projection_v1";
+  /** Value of the package the proposer receives. */
+  proposerValue: number;
+  /** Value of the package the recipient receives. */
+  recipientValue: number;
+  score: number;
+  floor: number;
+  flagged: boolean;
+  /** Net FAAB proposer -> recipient, and its point equivalent. */
+  faab: number;
+  faabPoints: number;
+  items: PlayerValuation[];
+  notes: string[];
+  /** Optional Commissioner-Agent prose. Never affects the score. */
+  narrative?: string;
+  rosterFitAdjustment?: number;
+  rationale?: string;
+  [key: string]: unknown;
 };
 
 export type FairnessResult = {
@@ -184,7 +211,7 @@ export type ScoreTradeInput = {
 
 /**
  * Score a proposal. Identical arithmetic and identical `fairness_detail` v1
- * shape to `scoreTrade` in `lib/services/trades/fairness.ts`.
+ * shape to `scoreTrade`.
  */
 export function scoreTradePure(input: ScoreTradeInput): FairnessResult {
   const { rules } = input;

@@ -1,6 +1,6 @@
 /**
  * Shared guard for the seed-only public functions (`seed.importBatch`,
- * `seed.lookupLegacy`, `seed.runBase`, `users.byEmailPublic`).
+ * `seed.tableCount`, `seed.runBase`, `users.byEmailPublic`).
  *
  * These have to be public because `scripts/seed-convex.ts` calls them over HTTP
  * with `ConvexHttpClient`, which cannot reach `internal.*`. `SEED_SECRET` is a

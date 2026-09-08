@@ -1,6 +1,5 @@
 /**
- * League / config defaults, ported from `lib/db/schema/{league,config}.ts` and
- * `lib/services/league/defaults.ts`. Those modules define Drizzle tables, so the
+ * League / config defaults. Convex has no column defaults, so the
  * values are copied here rather than imported.
  */
 import type { Infer } from "convex/values";

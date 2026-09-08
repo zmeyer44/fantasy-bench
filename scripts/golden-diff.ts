@@ -21,8 +21,9 @@
  *  - usage events, and that every team-week rollup equals the sum of its events
  *    (`ledger.verify`, which is the reconciliation action itself).
  *
- * Player identity crosses the two systems through `players.legacyId`: the golden
- * uuid maps to a Convex id through `seed.lookupLegacy`, and to a sleeper id
+ * Player identity crosses the two systems through the seed's id map
+ * (`.cache/seed-map.<deployment>.json`): the golden uuid maps to a Convex id, and
+ * to a sleeper id
  * through `players.json`.
  *
  * A mismatch fails the script (exit 1) **unless** it matches an entry in
@@ -38,6 +39,7 @@ import { fileURLToPath } from "node:url";
 import { ConvexHttpClient } from "convex/browser";
 
 import { api } from "../convex/_generated/api";
+import { readIdMap, seedMapFile } from "./seed-map";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const GOLDEN = path.join(ROOT, "tests", "golden", "postgres-week1");
@@ -306,28 +308,23 @@ async function paginate<T>(
   return out;
 }
 
-/** Convex player id -> sleeper id, via `players.legacyId` and the golden dump. */
+/** Convex player id -> sleeper id, via the seed's id map and the golden dump. */
 async function sleeperMap(): Promise<Map<string, string>> {
   const goldenSleeper = new Map(
     readGolden("players").map((p) => [String(p.id), String(p.sleeper_id ?? p.id)]),
   );
   const out = new Map<string, string>();
-  let cursor: string | null = null;
-  for (;;) {
-    const page: { map: Record<string, string>; continueCursor: string; isDone: boolean } =
-      await client.query(api.seed.lookupLegacy, {
-        secret: secret!,
-        table: "players",
-        cursor,
-        numItems: 1_000,
-      });
-    for (const [legacyId, id] of Object.entries(page.map)) {
-      const sleeper = goldenSleeper.get(legacyId);
-      if (sleeper) out.set(id, sleeper);
-    }
-    if (page.isDone) return out;
-    cursor = page.continueCursor;
+  const players = readIdMap(seedMapFile(ROOT)).players ?? {};
+  if (!Object.keys(players).length) {
+    throw new Error(
+      `${seedMapFile(ROOT)} has no players; run \`npm run seed:convex\` against this deployment first.`,
+    );
   }
+  for (const [goldenId, convexId] of Object.entries(players)) {
+    const sleeper = goldenSleeper.get(goldenId);
+    if (sleeper) out.set(convexId, sleeper);
+  }
+  return out;
 }
 
 type RunItem = {

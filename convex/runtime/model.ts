@@ -1,5 +1,5 @@
 /**
- * Model resolution and the price book (port of `lib/agent/model.ts`).
+ * Model resolution and the price book.
  *
  * Models are addressed by pinned Vercel AI Gateway id (`anthropic/claude-sonnet-4.5`).
  * "latest" aliases are rejected outright — PRD 5.1/7 require a pinned version for

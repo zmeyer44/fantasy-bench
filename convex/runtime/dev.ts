@@ -26,6 +26,8 @@ export const smokeLineup = internalMutation({
     /** Defaults to the league's first team. */
     teamId: v.optional(v.id("teams")),
     modelId: v.optional(v.string()),
+    /** Window type to smoke (default lineup). */
+    windowType: v.optional(v.string()),
   },
   returns: v.object({
     runId: v.id("runs"),
@@ -42,7 +44,10 @@ export const smokeLineup = internalMutation({
       .order("desc")
       .take(WINDOW_SCAN);
     const window = windows.find(
-      (w) => w.type === "lineup" && w.snapshotId != null && (w.status === "open" || w.status === "closed"),
+      (w) =>
+        w.type === (args.windowType ?? "lineup") &&
+        w.snapshotId != null &&
+        (w.status === "open" || w.status === "closed"),
     );
     if (!window) throw new Error("smokeLineup: no lineup window with a snapshot in this league");
 
@@ -137,6 +142,45 @@ export const runReport = internalQuery({
         committed: a.committedAt != null,
       })),
       usageEvents: usage.length,
+    };
+  },
+});
+
+/** Dev audit: the step/action timeline of one run (indices, creation order, tool names). */
+export const stepAudit = internalQuery({
+  args: { runId: v.id("runs") },
+  handler: async (ctx, { runId }) => {
+    const run = await ctx.db.get("runs", runId);
+    // Bounded: one run has at most maxSteps (≤ 31) steps and a few dozen actions.
+    const steps = await ctx.db
+      .query("run_steps")
+      .withIndex("by_runId_stepIndex", (q) => q.eq("runId", runId))
+      .collect();
+    const actions = await ctx.db
+      .query("run_actions")
+      .withIndex("by_runId_stepIndex", (q) => q.eq("runId", runId))
+      .collect();
+    return {
+      run: run && {
+        attempt: run.attempt,
+        status: run.status,
+        stepCount: run.stepCount,
+        lastPersistedStep: run.lastPersistedStep,
+        startedAt: run.startedAt,
+        finishedAt: run.finishedAt,
+        workId: run.workId,
+      },
+      steps: steps
+        .sort((a, b) => a._creationTime - b._creationTime)
+        .map((s) => ({
+          stepIndex: s.stepIndex,
+          at: s._creationTime,
+          tools: (Array.isArray(s.toolCalls) ? (s.toolCalls as Array<{ toolName?: string }>) : []).map((t) => t.toolName),
+          text: (s.text ?? "").slice(0, 40),
+        })),
+      actions: actions
+        .sort((a, b) => a._creationTime - b._creationTime)
+        .map((a) => ({ stepIndex: a.stepIndex, at: a._creationTime, type: a.actionType, ok: a.validationResult.ok })),
     };
   },
 });

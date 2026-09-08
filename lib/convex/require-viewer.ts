@@ -1,7 +1,7 @@
 /**
  * Route guards for server components, on Convex Auth.
  *
- * Replaces `lib/auth/session#requireUser`: the viewer comes from
+ * The server-side viewer guard: the viewer comes from
  * `api.users.me` through the request's Convex Auth token, so a page that needs
  * a session bounces to `/login?next=…` exactly as it did before.
  */

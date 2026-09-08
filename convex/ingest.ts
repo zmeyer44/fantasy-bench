@@ -9,7 +9,7 @@
  * `upsertOwnership` in batches of ≤ 400. Each batch is its own transaction, so a
  * failure half-way leaves a coherent prefix rather than nothing.
  *
- * Two rules run through the whole file, unchanged from `lib/providers/ingest.ts`:
+ * Two rules run through the whole file:
  *
  *  - Projections are **append-only vintages**: a row is written only when the
  *    provider's `effectiveAt` is strictly newer than the stored one for that
@@ -684,7 +684,7 @@ export type IngestPlan = {
 };
 
 /**
- * What each cron pulls (port of `lib/providers/ingest-plan.ts`, but chosen by
+ * What each cron pulls (chosen by
  * the caller rather than by the clock, because the two crons already encode the
  * clock):
  *

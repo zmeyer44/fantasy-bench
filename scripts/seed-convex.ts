@@ -14,15 +14,17 @@
  *     (`api.auth.signIn`, `flow: "signUp"`, falling back to `"signIn"`), so the
  *     credential hash is genuine and package D can sign in with the same password.
  *  3. Imports `tests/golden/postgres-week1/*.json` in dependency order through
- *     `seed.importBatch`, mapping every Postgres uuid to a Convex id via the
- *     `legacyId` each row carries.
+ *     `seed.importBatch`, keeping the golden-uuid -> Convex-id map it builds as
+ *     it goes.
  *
  * Derived data the old schema did not have is computed here rather than at read
  * time (§2.3/§2.6): snapshot chunks + digests, the three rollup tables,
  * `team_standings`, `run_search_docs` and `player_projection_latest`.
  *
- * Idempotent: a table whose rows already carry the golden `legacyId`s is skipped,
- * so a partial run can be resumed.
+ * Idempotent: the id map is written to `.cache/seed-map.<deployment>.json` after
+ * every table and read back on the next run, so rows already imported are skipped
+ * and a partial run resumes where it stopped. Delete that file only if you have
+ * also wiped the deployment (`npx convex run seed:reset '{}'`).
  */
 import fs from "node:fs";
 import path from "node:path";
@@ -31,6 +33,7 @@ import { fileURLToPath } from "node:url";
 import { ConvexHttpClient } from "convex/browser";
 
 import { api } from "../convex/_generated/api";
+import { readIdMap, seedMapFile, setTable, tableMap, writeIdMap, type IdMap } from "./seed-map";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const GOLDEN = path.join(ROOT, "tests", "golden", "postgres-week1");
@@ -131,28 +134,40 @@ function clean<T extends Row>(row: T): T {
 
 // ------------------------------------------------------------------ id mapping
 
-/** `table -> legacyId -> Convex _id`. */
+/**
+ * `table -> golden id -> Convex _id`, loaded from and written back to
+ * `.cache/seed-map.<deployment>.json` (`scripts/seed-map.ts`). Convex rows carry
+ * no id of their own, so this file *is* the idempotency key.
+ */
+const MAP_FILE = seedMapFile(ROOT);
+const persisted: IdMap = readIdMap(MAP_FILE);
 const ids = new Map<string, Map<string, string>>();
 
 function mapOf(table: string): Map<string, string> {
   let m = ids.get(table);
   if (!m) {
-    m = new Map();
+    m = tableMap(persisted, table);
     ids.set(table, m);
   }
   return m;
 }
 
-function ref(table: string, legacyId: unknown): string | undefined {
-  if (legacyId === null || legacyId === undefined) return undefined;
-  const found = mapOf(table).get(String(legacyId));
-  if (!found) throw new Error(`No imported ${table} row for legacy id ${String(legacyId)}`);
+/** Fold the live maps back into the file. Called after every table. */
+function saveMap(): void {
+  for (const [table, m] of ids) setTable(persisted, table, m);
+  writeIdMap(MAP_FILE, persisted);
+}
+
+function ref(table: string, goldenId: unknown): string | undefined {
+  if (goldenId === null || goldenId === undefined) return undefined;
+  const found = mapOf(table).get(String(goldenId));
+  if (!found) throw new Error(`No imported ${table} row for golden id ${String(goldenId)}`);
   return found;
 }
 
-function refOpt(table: string, legacyId: unknown): string | undefined {
-  if (legacyId === null || legacyId === undefined) return undefined;
-  return mapOf(table).get(String(legacyId));
+function refOpt(table: string, goldenId: unknown): string | undefined {
+  if (goldenId === null || goldenId === undefined) return undefined;
+  return mapOf(table).get(String(goldenId));
 }
 
 // -------------------------------------------------------------------- remapping
@@ -164,7 +179,7 @@ function refOpt(table: string, legacyId: unknown): string | undefined {
  * and views join them against `roster_slots.playerId` / `teams._id` / thread and
  * trade ids. Left as uuids they would break every roster and projection lookup on
  * the golden data, so every blob that is *read as data* is remapped through the
- * same `legacyId -> _id` maps the columns use.
+ * same golden-id -> `_id` maps the columns use.
  *
  * `run_steps.responseMessages/toolCalls/toolResults` are deliberately NOT remapped:
  * they are the verbatim model transcript (trace text, replayed on resume), nothing
@@ -332,35 +347,19 @@ if (!secret) throw new Error("SEED_SECRET is not set (see .env.local).");
 const client = new ConvexHttpClient(url);
 const counts: Array<[string, number]> = [];
 
-/** Pull the whole `legacyId -> _id` map for a table, paging the scan. */
-async function loadExisting(table: string): Promise<void> {
-  const target = mapOf(table);
-  let cursor: string | null = null;
-  for (;;) {
-    const page: { map: Record<string, string>; continueCursor: string; isDone: boolean } =
-      await client.query(api.seed.lookupLegacy, {
-        secret: secret!,
-        table: table as never,
-        cursor,
-        numItems: 1_000,
-      });
-    for (const [legacyId, id] of Object.entries(page.map)) target.set(legacyId, id);
-    if (page.isDone) return;
-    cursor = page.continueCursor;
-  }
-}
-
 /**
  * Insert `rows` (already shaped for the schema) and record their ids.
- * Rows whose `legacyId` is already present are skipped, which is what makes a
- * re-run cheap and a half-finished run resumable.
+ *
+ * Each row carries `__golden`, the golden uuid it came from. That key is the
+ * local dedupe key and never a column: it is stripped before the insert and
+ * written to the id map afterwards. Rows already in the map are skipped, which is
+ * what makes a re-run cheap and a half-finished run resumable.
  */
 async function importRows(table: string, rows: Row[], batchSize = 400): Promise<number> {
-  await loadExisting(table);
   const known = mapOf(table);
   const pending = rows.filter((row) => {
-    const legacyId = row.legacyId as string | undefined;
-    return legacyId === undefined || !known.has(legacyId);
+    const goldenId = row.__golden as string | undefined;
+    return goldenId === undefined || !known.has(goldenId);
   });
 
   for (let i = 0; i < pending.length; i += batchSize) {
@@ -368,13 +367,15 @@ async function importRows(table: string, rows: Row[], batchSize = 400): Promise<
     const { ids: inserted } = await client.mutation(api.seed.importBatch, {
       secret: secret!,
       table,
-      rows: batch,
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars -- __golden is the local dedupe key, never a column
+      rows: batch.map(({ __golden, ...rest }) => rest),
     });
     batch.forEach((row, index) => {
-      const legacyId = row.legacyId as string | undefined;
-      if (legacyId) known.set(legacyId, inserted[index]);
+      const goldenId = row.__golden as string | undefined;
+      if (goldenId) known.set(goldenId, inserted[index]);
     });
   }
+  saveMap();
 
   counts.push([table, rows.length]);
   process.stdout.write(
@@ -385,12 +386,12 @@ async function importRows(table: string, rows: Row[], batchSize = 400): Promise<
 }
 
 /**
- * Insert rows for a derived table — one with no `legacyId` to de-duplicate on
+ * Insert rows for a derived table — one with no golden uuid to de-duplicate on
  * (`snapshot_chunks`, the rollups, `team_standings`, `run_search_docs`,
- * `player_projection_latest`). The table is cleared first so a re-run replaces
- * rather than doubles.
+ * `player_projection_latest`, `run_step_payloads`). The table is cleared first so
+ * a re-run replaces rather than doubles.
  */
-async function importDerived(table: string, rows: Row[], batchSize = 400): Promise<void> {
+async function importDerived(table: string, rows: Row[], batchSize = 400): Promise<string[]> {
   for (;;) {
     const { done } = await client.mutation(api.seed.clearTable, {
       secret: secret!,
@@ -398,15 +399,18 @@ async function importDerived(table: string, rows: Row[], batchSize = 400): Promi
     });
     if (done) break;
   }
+  const ids: string[] = [];
   for (let i = 0; i < rows.length; i += batchSize) {
-    await client.mutation(api.seed.importBatch, {
+    const inserted = await client.mutation(api.seed.importBatch, {
       secret: secret!,
       table,
       rows: rows.slice(i, i + batchSize),
     });
+    ids.push(...inserted.ids);
   }
   counts.push([table, rows.length]);
   process.stdout.write(`  ${table.padEnd(26)} ${String(rows.length).padStart(5)} rows\n`);
+  return ids;
 }
 
 async function patchRows(table: string, rows: Array<{ id: string; patch: Row }>): Promise<void> {
@@ -435,9 +439,8 @@ async function main(): Promise<void> {
   process.stdout.write(`  demo user                    ${DEMO_USER.email} (${demoUserId})\n`);
 
   const goldenUser = readGolden("users")[0];
-  const legacyUserId = String(goldenUser.id);
-  mapOf("users").set(legacyUserId, demoUserId);
-  await patchRows("users", [{ id: demoUserId, patch: { legacyId: legacyUserId } }]);
+  mapOf("users").set(String(goldenUser.id), demoUserId);
+  saveMap();
 
   // 3 -------------------------------------------------------------- the league
   await importLeague();
@@ -543,7 +546,7 @@ async function importLeague(): Promise<void> {
   await importRows(
     "leagues",
     readGolden("leagues").map((row) => ({
-      legacyId: String(row.id),
+      __golden: String(row.id),
       name: String(row.name),
       slug: String(row.slug),
       commissionerUserId: ref("users", row.commissioner_user_id)!,
@@ -563,7 +566,7 @@ async function importLeague(): Promise<void> {
     "league_rules",
     readGolden("league_rules").map((row) =>
       clean({
-        legacyId: String(row.id),
+        __golden: String(row.id),
         leagueId: ref("leagues", row.league_id)!,
         scoringPreset: String(row.scoring_preset),
         superflex: row.superflex === true,
@@ -606,7 +609,7 @@ async function importLeague(): Promise<void> {
     "league_members",
     readGolden("league_members").map((row) =>
       clean({
-        legacyId: String(row.id),
+        __golden: String(row.id),
         leagueId: ref("leagues", row.league_id)!,
         userId: ref("users", row.user_id)!,
         role: String(row.role),
@@ -619,7 +622,7 @@ async function importLeague(): Promise<void> {
     "teams",
     readGolden("teams").map((row) =>
       clean({
-        legacyId: String(row.id),
+        __golden: String(row.id),
         leagueId: ref("leagues", row.league_id)!,
         ownerUserId: refOpt("users", row.owner_user_id),
         name: String(row.name),
@@ -637,7 +640,7 @@ async function importLeague(): Promise<void> {
     "weeks",
     readGolden("weeks").map((row) =>
       clean({
-        legacyId: String(row.id),
+        __golden: String(row.id),
         leagueId: ref("leagues", row.league_id)!,
         weekNo: numOr(row.week_no, 0),
         startsAt: msRequired(row.starts_at, 0),
@@ -652,7 +655,7 @@ async function importLeague(): Promise<void> {
     "matchups",
     readGolden("matchups").map((row) =>
       clean({
-        legacyId: String(row.id),
+        __golden: String(row.id),
         leagueId: ref("leagues", row.league_id)!,
         weekNo: numOr(row.week_no, 0),
         homeTeamId: ref("teams", row.home_team_id)!,
@@ -668,7 +671,7 @@ async function importLeague(): Promise<void> {
     "team_results",
     readGolden("team_results").map((row) =>
       clean({
-        legacyId: String(row.id),
+        __golden: String(row.id),
         leagueId: ref("leagues", row.league_id)!,
         teamId: ref("teams", row.team_id)!,
         weekNo: numOr(row.week_no, 0),
@@ -707,7 +710,7 @@ async function importPlayersAndProjections(): Promise<void> {
     players.map((row) => {
       const externalIds = externalIdsOf(row.raw);
       return clean({
-        legacyId: String(row.id),
+        __golden: String(row.id),
         sleeperId: String(row.sleeper_id),
         gsisId: str(row.gsis_id),
         espnId: externalIds.espn_id,
@@ -736,7 +739,7 @@ async function importPlayersAndProjections(): Promise<void> {
     "nfl_games",
     readGolden("nfl_games").map((row) =>
       clean({
-        legacyId: String(row.id),
+        __golden: String(row.id),
         season: numOr(row.season, 0),
         week: numOr(row.week, 0),
         gameId: String(row.game_id),
@@ -756,7 +759,7 @@ async function importPlayersAndProjections(): Promise<void> {
     "player_projections",
     projections.map((row) =>
       clean({
-        legacyId: String(row.id),
+        __golden: String(row.id),
         playerId: ref("players", row.player_id)!,
         season: numOr(row.season, 0),
         week: numOr(row.week, 0),
@@ -803,7 +806,7 @@ async function importPlayersAndProjections(): Promise<void> {
     "player_stats_weekly",
     readGolden("player_stats_weekly").map((row) =>
       clean({
-        legacyId: String(row.id),
+        __golden: String(row.id),
         playerId: ref("players", row.player_id)!,
         season: numOr(row.season, 0),
         week: numOr(row.week, 0),
@@ -840,7 +843,6 @@ async function importSkills(): Promise<void> {
   const stamps: Array<{ id: string; patch: Row }> = [];
   const fresh: Row[] = [];
 
-  await loadExisting("skills");
   for (const row of rows) {
     const slug = String(row.slug);
     const existing = await client.query(api.skills.get, { slug });
@@ -849,7 +851,6 @@ async function importSkills(): Promise<void> {
       stamps.push({
         id: existing._id,
         patch: clean({
-          legacyId: String(row.id),
           authorUserId: refOpt("users", row.author_user_id),
           createdAt: ms(row.created_at),
         }),
@@ -857,7 +858,7 @@ async function importSkills(): Promise<void> {
     } else {
       fresh.push(
         clean({
-          legacyId: String(row.id),
+          __golden: String(row.id),
           authorUserId: refOpt("users", row.author_user_id),
           name: String(row.name),
           slug,
@@ -875,6 +876,7 @@ async function importSkills(): Promise<void> {
 
   if (stamps.length) await patchRows("skills", stamps);
   if (fresh.length) await importRows("skills", fresh);
+  saveMap();
   counts.push(["skills", rows.length]);
   process.stdout.write(
     `  ${"skills".padEnd(26)} ${String(rows.length).padStart(5)} rows (${stamps.length} merged with seed:base)\n`,
@@ -896,7 +898,7 @@ async function importConfigs(): Promise<void> {
     "agent_configs",
     configs.map((row) =>
       clean({
-        legacyId: String(row.id),
+        __golden: String(row.id),
         teamId: ref("teams", row.team_id)!,
         leagueId: ref("leagues", leagueOfTeam(String(row.team_id)))!,
         noteToAgent: str(row.note_to_agent),
@@ -924,7 +926,7 @@ async function importConfigs(): Promise<void> {
       const legacyTeamId = teamByConfig.get(String(row.config_id));
       if (!legacyTeamId) throw new Error(`config_versions row ${String(row.id)} has no config`);
       return clean({
-        legacyId: String(row.id),
+        __golden: String(row.id),
         configId: ref("agent_configs", row.config_id)!,
         teamId: ref("teams", legacyTeamId)!,
         leagueId: ref("leagues", leagueOfTeam(legacyTeamId))!,
@@ -971,13 +973,13 @@ async function importConfigs(): Promise<void> {
 
 let teamLeagues: Map<string, string> | null = null;
 
-/** Legacy team id -> legacy league id, from `teams.json`. */
-function leagueOfTeam(legacyTeamId: string): string {
+/** Golden team id -> golden league id, from `teams.json`. */
+function leagueOfTeam(goldenTeamId: string): string {
   if (!teamLeagues) {
     teamLeagues = new Map(readGolden("teams").map((row) => [String(row.id), String(row.league_id)]));
   }
-  const leagueId = teamLeagues.get(legacyTeamId);
-  if (!leagueId) throw new Error(`No golden team ${legacyTeamId}`);
+  const leagueId = teamLeagues.get(goldenTeamId);
+  if (!leagueId) throw new Error(`No golden team ${goldenTeamId}`);
   return leagueId;
 }
 
@@ -1030,7 +1032,7 @@ async function importWindowsAndSnapshots(): Promise<void> {
     "windows",
     windows.map((row) =>
       clean({
-        legacyId: String(row.id),
+        __golden: String(row.id),
         leagueId: ref("leagues", row.league_id)!,
         type: String(row.type),
         label: String(row.label),
@@ -1058,7 +1060,7 @@ async function importWindowsAndSnapshots(): Promise<void> {
     const chunkCount = 1 + Math.ceil(playerCount / SNAPSHOT_PLAYERS_PER_CHUNK);
     snapshotRows.push(
       clean({
-        legacyId: String(row.id),
+        __golden: String(row.id),
         leagueId: ref("leagues", row.league_id)!,
         windowId: refOpt("windows", row.window_id),
         season: numOr(payload.season ?? row.season, 0),
@@ -1168,7 +1170,7 @@ async function importRunsAndLedger(): Promise<void> {
       if (!window) throw new Error(`run ${String(row.id)} has no window`);
       const stepCount = numOr(row.step_count, 0);
       return clean({
-        legacyId: String(row.id),
+        __golden: String(row.id),
         windowId: ref("windows", row.window_id)!,
         leagueId: ref("leagues", row.league_id)!,
         teamId: refOpt("teams", row.team_id),
@@ -1203,15 +1205,25 @@ async function importRunsAndLedger(): Promise<void> {
   const runsById = new Map(runs.map((row) => [String(row.id), row]));
 
   // run_steps, with oversized tool results split into run_step_payloads (§2.3).
+  //
+  // The payload rows go in *first*, so the stub left in `toolResults` can carry
+  // the real `payloadRef` — `convex/runs.ts` follows that ref to `runs.stepPayload`,
+  // and a null ref would make the result unreachable from the trace viewer.
+  // `run_step_payloads` is keyed by (runId, stepIndex, toolCallId), not by the
+  // step's document id, so it can be written before the steps exist.
   const overflow: Row[] = [];
-  const stepRows = steps.map((row) => {
+  /** Where each overflow row's ref has to be written back. */
+  const overflowSlots: Array<{ step: number; result: number }> = [];
+  const inlinedByStep: Row[][] = [];
+
+  const stepRows = steps.map((row, stepRowIndex) => {
     const run = runsById.get(String(row.run_id));
     if (!run) throw new Error(`run_step ${String(row.id)} has no run`);
     const runId = ref("runs", row.run_id)!;
     const stepIndex = numOr(row.step_index, 0);
 
     const results = Array.isArray(row.tool_results) ? (row.tool_results as Row[]) : [];
-    const inlined = results.map((result) => {
+    const inlined = results.map((result, resultIndex) => {
       if (bytesOf(result) <= PAYLOAD_INLINE_LIMIT) return result;
       overflow.push({
         runId,
@@ -1221,11 +1233,14 @@ async function importRunsAndLedger(): Promise<void> {
         payload: result,
         bytes: bytesOf(result),
       });
-      return { toolCallId: result.toolCallId, payloadRef: null, overflowed: true };
+      overflowSlots.push({ step: stepRowIndex, result: resultIndex });
+      // `payloadRef` is filled in below, once the payload rows have ids.
+      return { toolCallId: result.toolCallId, payloadRef: null as string | null, overflowed: true };
     });
+    inlinedByStep.push(inlined);
 
     return clean({
-      legacyId: String(row.id),
+      __golden: String(row.id),
       runId,
       leagueId: ref("leagues", run.league_id)!,
       stepIndex,
@@ -1240,11 +1255,28 @@ async function importRunsAndLedger(): Promise<void> {
       finishReason: str(row.finish_reason),
       latencyMs: num(row.latency_ms),
       costUsd: numOr(row.cost_usd, 0),
-      bytes: bytesOf(row.messages) + bytesOf(inlined),
+      bytes: 0, // set below, once `toolResults` is final
     });
   });
+
+  if (overflow.length) {
+    const payloadIds = await importDerived("run_step_payloads", overflow, 10);
+    if (payloadIds.length !== overflowSlots.length) {
+      throw new Error(
+        `run_step_payloads returned ${payloadIds.length} ids for ${overflowSlots.length} rows`,
+      );
+    }
+    overflowSlots.forEach((slot, index) => {
+      const stub = inlinedByStep[slot.step][slot.result] as { payloadRef: string | null };
+      stub.payloadRef = payloadIds[index];
+    });
+  }
+
+  stepRows.forEach((step, index) => {
+    step.bytes = bytesOf(steps[index].messages) + bytesOf(inlinedByStep[index]);
+  });
+
   await importRows("run_steps", stepRows, 20);
-  if (overflow.length) await importDerived("run_step_payloads", overflow, 10);
 
   // usage_events + the three rollups, in one pass (§2.6).
   type Counters = {
@@ -1301,7 +1333,7 @@ async function importRunsAndLedger(): Promise<void> {
 
     eventRows.push(
       clean({
-        legacyId: String(row.id),
+        __golden: String(row.id),
         runId: ref("runs", row.run_id)!,
         stepIndex: numOr(row.step_index, 0),
         leagueId: ref("leagues", row.league_id)!,
@@ -1406,7 +1438,7 @@ async function importRunActions(): Promise<void> {
       if (!run) throw new Error(`run_action ${String(row.id)} has no run`);
       const validation = (row.validation_result ?? {}) as Row;
       return clean({
-        legacyId: String(row.id),
+        __golden: String(row.id),
         runId: ref("runs", row.run_id)!,
         leagueId: ref("leagues", run.league_id)!,
         teamId: refOpt("teams", run.team_id),
@@ -1447,7 +1479,7 @@ async function importRosterAndTransactions(): Promise<void> {
     "roster_slots",
     readGolden("roster_slots").map((row) =>
       clean({
-        legacyId: String(row.id),
+        __golden: String(row.id),
         leagueId: ref("leagues", leagueOfTeam(String(row.team_id)))!,
         teamId: ref("teams", row.team_id)!,
         playerId: ref("players", row.player_id)!,
@@ -1461,7 +1493,7 @@ async function importRosterAndTransactions(): Promise<void> {
     "lineups",
     readGolden("lineups").map((row) =>
       clean({
-        legacyId: String(row.id),
+        __golden: String(row.id),
         teamId: ref("teams", row.team_id)!,
         leagueId: ref("leagues", leagueOfTeam(String(row.team_id)))!,
         weekNo: numOr(row.week_no, 0),
@@ -1480,7 +1512,7 @@ async function importRosterAndTransactions(): Promise<void> {
     "draft_picks",
     readGolden("draft_picks").map((row) =>
       clean({
-        legacyId: String(row.id),
+        __golden: String(row.id),
         leagueId: ref("leagues", row.league_id)!,
         round: numOr(row.round, 0),
         pickNo: numOr(row.pick_no, 0),
@@ -1501,7 +1533,7 @@ async function importRosterAndTransactions(): Promise<void> {
     "waiver_claims",
     readGolden("waiver_claims").map((row) =>
       clean({
-        legacyId: String(row.id),
+        __golden: String(row.id),
         leagueId: ref("leagues", row.league_id)!,
         teamId: ref("teams", row.team_id)!,
         windowId: ref("windows", row.window_id)!,
@@ -1541,7 +1573,7 @@ async function importSocial(): Promise<void> {
     "threads",
     threads.map((row) =>
       clean({
-        legacyId: String(row.id),
+        __golden: String(row.id),
         leagueId: ref("leagues", row.league_id)!,
         teamAId: ref("teams", row.team_a_id)!,
         teamBId: ref("teams", row.team_b_id)!,
@@ -1558,7 +1590,7 @@ async function importSocial(): Promise<void> {
     messages.map((row) => {
       const threadLeague = threads.find((t) => String(t.id) === String(row.thread_id))?.league_id;
       return clean({
-        legacyId: String(row.id),
+        __golden: String(row.id),
         threadId: ref("threads", row.thread_id)!,
         leagueId: ref("leagues", threadLeague)!,
         senderTeamId: ref("teams", row.sender_team_id)!,
@@ -1583,7 +1615,7 @@ async function importSocial(): Promise<void> {
     "trades",
     readGolden("trades").map((row) =>
       clean({
-        legacyId: String(row.id),
+        __golden: String(row.id),
         leagueId: ref("leagues", row.league_id)!,
         proposerTeamId: ref("teams", row.proposer_team_id)!,
         recipientTeamId: ref("teams", row.recipient_team_id)!,
@@ -1620,7 +1652,7 @@ async function importSocial(): Promise<void> {
     readGolden("trade_events").map((row) => {
       const trade = readGolden("trades").find((t) => String(t.id) === String(row.trade_id));
       return clean({
-        legacyId: String(row.id),
+        __golden: String(row.id),
         tradeId: ref("trades", row.trade_id)!,
         leagueId: ref("leagues", trade?.league_id)!,
         type: String(row.type),
@@ -1638,7 +1670,7 @@ async function importSocial(): Promise<void> {
     "trade_votes",
     readGolden("trade_votes").map((row) =>
       clean({
-        legacyId: String(row.id),
+        __golden: String(row.id),
         tradeId: ref("trades", row.trade_id)!,
         userId: ref("users", row.user_id)!,
         vote: String(row.vote),
@@ -1650,7 +1682,7 @@ async function importSocial(): Promise<void> {
     "transactions",
     readGolden("transactions").map((row) =>
       clean({
-        legacyId: String(row.id),
+        __golden: String(row.id),
         leagueId: ref("leagues", row.league_id)!,
         teamId: ref("teams", row.team_id)!,
         type: String(row.type),
@@ -1668,7 +1700,7 @@ async function importSocial(): Promise<void> {
     "forum_posts",
     readGolden("forum_posts").map((row) =>
       clean({
-        legacyId: String(row.id),
+        __golden: String(row.id),
         leagueId: ref("leagues", row.league_id)!,
         teamId: refOpt("teams", row.team_id),
         runId: refOpt("runs", row.run_id),
@@ -1689,7 +1721,7 @@ async function importSocial(): Promise<void> {
     "forum_comments",
     readGolden("forum_comments").map((row) =>
       clean({
-        legacyId: String(row.id),
+        __golden: String(row.id),
         postId: ref("forum_posts", row.post_id)!,
         leagueId: ref("leagues", row.league_id)!,
         parentId: refOpt("forum_comments", row.parent_id),
@@ -1709,7 +1741,7 @@ async function importSocial(): Promise<void> {
     "forum_votes",
     readGolden("forum_votes").map((row) =>
       clean({
-        legacyId: String(row.id),
+        __golden: String(row.id),
         leagueId: ref("leagues", row.league_id)!,
         targetType: String(row.target_type),
         targetId: String(row.target_id),
@@ -1724,7 +1756,7 @@ async function importSocial(): Promise<void> {
     "league_rule_changes",
     readGolden("league_rule_changes").map((row) =>
       clean({
-        legacyId: String(row.id),
+        __golden: String(row.id),
         leagueId: ref("leagues", row.league_id)!,
         userId: refOpt("users", row.user_id),
         field: String(row.field),
@@ -1740,7 +1772,7 @@ async function importSocial(): Promise<void> {
     "custom_providers",
     readGolden("custom_providers").map((row) =>
       clean({
-        legacyId: String(row.id),
+        __golden: String(row.id),
         leagueId: refOpt("leagues", row.league_id),
         teamId: refOpt("teams", row.team_id),
         name: String(row.name),

@@ -1,5 +1,5 @@
 /**
- * Draft progression (PRD §5.2) — the port of `lib/scheduler/draft-progression.ts`.
+ * Draft progression (PRD §5.2).
  *
  * The old version was polled: every five minutes the tick asked "is a pick
  * window past its close?" and, if so, auto-picked and opened the next one. Here

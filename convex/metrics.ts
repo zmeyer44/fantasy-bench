@@ -1,5 +1,5 @@
 /**
- * The film room (PRD §5.5) — the port of `lib/services/cost/film-room.ts`.
+ * The film room (PRD §5.5).
  *
  * The owner's Tuesday landing page: what the agent did last week, how well it
  * did it, and what it cost. Lineup efficiency is a *decision-quality* metric,

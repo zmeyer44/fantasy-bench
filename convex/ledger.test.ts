@@ -1116,7 +1116,6 @@ describe("ledger.recordStep — golden equivalence", () => {
     const ids = await t.run(async (ctx) => {
       const userId = await ctx.db.insert("users", { email: "golden@x.dev" });
       const leagueId = await ctx.db.insert("leagues", {
-        legacyId: String(goldenLeague.id),
         name: String(goldenLeague.name ?? "Golden"),
         slug: `g-${Math.random()}`,
         commissionerUserId: userId,
@@ -1131,7 +1130,6 @@ describe("ledger.recordStep — golden equivalence", () => {
       const teams: Record<string, Id<"teams">> = {};
       for (const row of readGolden("teams")) {
         teams[String(row.id)] = await ctx.db.insert("teams", {
-          legacyId: String(row.id),
           leagueId,
           name: String(row.name),
           abbreviation: String(row.abbreviation ?? "TM"),
@@ -1148,7 +1146,6 @@ describe("ledger.recordStep — golden equivalence", () => {
         windows[String(row.id)] = {
           weekNo,
           id: await ctx.db.insert("windows", {
-            legacyId: String(row.id),
             leagueId,
             type: String(row.type) as "lineup",
             label: String(row.label),
@@ -1170,7 +1167,6 @@ describe("ledger.recordStep — golden equivalence", () => {
         const window = windows[String(row.window_id)];
         const legacyTeamId = row.team_id == null ? null : String(row.team_id);
         runs[String(row.id)] = await ctx.db.insert("runs", {
-          legacyId: String(row.id),
           leagueId,
           windowId: window.id,
           teamId: legacyTeamId ? teams[legacyTeamId] : undefined,

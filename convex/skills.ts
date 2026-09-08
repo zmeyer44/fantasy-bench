@@ -194,7 +194,7 @@ export const MAX_SKILL_NAME_CHARS = 80;
 export const MAX_SKILL_DESCRIPTION_CHARS = 280;
 const MIN_SKILL_NAME_CHARS = 3;
 
-/** `SkillValidationError` → BAD_REQUEST, as `lib/trpc/routers/skills.ts` mapped it. */
+/** `SkillValidationError` → BAD_REQUEST. */
 function validateBody(bodyMd: string): void {
   if (!bodyMd.trim()) throw appError("BAD_REQUEST", "The skill body cannot be empty");
   if (bodyMd.length > MAX_SKILL_BODY_CHARS) {

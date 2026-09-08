@@ -1,6 +1,6 @@
 /**
  * The skill library. Reads are public and cross-league; private skills are
- * visible only to their author (`lib/trpc/routers/skills.ts` + `lib/services/skills`).
+ * visible only to their author.
  */
 import { convexTest } from "convex-test";
 import { describe, expect, it } from "vitest";

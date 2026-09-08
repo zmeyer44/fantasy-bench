@@ -1,7 +1,7 @@
 /**
  * Types shared by the runtime's prompt, tools and executor.
  *
- * The port of `lib/agent/tools/context.ts`'s type half. The one structural change
+ * The type half of the tool context. The one structural change
  * from the Postgres runtime is `ctx`: tools no longer hold a Drizzle executor,
  * they hold the Convex `ActionCtx` and reach the database through internal
  * queries and mutations.

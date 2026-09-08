@@ -2,7 +2,7 @@
  * Decision windows (PRD §5.3): what is open now, what opens next, the grid for a
  * week, and the idempotent materializer that turns templates into rows.
  *
- * Port of `lib/services/views/windows.ts` + `lib/scheduler/materialize.ts`. The
+ * Window reads plus materialisation. The
  * old view counted runs with a correlated sub-query per row; here the counts are
  * denormalised onto the window (`runCount`, `terminalRunCount`), maintained by
  * the dispatch/persist/close mutations in Phase 5.
@@ -13,7 +13,6 @@
 import { v } from "convex/values";
 
 import { DEFAULT_MODEL_ID } from "../lib/models";
-import type { WindowView as LegacyWindowView } from "../lib/services/views/windows";
 import { internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
 import {
@@ -29,17 +28,24 @@ import { countdown, windowLabelText } from "./lib/views_shared";
 import { enqueueRun } from "./runs";
 import { rescheduleWindow, scheduleWindowJobs } from "./scheduling";
 
-/** The old `WindowView` with epoch-ms dates, plus the denormalised terminal count. */
-export type WindowView = Omit<
-  LegacyWindowView,
-  "id" | "opensAt" | "submissionDeadlineAt" | "closesAt" | "snapshotId"
-> & {
+/** One decision window as the UI reads it (dates are epoch ms). */
+export type WindowView = {
   id: Id<"windows">;
+  type: Doc<"windows">["type"];
+  label: string;
+  labelText: string;
+  weekNo: number | null;
+  roundNo: number;
   opensAt: number;
   submissionDeadlineAt: number;
   closesAt: number;
+  status: Doc<"windows">["status"];
   snapshotId: Id<"snapshots"> | null;
+  runCount: number;
   terminalRunCount: number;
+  /** Human countdown to the next state change, relative to `now`. */
+  countdown: string;
+  phase: "past" | "open" | "upcoming";
 };
 
 export type WindowSchedule = {
@@ -272,7 +278,7 @@ async function teamIdsForWindow(
 /**
  * `modelId` + `configVersionId` per team.
  *
- * Port of `lib/scheduler/runs#assignmentsForTeams`: the team's applied config
+ * `assignmentsForTeams`: the team's applied config
  * version decides, and a team with no config at all falls back to the league's
  * first allowlisted model so it still gets a run.
  */
