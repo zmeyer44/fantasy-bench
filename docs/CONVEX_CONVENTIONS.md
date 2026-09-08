@@ -111,3 +111,14 @@ default lineups, week-1 windows and a ready snapshot (chunked). `seed:golden` th
 (`tests/golden/postgres-week1/*.json`: runs, steps, actions, usage events → rollups, trades, threads,
 messages, forum, waivers, transactions, lineups…) mapping old uuids to Convex ids through `legacyId`,
 so every read path has the same data the old tRPC procedures had. That dataset is the parity fixture. `seed:reset` wipes app tables (dev only; refuses on prod).
+
+## Phase 3 ownership (write paths)
+
+| Package | Owns |
+|---|---|
+| **E: core mutations** | `convex/leagues.ts` (`create` public), `convex/configs.ts` (`save`, `setNote`, internal `applyPending`, `currentForTeam`), `convex/skills.ts` (`create`, `update`, `fork`, usage-count maintenance), `convex/commissioner.ts` (all 16 mutations from plan §2.1 incl. `replaceDeprecatedModel`, `rotateJoinCode`, `startDraft` delegating to `internal.draft.start`), `convex/lib/config_pure.ts` additions, tests |
+| **F: social mutations** | `convex/messaging.ts` (`send` internal for the runtime + rate limits), `convex/trades.ts` (`propose`, `respond`, `castVeto`, internal `expireForWindow`, `processReviews`, completion), `convex/forum.ts` (`createPost`, `createComment`, `vote` with optimistic-friendly return, `hide`, karma), `convex/lib/{moderation_pure,fairness_pure}.ts` (ports of `lib/services/moderation/classifier.ts` and `lib/services/trades/fairness.ts`), `convex/commissioner_agent.ts` (narrative/recap actions — Phase 5 wires triggers), tests |
+| **G: roster & season mutations** | `convex/lineups.ts` (`commit`, `validate`, `applySafetyAutopilot` internal — uses `lib/lineup_pure`), `convex/waivers.ts` (`submit`, `drop` internal for the runtime; `process` internal), `convex/draft.ts` (`start`, `recordPick`, `nominate`, `bid`, `resolveLot`, `finalize`, `bestAvailable`), `convex/scoring.ts` (`scoreLeague`, `finalizeWeek`, `team_results` + `team_standings` maintenance, playoff seeding/bracket), `convex/standings.ts` (`generateSchedule`), `convex/transactions.ts`, `convex/lib/{scoring_pure,standings_pure}.ts`, tests |
+| **H: frontend writes** (after E–G) | every `useMutation(trpc.*)` → Convex `useMutation`/`useAction`; optimistic forum votes; Server Actions replaced by client mutations; `lib/trpc/**` and `app/api/trpc` deleted; better-auth removed from the app |
+
+Counters every write path must maintain (from the Phase 2 reports): `threads.lastMessageAt/messageCount/flaggedCount`, `trades.vetoCount/approveCount`, `forum_posts.score/commentCount`, `forum_comments.score`, `teams.karma`, `skills.usageCount`, `windows.runCount/terminalRunCount`, `runs.committedActionCount/rejectedActionCount`, `team_standings` (incl. `streak`), the three rollup tables (Phase 4), `team_week_metrics` (Phase 5 close).

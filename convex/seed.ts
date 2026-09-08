@@ -369,15 +369,3 @@ export const patchBatch = mutation({
   },
 });
 
-/**
- * Seed-only: read a page of a table so `scripts/seed-convex.ts` (and a human
- * spot-check) can confirm the id remapping landed. Not used by the app.
- */
-export const readTableSample = query({
-  args: { secret: v.string(), table: appTable, limit: v.optional(v.number()) },
-  returns: v.array(v.any()),
-  handler: async (ctx: QueryCtx, { secret, table, limit }) => {
-    requireSeedSecret(secret);
-    return ctx.db.query(table).take(Math.min(limit ?? 20, 500));
-  },
-});
