@@ -1,10 +1,11 @@
 "use client";
 
-import { useMutation } from "@tanstack/react-query";
+import { useMutation } from "convex/react";
 import { useState } from "react";
 
 import { Button } from "@/components/ui";
-import { useTRPC } from "@/lib/trpc/client";
+import { api } from "@/convex/_generated/api";
+import type { Id } from "@/convex/_generated/dataModel";
 
 /**
  * Commissioner moderation. Hiding never deletes — the row stays in the trace,
@@ -21,28 +22,32 @@ export function HideControl({
   targetId: string;
   hidden: boolean;
 }) {
-  const trpc = useTRPC();
+  const hide = useMutation(api.forum.hide);
   // `hidden` comes from a live read; the guess only covers the round trip.
   const [guess, setGuess] = useState<boolean | null>(null);
+  const [pending, setPending] = useState(false);
   const isHidden = guess ?? hidden;
 
-  const hide = useMutation(
-    trpc.forum.hide.mutationOptions({
-      onError: () => setGuess(null),
-    }),
-  );
+  async function submit() {
+    const next = !isHidden;
+    setGuess(next);
+    setPending(true);
+    try {
+      await hide({
+        leagueId: leagueId as Id<"leagues">,
+        targetType,
+        targetId,
+        hidden: next,
+      });
+    } catch {
+      setGuess(null);
+    } finally {
+      setPending(false);
+    }
+  }
 
   return (
-    <Button
-      size="sm"
-      variant="ghost"
-      disabled={hide.isPending}
-      onClick={() => {
-        const next = !isHidden;
-        setGuess(next);
-        hide.mutate({ leagueId, targetType, targetId, hidden: next });
-      }}
-    >
+    <Button size="sm" variant="ghost" disabled={pending} onClick={() => void submit()}>
       {isHidden ? "Unhide" : "Hide"}
     </Button>
   );

@@ -3,7 +3,7 @@
 import { useState } from "react";
 
 import { Field, Input, Select } from "@/components/ui";
-import { useTRPC } from "@/lib/trpc/client";
+import { api } from "@/convex/_generated/api";
 
 import { SettingsSection, Toggle, useSave } from "./shared";
 import {
@@ -17,14 +17,13 @@ import {
 
 /** The config edit lock plus per-window-label schedule overrides (PRD 5.3, 5.5). */
 export function WindowsTab({ data }: { data: SettingsData }) {
-  const trpc = useTRPC();
   const [editLock, setEditLock] = useState(data.rules.editLock);
   const [overrides, setOverrides] = useState<WindowOverridesInput>(
     (data.rules.windowOverrides ?? {}) as WindowOverridesInput,
   );
 
-  const saveLock = useSave(trpc.commissioner.setEditLock.mutationOptions());
-  const saveOverrides = useSave(trpc.commissioner.setWindowOverrides.mutationOptions());
+  const saveLock = useSave(api.commissioner.setEditLock);
+  const saveOverrides = useSave(api.commissioner.setWindowOverrides);
 
   const patch = (label: string, next: Partial<WindowOverrideInput>) =>
     setOverrides((prev) => ({ ...prev, [label]: { ...prev[label], ...next } }));
@@ -34,16 +33,16 @@ export function WindowsTab({ data }: { data: SettingsData }) {
       <SettingsSection
         title="Config edit lock"
         description="Owners may edit their agent between these two Eastern moments each week. Edits saved during the lock are queued and apply at the next unlock."
-        saving={saveLock.mutation.isPending}
+        saving={saveLock.isPending}
         error={saveLock.error}
         saved={saveLock.saved}
         onSubmit={() =>
-          saveLock.mutation.mutate({
-            leagueId: data.league.id,
+          void saveLock.submit({
+            leagueId: data.league._id,
             editLock: {
-              unlockDay: editLock.unlockDay as (typeof WEEKDAY_OPTIONS)[number],
+              unlockDay: editLock.unlockDay,
               unlockTime: editLock.unlockTime,
-              lockDay: editLock.lockDay as (typeof WEEKDAY_OPTIONS)[number],
+              lockDay: editLock.lockDay,
               lockTime: editLock.lockTime,
             },
           })
@@ -97,12 +96,12 @@ export function WindowsTab({ data }: { data: SettingsData }) {
       <SettingsSection
         title="Window overrides"
         description="Leave a field blank to keep the template default. Only labels you touch are stored."
-        saving={saveOverrides.mutation.isPending}
+        saving={saveOverrides.isPending}
         error={saveOverrides.error}
         saved={saveOverrides.saved}
         onSubmit={() =>
-          saveOverrides.mutation.mutate({
-            leagueId: data.league.id,
+          void saveOverrides.submit({
+            leagueId: data.league._id,
             windowOverrides: Object.keys(overrides).length > 0 ? overrides : null,
           })
         }

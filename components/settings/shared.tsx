@@ -1,47 +1,44 @@
 "use client";
 
-import { useMutation, type UseMutationOptions } from "@tanstack/react-query";
+import { useMutation } from "convex/react";
+import type { FunctionArgs, FunctionReference, FunctionReturnType } from "convex/server";
 import { useState, type ReactNode } from "react";
 
+import { mutationErrorMessage } from "@/components/league/convex-errors";
 import { Button, Card, CardBody, CardFooter, CardHeader } from "@/components/ui";
 
 /**
- * One mutation + its inline error/success state. Every settings form is the
- * same shape: edit locally, submit, show the server's validation message next
- * to the form rather than in a toast.
+ * One Convex mutation plus its inline error/success state. Every settings form
+ * is the same shape: edit locally, submit, show the server's validation message
+ * next to the form rather than in a toast.
+ *
+ * The console reads `commissioner.settings` live, so the saved values arrive on
+ * their own — there is nothing to refetch and no `router.refresh()`.
  */
-export function useSave<TData, TError, TVariables>(
-  options: UseMutationOptions<TData, TError, TVariables>,
-) {
+export function useSave<Mutation extends FunctionReference<"mutation">>(mutationRef: Mutation) {
+  const run = useMutation(mutationRef);
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
+  const [isPending, setIsPending] = useState(false);
+  const [data, setData] = useState<FunctionReturnType<Mutation> | null>(null);
 
-  const mutation = useMutation<TData, TError, TVariables>({
-    ...options,
-    onSuccess: (data, variables, onMutateResult, context) => {
+  async function submit(args: FunctionArgs<Mutation>): Promise<void> {
+    setIsPending(true);
+    try {
+      const result = (await run(args)) as FunctionReturnType<Mutation>;
+      setData(result);
       setError(null);
       setSaved(true);
-      options.onSuccess?.(data, variables, onMutateResult, context);
-      // The console reads `commissioner.settings` live, so the saved values
-      // arrive on their own — nothing to refresh.
       setTimeout(() => setSaved(false), 2500);
-    },
-    onError: (err, variables, onMutateResult, context) => {
+    } catch (err) {
       setSaved(false);
-      setError(messageOf(err));
-      options.onError?.(err, variables, onMutateResult, context);
-    },
-  });
-
-  return { mutation, error, saved, setError };
-}
-
-function messageOf(error: unknown): string {
-  if (error && typeof error === "object" && "message" in error) {
-    const message = (error as { message?: unknown }).message;
-    if (typeof message === "string" && message.length > 0) return message;
+      setError(mutationErrorMessage(err));
+    } finally {
+      setIsPending(false);
+    }
   }
-  return "Something went wrong. Try again.";
+
+  return { submit, isPending, error, saved, data, setError };
 }
 
 export function SettingsSection({

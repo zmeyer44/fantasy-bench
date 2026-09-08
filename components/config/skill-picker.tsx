@@ -1,12 +1,11 @@
 "use client";
 
-import { useMutation } from "@tanstack/react-query";
-import { useQuery } from "convex/react";
+import { useMutation, useQuery } from "convex/react";
 import { useState } from "react";
 
+import { mutationErrorMessage } from "@/components/league/convex-errors";
 import { Badge, Button, Dialog, Field, Input, Textarea } from "@/components/ui";
 import { api } from "@/convex/_generated/api";
-import { useTRPC } from "@/lib/trpc/client";
 
 import { Markdown } from "./markdown";
 
@@ -113,32 +112,37 @@ export function AuthorSkillDialog({
   onClose: () => void;
   onCreated: (skill: AttachedSkill) => void;
 }) {
-  const trpc = useTRPC();
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [bodyMd, setBodyMd] = useState("");
   const [preview, setPreview] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [pending, setPending] = useState(false);
 
-  const create = useMutation(
-    trpc.skills.create.mutationOptions({
-      onSuccess: (skill) => {
-        onCreated({
-          id: skill.id,
-          name: skill.name,
-          slug: skill.slug,
-          description: skill.description,
-          bodyMd: skill.bodyMd,
-        });
-        setName("");
-        setDescription("");
-        setBodyMd("");
-        setError(null);
-        onClose();
-      },
-      onError: (err) => setError(err.message),
-    }),
-  );
+  const create = useMutation(api.skills.create);
+
+  async function submit() {
+    setPending(true);
+    try {
+      const skill = await create({ name, description, bodyMd, visibility: "public" });
+      onCreated({
+        id: skill._id,
+        name: skill.name,
+        slug: skill.slug,
+        description: skill.description ?? "",
+        bodyMd: skill.bodyMd,
+      });
+      setName("");
+      setDescription("");
+      setBodyMd("");
+      setError(null);
+      onClose();
+    } catch (err) {
+      setError(mutationErrorMessage(err));
+    } finally {
+      setPending(false);
+    }
+  }
 
   return (
     <Dialog
@@ -152,12 +156,10 @@ export function AuthorSkillDialog({
             Cancel
           </Button>
           <Button
-            disabled={create.isPending || name.trim().length < 3 || bodyMd.trim().length === 0}
-            onClick={() =>
-              create.mutate({ name, description, bodyMd, visibility: "public" })
-            }
+            disabled={pending || name.trim().length < 3 || bodyMd.trim().length === 0}
+            onClick={() => void submit()}
           >
-            {create.isPending ? "Publishing…" : "Publish & attach"}
+            {pending ? "Publishing…" : "Publish & attach"}
           </Button>
         </>
       }

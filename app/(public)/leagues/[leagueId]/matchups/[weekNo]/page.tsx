@@ -22,22 +22,20 @@ export default async function WeekMatchupsPage({
   if (!Number.isInteger(weekNo) || weekNo < 1 || weekNo > 18) notFound();
 
   const id = leagueId as Id<"leagues">;
-  const [preloaded, league] = await Promise.all([
+  const [preloaded, weeks] = await Promise.all([
     readOrNull(() => preloadAuthQuery(api.views.matchups, { leagueId: id, weekNo })),
-    readOrNull(() => fetchAuthQuery(api.leagues.get, { leagueId: id })),
+    readOrNull(() => fetchAuthQuery(api.weeks.list, { leagueId: id })),
   ]);
-  if (!preloaded || !league) notFound();
+  if (!preloaded || !weeks) notFound();
 
-  // No Convex query lists a league's week rows; the rule set is the source of
-  // truth for how many weeks exist, and the seed materialises exactly that many.
-  const seasonWeeks = league.rules?.seasonWeeks ?? 18;
-  const weeks = Array.from({ length: seasonWeeks }, (_, index) => index + 1);
-
+  // The picker lists the week rows the league actually has, rather than
+  // `1..rules.seasonWeeks`: playoff weeks are rows too, and a league that has
+  // not been fully materialised should not offer weeks that do not exist.
   return (
     <MatchupsWeekView
       leagueId={leagueId}
       weekNo={weekNo}
-      weeks={weeks}
+      weeks={weeks.map((week) => week.weekNo)}
       preloaded={preloaded}
     />
   );

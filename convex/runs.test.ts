@@ -459,3 +459,157 @@ describe("runs.modelOptions", () => {
     ]);
   });
 });
+
+describe("runs.usageEvents", () => {
+  test("pages the run's usage events and exposes both cost figures", async () => {
+    const t = convexTest(schema, modules);
+    const s = await seed(t);
+    const runId = await insertRun(t, s);
+    const otherRunId = await insertRun(t, s, { teamId: s.bravo });
+
+    await t.run(async (ctx) => {
+      const base = {
+        leagueId: s.leagueId,
+        teamId: s.alpha,
+        season: SEASON,
+        weekNo: 1,
+        provider: "anthropic",
+        cachedInputTokens: 100,
+        reasoningTokens: 25,
+        createdAt: NOW,
+      };
+      await ctx.db.insert("usage_events", {
+        ...base,
+        runId,
+        stepIndex: 0,
+        modelId: SONNET,
+        inputTokens: 900,
+        outputTokens: 120,
+        latencyMs: 1400,
+        computedCostUsd: 0.004,
+        gatewayCostUsd: 0.0042,
+        costUsd: 0.0042,
+      });
+      await ctx.db.insert("usage_events", {
+        ...base,
+        runId,
+        stepIndex: 1,
+        modelId: SONNET,
+        inputTokens: 1200,
+        outputTokens: 80,
+        computedCostUsd: 0.005,
+        costUsd: 0.005,
+      });
+      // A different run's events never appear in this run's ledger.
+      await ctx.db.insert("usage_events", {
+        ...base,
+        runId: otherRunId,
+        teamId: s.bravo,
+        stepIndex: 0,
+        modelId: HAIKU,
+        inputTokens: 10,
+        outputTokens: 10,
+        computedCostUsd: 0.001,
+        costUsd: 0.001,
+      });
+    });
+
+    const first = await t.query(api.runs.usageEvents, {
+      runId,
+      paginationOpts: { numItems: 1, cursor: null },
+    });
+    expect(first.page).toHaveLength(1);
+    expect(first.isDone).toBe(false);
+    expect(first.page[0]).toEqual({
+      stepIndex: 0,
+      modelId: SONNET,
+      provider: "anthropic",
+      inputTokens: 900,
+      outputTokens: 120,
+      cachedInputTokens: 100,
+      reasoningTokens: 25,
+      latencyMs: 1400,
+      costUsd: 0.0042,
+      computedCostUsd: 0.004,
+      gatewayCostUsd: 0.0042,
+      createdAt: NOW,
+    });
+
+    const rest = await t.query(api.runs.usageEvents, {
+      runId,
+      paginationOpts: { numItems: 10, cursor: first.continueCursor },
+    });
+    expect(rest.page.map((event) => event.stepIndex)).toEqual([1]);
+    expect(rest.isDone).toBe(true);
+    // No gateway figure: the row reports the computed cost and a null gateway cost.
+    expect(rest.page[0].gatewayCostUsd).toBeNull();
+    expect(rest.page[0].latencyMs).toBeNull();
+
+    expect(
+      (
+        await t.query(api.runs.usageEvents, {
+          runId: otherRunId,
+          paginationOpts: { numItems: 10, cursor: null },
+        })
+      ).page.map((event) => event.modelId),
+    ).toEqual([HAIKU]);
+  });
+
+  test("carries the run's gateway cost onto the step shape too", async () => {
+    const t = convexTest(schema, modules);
+    const s = await seed(t);
+    const runId = await insertRun(t, s);
+    await t.run(async (ctx) => {
+      await ctx.db.insert("run_steps", {
+        runId,
+        leagueId: s.leagueId,
+        stepIndex: 0,
+        modelId: SONNET,
+        responseMessages: [],
+        toolCalls: [],
+        toolResults: [],
+        usage: {
+          inputTokens: 900,
+          outputTokens: 120,
+          cachedInputTokens: 100,
+          reasoningTokens: 25,
+          totalTokens: 1145,
+        },
+        costUsd: 0.004,
+        gatewayCostUsd: 0.0042,
+        bytes: 128,
+      });
+    });
+    const page = await t.query(api.runs.steps, {
+      runId,
+      paginationOpts: { numItems: 10, cursor: null },
+    });
+    expect(page.page[0].gatewayCostUsd).toBe(0.0042);
+  });
+});
+
+describe("runs.searchPlayers", () => {
+  test("resolves the term against player names and skips an empty term", async () => {
+    const t = convexTest(schema, modules);
+    const s = await seed(t);
+    await t.run(async (ctx) => {
+      await ctx.db.insert("players", {
+        sleeperId: "rb1",
+        fullName: "Ray Rusher",
+        position: "RB",
+        fantasyPositions: ["RB"],
+        externalIds: {},
+        updatedAt: NOW,
+      });
+    });
+
+    expect(await t.query(api.runs.searchPlayers, { leagueId: s.leagueId, q: "Quinn Back" })).toEqual(
+      [{ playerId: s.player, fullName: "Quinn Back", position: "QB", nflTeam: "KC" }],
+    );
+    // No nflTeam on the row -> null, not undefined.
+    expect(await t.query(api.runs.searchPlayers, { leagueId: s.leagueId, q: "Rusher" })).toEqual([
+      expect.objectContaining({ fullName: "Ray Rusher", nflTeam: null }),
+    ]);
+    expect(await t.query(api.runs.searchPlayers, { leagueId: s.leagueId, q: "   " })).toEqual([]);
+  });
+});

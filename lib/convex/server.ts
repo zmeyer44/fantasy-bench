@@ -5,7 +5,8 @@
  * over the subscription with `usePreloadedQuery`); `fetchAuthQuery` is for reads
  * whose result stays on the server. Both forward the Convex Auth token when the
  * visitor is signed in. Never perform side effects from GET handlers or server
- * components (CSRF) — mutations happen from client components or Server Actions.
+ * components (CSRF): every write in the app is a Convex `useMutation` from a
+ * client component, so there is no `fetchMutation` here and no Server Action.
  */
 import { convexAuthNextjsToken } from "@convex-dev/auth/nextjs/server";
 import { fetchQuery, preloadQuery } from "convex/nextjs";

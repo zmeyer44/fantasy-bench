@@ -1,11 +1,13 @@
 "use client";
 
-import { useMutation } from "@tanstack/react-query";
+import { useMutation } from "convex/react";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
+import { mutationErrorMessage } from "@/components/league/convex-errors";
 import { Button, Card, CardBody, CardFooter, CardHeader, Field, Input, Select, Textarea } from "@/components/ui";
-import { useTRPC } from "@/lib/trpc/client";
+import { api } from "@/convex/_generated/api";
+import type { Id } from "@/convex/_generated/dataModel";
 
 import { Markdown } from "./markdown";
 import { Toast, type ToastTone } from "./toast";
@@ -29,7 +31,6 @@ export type SkillFormProps = {
 /** Author or edit a library skill. Markdown editor with a preview toggle. */
 export function SkillForm({ mode, skillId, initial, usageCount = 0 }: SkillFormProps) {
   const router = useRouter();
-  const trpc = useTRPC();
 
   const [name, setName] = useState(initial?.name ?? "");
   const [description, setDescription] = useState(initial?.description ?? "");
@@ -40,26 +41,38 @@ export function SkillForm({ mode, skillId, initial, usageCount = 0 }: SkillFormP
   const [preview, setPreview] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [toast, setToast] = useState<{ message: string; tone: ToastTone } | null>(null);
+  const [pending, setPending] = useState(false);
 
-  const create = useMutation(
-    trpc.skills.create.mutationOptions({
-      onSuccess: (skill) => router.push(`/skills/${skill.slug}`),
-      onError: (err) => setError(err.message),
-    }),
-  );
+  const create = useMutation(api.skills.create);
+  const update = useMutation(api.skills.update);
 
-  const update = useMutation(
-    trpc.skills.update.mutationOptions({
-      onSuccess: (skill) => {
-        setToast({ message: "Saved.", tone: "success" });
-        // The skill page reads Convex live; navigating is enough.
+  async function submit() {
+    setError(null);
+    setPending(true);
+    try {
+      if (mode === "create") {
+        const skill = await create({ name, description, bodyMd, visibility });
         router.push(`/skills/${skill.slug}`);
-      },
-      onError: (err) => setError(err.message),
-    }),
-  );
+        return;
+      }
+      if (!skillId) return;
+      const skill = await update({
+        skillId: skillId as Id<"skills">,
+        name,
+        description,
+        bodyMd,
+        visibility,
+      });
+      setToast({ message: "Saved.", tone: "success" });
+      // The skill page reads Convex live; navigating is enough.
+      router.push(`/skills/${skill.slug}`);
+    } catch (err) {
+      setError(mutationErrorMessage(err));
+    } finally {
+      setPending(false);
+    }
+  }
 
-  const pending = create.isPending || update.isPending;
   const valid = name.trim().length >= 3 && bodyMd.trim().length > 0 && bodyMd.length <= MAX_BODY;
 
   return (
@@ -138,17 +151,7 @@ export function SkillForm({ mode, skillId, initial, usageCount = 0 }: SkillFormP
         ) : null}
       </CardBody>
       <CardFooter className="flex justify-end gap-2">
-        <Button
-          disabled={pending || !valid}
-          onClick={() => {
-            setError(null);
-            if (mode === "create") {
-              create.mutate({ name, description, bodyMd, visibility });
-            } else if (skillId) {
-              update.mutate({ skillId, name, description, bodyMd, visibility });
-            }
-          }}
-        >
+        <Button disabled={pending || !valid} onClick={() => void submit()}>
           {pending ? "Saving…" : mode === "create" ? "Publish skill" : "Save changes"}
         </Button>
       </CardFooter>

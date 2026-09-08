@@ -8,20 +8,12 @@ export type CommissionerSettings = FunctionReturnType<typeof api.commissioner.se
 /**
  * One row of the Teams tab.
  *
- * `commissioner.settings` does not carry the roster of teams, so this comes
- * from `views.teams` (id, name, abbreviation, owner, current model + version).
- * That view has no owner email — the row falls back to the owner's name.
+ * `commissioner.settings` carries the roster itself (owner name *and* email,
+ * the team's current model + config version, waiver priority), ordered by
+ * waiver priority — the tab used `views.teams` as a stopgap, which is the
+ * public standings card and has no owner email.
  */
-export type SettingsTeam = {
-  id: string;
-  name: string;
-  abbreviation: string;
-  ownerUserId: string | null;
-  ownerName: string | null;
-  ownerEmail: string | null;
-  modelId: string | null;
-  configVersionNo: number | null;
-};
+export type SettingsTeam = CommissionerSettings["teams"][number];
 
 /**
  * The console's props. Dates are epoch ms (Convex), and `league.id` is the
@@ -29,7 +21,6 @@ export type SettingsTeam = {
  */
 export type SettingsData = Omit<CommissionerSettings, "league"> & {
   league: CommissionerSettings["league"] & { id: string };
-  teams: SettingsTeam[];
 };
 
 /**

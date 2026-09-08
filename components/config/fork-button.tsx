@@ -1,37 +1,43 @@
 "use client";
 
-import { useMutation } from "@tanstack/react-query";
+import { useMutation } from "convex/react";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
+import { mutationErrorMessage } from "@/components/league/convex-errors";
 import { Button } from "@/components/ui";
-import { useTRPC } from "@/lib/trpc/client";
+import { api } from "@/convex/_generated/api";
 
 import { Toast, type ToastTone } from "./toast";
 
 /** Copy a skill into your own library so you can diverge from it. */
 export function ForkSkillButton({ slug, signedIn }: { slug: string; signedIn: boolean }) {
   const router = useRouter();
-  const trpc = useTRPC();
+  const fork = useMutation(api.skills.fork);
+  const [pending, setPending] = useState(false);
   const [toast, setToast] = useState<{ message: string; tone: ToastTone } | null>(null);
 
-  const fork = useMutation(
-    trpc.skills.fork.mutationOptions({
-      onSuccess: (skill) => router.push(`/skills/${skill.slug}/edit`),
-      onError: (err) => setToast({ message: err.message, tone: "error" }),
-    }),
-  );
+  async function submit() {
+    setPending(true);
+    try {
+      const skill = await fork({ slug });
+      router.push(`/skills/${skill.slug}/edit`);
+    } catch (error) {
+      setToast({ message: mutationErrorMessage(error), tone: "error" });
+      setPending(false);
+    }
+  }
 
   return (
     <>
       <Button
         size="sm"
         variant="secondary"
-        disabled={fork.isPending || !signedIn}
+        disabled={pending || !signedIn}
         title={signedIn ? undefined : "Sign in to fork"}
-        onClick={() => fork.mutate({ slug })}
+        onClick={() => void submit()}
       >
-        {fork.isPending ? "Forking…" : "Fork"}
+        {pending ? "Forking…" : "Fork"}
       </Button>
       <Toast message={toast?.message ?? null} tone={toast?.tone} onDismiss={() => setToast(null)} />
     </>

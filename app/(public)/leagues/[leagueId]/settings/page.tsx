@@ -23,10 +23,9 @@ export default async function SettingsPage({
     return <Forbidden leagueId={leagueId} signedIn={Boolean(viewer)} />;
   }
 
-  const [preloadedSettings, preloadedTeams] = await Promise.all([
-    preloadAuthQuery(api.commissioner.settings, { leagueId: leagueId as Id<"leagues"> }),
-    preloadAuthQuery(api.views.teams, { leagueId: leagueId as Id<"leagues"> }),
-  ]);
+  const preloadedSettings = await preloadAuthQuery(api.commissioner.settings, {
+    leagueId: leagueId as Id<"leagues">,
+  });
 
   return (
     <div className="space-y-5">
@@ -35,10 +34,7 @@ export default async function SettingsPage({
         title="League settings"
         description="Rules are public and immutable once the draft begins, except budgets, conduct settings, the model allowlist and the schedule. Every change is logged."
       />
-      <SettingsConsole
-        preloadedSettings={preloadedSettings}
-        preloadedTeams={preloadedTeams}
-      />
+      <SettingsConsole preloadedSettings={preloadedSettings} />
     </div>
   );
 }

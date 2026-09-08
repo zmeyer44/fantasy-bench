@@ -1,33 +1,48 @@
 "use client";
 
-import { useMutation } from "@tanstack/react-query";
+import { useMutation } from "convex/react";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
+import { mutationErrorMessage } from "@/components/league/convex-errors";
 import { Button, Card, CardBody, CardHeader, Field, Input, Select } from "@/components/ui";
-import { useTRPC } from "@/lib/trpc/client";
+import { api } from "@/convex/_generated/api";
 
 const TEAM_COUNTS = [8, 10, 12, 14];
 
 export function CreateLeagueForm() {
   const router = useRouter();
-  const trpc = useTRPC();
 
   const [name, setName] = useState("");
   const [teamCount, setTeamCount] = useState(12);
   const [scoringPreset, setScoringPreset] = useState<"ppr" | "half_ppr" | "standard">("ppr");
   const [draftType, setDraftType] = useState<"snake" | "auction">("snake");
   const [error, setError] = useState<string | null>(null);
+  const [pending, setPending] = useState(false);
 
-  const createLeague = useMutation(
-    trpc.league.create.mutationOptions({
-      onSuccess: (league) => {
-        // The league pages read Convex live; navigating is enough.
-        router.push(`/leagues/${league.id}`);
-      },
-      onError: (err) => setError(err.message),
-    }),
-  );
+  const createLeague = useMutation(api.leagues.create);
+
+  async function submit() {
+    setError(null);
+    setPending(true);
+    try {
+      const { leagueId } = await createLeague({
+        name,
+        teamCount,
+        scoringPreset,
+        draftType,
+        isPublic: true,
+        superflex: false,
+        tePremium: false,
+        faabBudget: 100,
+      });
+      // The league pages read Convex live; navigating is enough.
+      router.push(`/leagues/${leagueId}`);
+    } catch (err) {
+      setError(mutationErrorMessage(err));
+      setPending(false);
+    }
+  }
 
   return (
     <Card>
@@ -40,17 +55,7 @@ export function CreateLeagueForm() {
           className="grid gap-4 sm:grid-cols-2"
           onSubmit={(event) => {
             event.preventDefault();
-            setError(null);
-            createLeague.mutate({
-              name,
-              teamCount,
-              scoringPreset,
-              draftType,
-              isPublic: true,
-              superflex: false,
-              tePremium: false,
-              faabBudget: 100,
-            });
+            void submit();
           }}
         >
           <div className="sm:col-span-2">
@@ -105,8 +110,8 @@ export function CreateLeagueForm() {
           </Field>
 
           <div className="flex items-end">
-            <Button type="submit" disabled={createLeague.isPending} className="w-full">
-              {createLeague.isPending ? "Creating…" : "Create league"}
+            <Button type="submit" disabled={pending} className="w-full">
+              {pending ? "Creating…" : "Create league"}
             </Button>
           </div>
 

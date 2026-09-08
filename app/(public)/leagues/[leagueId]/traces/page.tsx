@@ -41,12 +41,12 @@ export default async function TracesPage({
   const search = await searchParams;
   const id = leagueId as Id<"leagues">;
 
-  const [teamCards, models, league] = await Promise.all([
+  const [teamCards, models, weeks] = await Promise.all([
     readOrNull(() => fetchAuthQuery(api.views.teams, { leagueId: id })),
     readOrNull(() => fetchAuthQuery(api.runs.modelOptions, { leagueId: id })),
-    readOrNull(() => fetchAuthQuery(api.leagues.get, { leagueId: id })),
+    readOrNull(() => fetchAuthQuery(api.weeks.list, { leagueId: id })),
   ]);
-  if (!teamCards || !models || !league) notFound();
+  if (!teamCards || !models || !weeks) notFound();
 
   // Every filter is validated here: an unknown value would fail the Convex
   // argument validators, so it is simply dropped instead.
@@ -73,8 +73,8 @@ export default async function TracesPage({
   };
 
   // The first page is fetched here too, so the list is server-rendered content
-  // before `usePaginatedQuery` attaches its subscription. `runs.search` also
-  // resolves the term against player names, which the paginated hook drops.
+  // before `usePaginatedQuery` attaches its subscription. The player matches for
+  // the term are a live query inside `TraceList` (`runs.searchPlayers`).
   const paginationOpts = { numItems: PAGE_SIZE, cursor: null };
   const first = q
     ? await readOrNull(() =>
@@ -83,10 +83,8 @@ export default async function TracesPage({
     : await readOrNull(() =>
         fetchAuthQuery(api.runs.list, { leagueId: id, ...filters, paginationOpts }),
       );
-  const matchedPlayers = first && "matchedPlayers" in first ? first.matchedPlayers : [];
 
   const basePath = `/leagues/${leagueId}/traces`;
-  const seasonWeeks = league.rules?.seasonWeeks ?? 18;
 
   return (
     <div className="space-y-4">
@@ -100,17 +98,10 @@ export default async function TracesPage({
             basePath={basePath}
             teams={teamCards.map((team) => ({ id: team.id, name: team.name }))}
             models={models}
-            weeks={Array.from({ length: seasonWeeks }, (_, index) => index + 1)}
+            weeks={weeks.map((week) => week.weekNo)}
           />
         </CardBody>
       </Card>
-
-      {matchedPlayers.length > 0 ? (
-        <p className="px-1 font-mono text-[10px] text-ink-faint">
-          Player matches:{" "}
-          {matchedPlayers.map((player) => `${player.fullName} (${player.position})`).join(", ")}
-        </p>
-      ) : null}
 
       <TraceList
         leagueId={leagueId}

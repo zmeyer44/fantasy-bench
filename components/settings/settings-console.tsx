@@ -18,36 +18,22 @@ import type { SettingsData } from "./types";
 /**
  * The commissioner console.
  *
- * Both reads are preloaded on the server and then live here, so a saved rule,
- * a rotated join code or an owner assignment shows up as soon as the mutation
- * lands — no `router.refresh()`, and the open tab is never unmounted.
- *
- * The tabs still mutate over tRPC (Phase 3 moves them to Convex mutations).
+ * `commissioner.settings` is preloaded on the server and then lives here — it
+ * carries the roster for the Teams tab too — so a saved rule, a rotated join
+ * code or an owner assignment shows up as soon as the mutation lands: no
+ * `router.refresh()`, and the open tab is never unmounted. The tabs write with
+ * Convex mutations, so the console re-renders from the same subscription.
  */
 export function SettingsConsole({
   preloadedSettings,
-  preloadedTeams,
 }: {
   preloadedSettings: Preloaded<typeof api.commissioner.settings>;
-  preloadedTeams: Preloaded<typeof api.views.teams>;
 }) {
   const settings = usePreloadedQuery(preloadedSettings);
-  const teams = usePreloadedQuery(preloadedTeams);
 
   const data: SettingsData = {
     ...settings,
     league: { ...settings.league, id: settings.league._id },
-    teams: teams.map((team) => ({
-      id: team.id,
-      name: team.name,
-      abbreviation: team.abbreviation,
-      ownerUserId: team.ownerUserId,
-      ownerName: team.ownerName,
-      // `views.teams` does not expose owner emails; the badge falls back to the name.
-      ownerEmail: null,
-      modelId: team.modelId,
-      configVersionNo: team.configVersionNo,
-    })),
   };
 
   return (

@@ -3,14 +3,13 @@
 import { useState } from "react";
 
 import { Field, Input } from "@/components/ui";
-import { useTRPC } from "@/lib/trpc/client";
+import { api } from "@/convex/_generated/api";
 
 import { SettingsSection, useSave } from "./shared";
 import type { SettingsData } from "./types";
 
 /** Weekly token cap per team (game mechanic) and league USD hard cap (safety). */
 export function BudgetsTab({ data }: { data: SettingsData }) {
-  const trpc = useTRPC();
   const [tokenCap, setTokenCap] = useState(
     data.rules.weeklyTokenCapPerTeam === undefined ? "" : String(data.rules.weeklyTokenCapPerTeam),
   );
@@ -18,18 +17,18 @@ export function BudgetsTab({ data }: { data: SettingsData }) {
     data.rules.leagueUsdHardCap === undefined ? "" : String(data.rules.leagueUsdHardCap),
   );
 
-  const save = useSave(trpc.commissioner.setBudgets.mutationOptions());
+  const save = useSave(api.commissioner.setBudgets);
 
   return (
     <SettingsSection
       title="Budgets"
       description="Budgets stay editable after the draft (PRD 5.1). Every change is logged."
-      saving={save.mutation.isPending}
+      saving={save.isPending}
       error={save.error}
       saved={save.saved}
       onSubmit={() =>
-        save.mutation.mutate({
-          leagueId: data.league.id,
+        void save.submit({
+          leagueId: data.league._id,
           weeklyTokenCapPerTeam: tokenCap === "" ? null : Number(tokenCap),
           leagueUsdHardCap: usdCap === "" ? null : Number(usdCap),
         })

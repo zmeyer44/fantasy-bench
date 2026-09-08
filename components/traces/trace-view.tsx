@@ -27,6 +27,8 @@ import { formatET } from "@/lib/time";
 
 /** Steps loaded on the first paint; "load more" pulls another page of this size. */
 const STEP_PAGE_SIZE = 10;
+/** Usage ledger rows on the first paint; the table has its own "load more". */
+const USAGE_PAGE_SIZE = 30;
 
 /**
  * The trace viewer (PRD 5.8).
@@ -50,6 +52,14 @@ export function TraceView({
     api.runs.steps,
     { runId: runId as Id<"runs"> },
     { initialNumItems: STEP_PAGE_SIZE },
+  );
+  // The ledger is the `usage_events` rows themselves, not a projection of the
+  // steps that happen to be loaded: it pages independently and carries the
+  // gateway's own cost figure beside the computed one.
+  const usage = usePaginatedQuery(
+    api.runs.usageEvents,
+    { runId: runId as Id<"runs"> },
+    { initialNumItems: USAGE_PAGE_SIZE },
   );
 
   const { run } = detail;
@@ -277,9 +287,13 @@ export function TraceView({
       <Card>
         <CardHeader
           title="Usage ledger"
-          description="One row per model call. Totals come off the run; the rows are the steps loaded above."
+          description="One row per model call, straight off the run's usage events. Totals come off the run."
         />
-        {loaded.length === 0 ? (
+        {usage.status === "LoadingFirstPage" ? (
+          <CardBody>
+            <p className="text-sm text-ink-muted">Loading usage…</p>
+          </CardBody>
+        ) : usage.results.length === 0 ? (
           <CardBody>
             <p className="text-sm text-ink-muted">No usage recorded.</p>
           </CardBody>
@@ -298,33 +312,53 @@ export function TraceView({
               </TR>
             </THead>
             <TBody>
-              {loaded.map((step) => (
-                <TR key={step.id}>
-                  <TD className="font-mono text-xs">#{step.stepIndex}</TD>
-                  <TD className="font-mono text-[10px] text-ink-muted">{step.modelId}</TD>
-                  <TD numeric className="font-mono text-xs">
-                    {step.usage.inputTokens.toLocaleString()}
-                  </TD>
-                  <TD numeric className="font-mono text-xs text-ink-muted">
-                    {step.usage.cachedInputTokens.toLocaleString()}
+              {usage.results.map((event, index) => (
+                <TR key={`${event.stepIndex}-${index}`}>
+                  <TD className="font-mono text-xs">#{event.stepIndex}</TD>
+                  <TD className="font-mono text-[10px] text-ink-muted">
+                    {event.modelId}
+                    <span className="text-ink-faint"> · {event.provider}</span>
                   </TD>
                   <TD numeric className="font-mono text-xs">
-                    {step.usage.outputTokens.toLocaleString()}
+                    {event.inputTokens.toLocaleString()}
                   </TD>
                   <TD numeric className="font-mono text-xs text-ink-muted">
-                    {step.usage.reasoningTokens.toLocaleString()}
-                  </TD>
-                  <TD numeric className="font-mono text-xs text-ink-muted">
-                    {step.latencyMs !== null ? `${step.latencyMs}ms` : "—"}
+                    {event.cachedInputTokens.toLocaleString()}
                   </TD>
                   <TD numeric className="font-mono text-xs">
-                    ${step.costUsd.toFixed(5)}
+                    {event.outputTokens.toLocaleString()}
+                  </TD>
+                  <TD numeric className="font-mono text-xs text-ink-muted">
+                    {event.reasoningTokens.toLocaleString()}
+                  </TD>
+                  <TD numeric className="font-mono text-xs text-ink-muted">
+                    {event.latencyMs !== null ? `${event.latencyMs}ms` : "—"}
+                  </TD>
+                  <TD numeric className="font-mono text-xs">
+                    ${event.costUsd.toFixed(5)}
+                    {event.gatewayCostUsd === null ? (
+                      <span className="block text-[10px] text-ink-faint">computed</span>
+                    ) : null}
                   </TD>
                 </TR>
               ))}
             </TBody>
           </Table>
         )}
+        {usage.status === "CanLoadMore" || usage.status === "LoadingMore" ? (
+          <CardFooter className="flex justify-center">
+            <Button
+              size="sm"
+              variant="secondary"
+              disabled={usage.isLoading}
+              onClick={() => usage.loadMore(USAGE_PAGE_SIZE)}
+            >
+              {usage.status === "LoadingMore"
+                ? "Loading…"
+                : `Load more rows (${usage.results.length} so far)`}
+            </Button>
+          </CardFooter>
+        ) : null}
         <CardFooter>
           Run totals: {detail.usage.inputTokens.toLocaleString()} in ·{" "}
           {detail.usage.outputTokens.toLocaleString()} out · $

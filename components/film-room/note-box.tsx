@@ -1,12 +1,14 @@
 "use client";
 
-import { useMutation } from "@tanstack/react-query";
+import { useMutation } from "convex/react";
 import Link from "next/link";
 import { useState } from "react";
 
 import { Toast, type ToastTone } from "@/components/config/toast";
+import { mutationErrorMessage } from "@/components/league/convex-errors";
 import { Button, Card, CardBody, CardFooter, CardHeader, Textarea } from "@/components/ui";
-import { useTRPC } from "@/lib/trpc/client";
+import { api } from "@/convex/_generated/api";
+import type { Id } from "@/convex/_generated/dataModel";
 
 /**
  * The film room's quick scratchpad. Saving it does not change the config — the
@@ -23,20 +25,30 @@ export function NoteToAgentBox({
   initialNote: string;
   canEdit: boolean;
 }) {
-  const trpc = useTRPC();
   const [note, setNote] = useState(initialNote);
   const [toast, setToast] = useState<{ message: string; tone: ToastTone } | null>(null);
+  const [pending, setPending] = useState(false);
 
-  const save = useMutation(
-    trpc.config.setNote.mutationOptions({
-      onSuccess: () =>
-        setToast({
-          message: "Saved. It lands in your context on the next config save.",
-          tone: "success",
-        }),
-      onError: (err) => setToast({ message: err.message, tone: "error" }),
-    }),
-  );
+  const setNoteOnConfig = useMutation(api.configs.setNote);
+
+  async function submit() {
+    setPending(true);
+    try {
+      await setNoteOnConfig({
+        leagueId: leagueId as Id<"leagues">,
+        teamId: teamId as Id<"teams">,
+        text: note.trim() ? note : null,
+      });
+      setToast({
+        message: "Saved. It lands in your context on the next config save.",
+        tone: "success",
+      });
+    } catch (error) {
+      setToast({ message: mutationErrorMessage(error), tone: "error" });
+    } finally {
+      setPending(false);
+    }
+  }
 
   return (
     <Card>
@@ -58,12 +70,10 @@ export function NoteToAgentBox({
             <Button
               size="sm"
               variant="secondary"
-              disabled={save.isPending}
-              onClick={() =>
-                save.mutate({ leagueId, teamId, text: note.trim() ? note : null })
-              }
+              disabled={pending}
+              onClick={() => void submit()}
             >
-              {save.isPending ? "Saving…" : "Save note"}
+              {pending ? "Saving…" : "Save note"}
             </Button>
           </div>
         ) : (

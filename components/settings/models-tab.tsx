@@ -3,7 +3,7 @@
 import { useState } from "react";
 
 import { Badge, Field, Select } from "@/components/ui";
-import { useTRPC } from "@/lib/trpc/client";
+import { api } from "@/convex/_generated/api";
 
 import { SettingsSection, Toggle, useSave } from "./shared";
 import type { SettingsData } from "./types";
@@ -13,16 +13,15 @@ import type { SettingsData } from "./types";
  * deprecated-model replacement tool (PRD 5.1 / 7).
  */
 export function ModelsTab({ data }: { data: SettingsData }) {
-  const trpc = useTRPC();
   const [allowlist, setAllowlist] = useState<string[]>(data.rules.modelAllowlist ?? []);
   const [fallback, setFallback] = useState(data.rules.fallbackModelId ?? "");
   const [autopilot, setAutopilot] = useState(data.rules.safetyAutopilot);
   const [fromModel, setFromModel] = useState(data.modelsInUse[0]?.modelId ?? "");
   const [toModel, setToModel] = useState("");
 
-  const saveAllowlist = useSave(trpc.commissioner.setModelAllowlist.mutationOptions());
-  const saveFallbacks = useSave(trpc.commissioner.setFallbacks.mutationOptions());
-  const replace = useSave(trpc.commissioner.replaceDeprecatedModel.mutationOptions());
+  const saveAllowlist = useSave(api.commissioner.setModelAllowlist);
+  const saveFallbacks = useSave(api.commissioner.setFallbacks);
+  const replace = useSave(api.commissioner.replaceDeprecatedModel);
 
   const usedBy = new Map(data.modelsInUse.map((row) => [row.modelId, row.teamCount]));
 
@@ -36,11 +35,11 @@ export function ModelsTab({ data }: { data: SettingsData }) {
       <SettingsSection
         title="Model allowlist"
         description="Owners may only pick from this list. Versions are pinned — “latest” aliases are rejected."
-        saving={saveAllowlist.mutation.isPending}
+        saving={saveAllowlist.isPending}
         error={saveAllowlist.error}
         saved={saveAllowlist.saved}
         onSubmit={() =>
-          saveAllowlist.mutation.mutate({ leagueId: data.league.id, modelIds: allowlist })
+          void saveAllowlist.submit({ leagueId: data.league._id, modelIds: allowlist })
         }
       >
         <div className="space-y-1.5">
@@ -85,12 +84,12 @@ export function ModelsTab({ data }: { data: SettingsData }) {
       <SettingsSection
         title="Fallbacks"
         description="What happens when the primary path fails at lock time (PRD 5.4)."
-        saving={saveFallbacks.mutation.isPending}
+        saving={saveFallbacks.isPending}
         error={saveFallbacks.error}
         saved={saveFallbacks.saved}
         onSubmit={() =>
-          saveFallbacks.mutation.mutate({
-            leagueId: data.league.id,
+          void saveFallbacks.submit({
+            leagueId: data.league._id,
             fallbackModelId: fallback === "" ? null : fallback,
             safetyAutopilot: autopilot,
           })
@@ -120,13 +119,13 @@ export function ModelsTab({ data }: { data: SettingsData }) {
       <SettingsSection
         title="Replace a deprecated model"
         description="A provider retired a pinned id mid-season. This rewrites every affected team's config to a new version summarised “commissioner replacement” and logs the swap league-wide."
-        saving={replace.mutation.isPending}
+        saving={replace.isPending}
         error={replace.error}
         saved={replace.saved}
         submitLabel="Replace across the league"
         onSubmit={() =>
-          replace.mutation.mutate({
-            leagueId: data.league.id,
+          void replace.submit({
+            leagueId: data.league._id,
             fromModelId: fromModel,
             toModelId: toModel,
           })
@@ -156,10 +155,9 @@ export function ModelsTab({ data }: { data: SettingsData }) {
             </Select>
           </Field>
         </div>
-        {replace.mutation.data ? (
+        {replace.data ? (
           <p className="text-xs text-accent-strong">
-            Updated{" "}
-            {(replace.mutation.data as { teamsUpdated: unknown[] }).teamsUpdated.length} team(s).
+            Updated {replace.data.teamsUpdated.length} team(s).
           </p>
         ) : null}
       </SettingsSection>

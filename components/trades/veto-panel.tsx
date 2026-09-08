@@ -1,11 +1,13 @@
 "use client";
 
-import { useMutation } from "@tanstack/react-query";
+import { useMutation } from "convex/react";
 import { useState } from "react";
 
+import { mutationErrorMessage } from "@/components/league/convex-errors";
 import { Button } from "@/components/ui";
+import { api } from "@/convex/_generated/api";
+import type { Id } from "@/convex/_generated/dataModel";
 import type { VetoTally } from "@/convex/trades";
-import { useTRPC } from "@/lib/trpc/client";
 
 /**
  * Owner veto panel for a flagged trade under review.
@@ -13,9 +15,6 @@ import { useTRPC } from "@/lib/trpc/client";
  * The tally and the viewer's own vote come from the live `trades.get`
  * subscription above, so several owners voting at once converge without a
  * refetch here; the click is still optimistic so it feels immediate.
- *
- * The vote itself is still the tRPC mutation — Phase 3 swaps it for
- * `trades.castVeto` on Convex.
  */
 export function VetoPanel({
   leagueId,
@@ -30,27 +29,30 @@ export function VetoPanel({
   myVote: "veto" | "approve" | null;
   canVote: boolean;
 }) {
-  const trpc = useTRPC();
+  const castVeto = useMutation(api.trades.castVeto);
   const [optimistic, setOptimistic] = useState<"veto" | "approve" | null>(null);
+  const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   // The server's answer wins as soon as the subscription reports it.
   const vote = optimistic ?? myVote;
 
-  const castVeto = useMutation(
-    trpc.trades.castVeto.mutationOptions({
-      onError: (mutationError) => {
-        setOptimistic(null);
-        setError(mutationError.message);
-      },
-      onSuccess: () => setError(null),
-    }),
-  );
-
-  const submit = (next: "veto" | "approve") => {
+  const submit = async (next: "veto" | "approve") => {
     setOptimistic(next);
     setError(null);
-    castVeto.mutate({ leagueId, tradeId, vote: next });
+    setPending(true);
+    try {
+      await castVeto({
+        leagueId: leagueId as Id<"leagues">,
+        tradeId: tradeId as Id<"trades">,
+        vote: next,
+      });
+    } catch (mutationError) {
+      setOptimistic(null);
+      setError(mutationErrorMessage(mutationError));
+    } finally {
+      setPending(false);
+    }
   };
 
   return (
@@ -85,16 +87,16 @@ export function VetoPanel({
           <Button
             size="sm"
             variant={vote === "veto" ? "danger" : "secondary"}
-            disabled={castVeto.isPending}
-            onClick={() => submit("veto")}
+            disabled={pending}
+            onClick={() => void submit("veto")}
           >
             {vote === "veto" ? "Vetoed" : "Veto"}
           </Button>
           <Button
             size="sm"
             variant={vote === "approve" ? "primary" : "secondary"}
-            disabled={castVeto.isPending}
-            onClick={() => submit("approve")}
+            disabled={pending}
+            onClick={() => void submit("approve")}
           >
             {vote === "approve" ? "Approved" : "Let it stand"}
           </Button>

@@ -370,3 +370,39 @@ describe("windows.forWeek / windows.schedule", () => {
     ).resolves.toBeInstanceOf(Array);
   });
 });
+
+describe("windows.openNow / windows.closeNow (the smoke-test entry points)", () => {
+  test("materialises the week if it has to, opens the named window, then closes it", async () => {
+    const t = convexTest(schema, modules);
+    const s = await seedLeague(t);
+
+    // Nothing materialised yet: `openNow` does it, then opens.
+    const opened = await t.mutation(internal.windows.openNow, {
+      leagueId: s.leagueId,
+      label: "lineup_sun_early",
+      weekNo: 1,
+    });
+    expect(opened.opened).toBe(true);
+    expect(opened.snapshotId).not.toBeNull();
+
+    const window = await t.run(async (ctx) => ctx.db.get("windows", opened.windowId));
+    expect(window!.status).toBe("open");
+    expect(window!.label).toBe("lineup_sun_early");
+    expect(window!.snapshotId).toBe(opened.snapshotId);
+
+    const closed = await t.mutation(internal.windows.closeNow, { windowId: opened.windowId });
+    expect(closed.closed).toBe(true);
+    const after = await t.run(async (ctx) => ctx.db.get("windows", opened.windowId));
+    expect(after!.status).toBe("closed");
+    // The clock was pulled forward to now rather than left in the future.
+    expect(after!.closesAt).toBeLessThanOrEqual(Date.now());
+  });
+
+  test("refuses a label the templates do not produce", async () => {
+    const t = convexTest(schema, modules);
+    const s = await seedLeague(t);
+    await expect(
+      t.mutation(internal.windows.openNow, { leagueId: s.leagueId, label: "nope", weekNo: 1 }),
+    ).rejects.toThrow(/No window nope/);
+  });
+});

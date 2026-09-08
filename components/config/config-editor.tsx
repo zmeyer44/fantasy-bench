@@ -1,7 +1,6 @@
 "use client";
 
-import { useMutation } from "@tanstack/react-query";
-import { useQuery } from "convex/react";
+import { useMutation, useQuery } from "convex/react";
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 
@@ -23,8 +22,12 @@ import type { Id } from "@/convex/_generated/dataModel";
 import type { HarnessSettings } from "@/convex/lib/config_pure";
 import { formatUsd } from "@/components/cost/format";
 import { MODEL_CATALOG, findModel } from "@/lib/models";
+import {
+  mutationErrorIssues,
+  mutationErrorMessage,
+  type ConvexIssue,
+} from "@/components/league/convex-errors";
 import { formatET } from "@/lib/time";
-import { useTRPC } from "@/lib/trpc/client";
 
 import { Markdown } from "./markdown";
 import { AttachSkillDialog, AuthorSkillDialog, type AttachedSkill } from "./skill-picker";
@@ -60,13 +63,12 @@ const DEBOUNCE_MS = 500;
 
 export function ConfigEditor(props: ConfigEditorProps) {
   const { rules, initial, canEdit } = props;
-  const trpc = useTRPC();
+  const leagueId = props.leagueId as Id<"leagues">;
+  const teamId = props.teamId as Id<"teams">;
 
   // Live edit lock: when the window opens or closes the banner and the save
   // button change wording without a reload.
-  const lockStatus = useQuery(api.configs.lockStatus, {
-    leagueId: props.leagueId as Id<"leagues">,
-  });
+  const lockStatus = useQuery(api.configs.lockStatus, { leagueId });
   const lock = lockStatus ?? props.initialLock;
   const nextChangeLabel = `${formatET(lock.nextChange, "EEE h:mm a")} ET`;
 
@@ -82,6 +84,10 @@ export function ConfigEditor(props: ConfigEditorProps) {
   const [authorOpen, setAuthorOpen] = useState(false);
   const [toast, setToast] = useState<{ message: string; tone: ToastTone } | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // Field-level complaints from `configs.save`, rendered next to the save bar.
+  const [issues, setIssues] = useState<ConvexIssue[]>([]);
+  const [savingNote, setSavingNote] = useState(false);
+  const [saving, setSaving] = useState(false);
 
   const model = findModel(modelId);
   const allowed = useMemo(
@@ -117,7 +123,7 @@ export function ConfigEditor(props: ConfigEditorProps) {
     estimateInput.contextMd.trim().length === 0 && estimateInput.skillIds.length === 0
       ? ("skip" as const)
       : {
-          leagueId: props.leagueId as Id<"leagues">,
+          leagueId,
           contextMd: estimateInput.contextMd,
           skillIds: estimateInput.skillIds as Id<"skills">[],
           modelId: estimateInput.modelId,
@@ -133,32 +139,53 @@ export function ConfigEditor(props: ConfigEditorProps) {
   const charCount = contextMd.length;
   const overLimit = charCount > rules.contextCharLimit;
 
-  const saveNote = useMutation(
-    trpc.config.setNote.mutationOptions({
-      onSuccess: () => setToast({ message: "Note saved for the next config save.", tone: "info" }),
-      onError: (err) => setToast({ message: err.message, tone: "error" }),
-    }),
-  );
+  // Convex mutations: the versions list, the lock banner and the changelog are
+  // all live subscriptions, so a save needs no refetch — only local feedback.
+  const saveNote = useMutation(api.configs.setNote);
+  const save = useMutation(api.configs.save);
 
-  const save = useMutation(
-    trpc.config.save.mutationOptions({
-      onSuccess: (result) => {
-        setError(null);
-        setChangeSummary("");
-        setNote("");
-        setToast({
-          message: result.applied
-            ? `Version ${result.version.versionNo} saved and applied.`
-            : `Version ${result.version.versionNo} queued — it applies at the next unlock.`,
-          tone: "success",
-        });
-      },
-      onError: (err) => {
-        setError(err.message);
-        setToast({ message: "Save rejected — see the errors above.", tone: "error" });
-      },
-    }),
-  );
+  async function submitNote() {
+    setSavingNote(true);
+    try {
+      await saveNote({ leagueId, teamId, text: note.trim() ? note : null });
+      setToast({ message: "Note saved for the next config save.", tone: "info" });
+    } catch (err) {
+      setToast({ message: mutationErrorMessage(err), tone: "error" });
+    } finally {
+      setSavingNote(false);
+    }
+  }
+
+  async function submitVersion() {
+    setSaving(true);
+    setError(null);
+    setIssues([]);
+    try {
+      const result = await save({
+        leagueId,
+        teamId,
+        contextMd,
+        modelId,
+        harness: effectiveHarness,
+        skillIds: skillIds as Id<"skills">[],
+        ...(changeSummary.trim() ? { changeSummary: changeSummary.trim() } : {}),
+      });
+      setChangeSummary("");
+      setNote("");
+      setToast({
+        message: result.applied
+          ? `Version ${result.versionNo} saved and applied.`
+          : `Version ${result.versionNo} queued — it applies at the next unlock.`,
+        tone: "success",
+      });
+    } catch (err) {
+      setError(mutationErrorMessage(err));
+      setIssues(mutationErrorIssues(err));
+      setToast({ message: "Save rejected — see the errors above.", tone: "error" });
+    } finally {
+      setSaving(false);
+    }
+  }
 
   function attach(skill: AttachedSkill) {
     setSkills((current) =>
@@ -254,16 +281,10 @@ export function ConfigEditor(props: ConfigEditorProps) {
                 <Button
                   size="sm"
                   variant="secondary"
-                  disabled={disabled || saveNote.isPending}
-                  onClick={() =>
-                    saveNote.mutate({
-                      leagueId: props.leagueId,
-                      teamId: props.teamId,
-                      text: note.trim() ? note : null,
-                    })
-                  }
+                  disabled={disabled || savingNote}
+                  onClick={() => void submitNote()}
                 >
-                  {saveNote.isPending ? "Saving…" : "Save note"}
+                  {savingNote ? "Saving…" : "Save note"}
                 </Button>
               </div>
             </CardBody>
@@ -533,21 +554,10 @@ export function ConfigEditor(props: ConfigEditorProps) {
                 </Field>
               </div>
               <Button
-                disabled={save.isPending || overLimit}
-                onClick={() => {
-                  setError(null);
-                  save.mutate({
-                    leagueId: props.leagueId,
-                    teamId: props.teamId,
-                    contextMd,
-                    modelId,
-                    harness: effectiveHarness,
-                    skillIds,
-                    changeSummary: changeSummary.trim() || undefined,
-                  });
-                }}
+                disabled={saving || overLimit}
+                onClick={() => void submitVersion()}
               >
-                {save.isPending
+                {saving
                   ? "Saving…"
                   : lock.open
                     ? `Save version ${props.nextVersionNo}`
@@ -559,6 +569,15 @@ export function ConfigEditor(props: ConfigEditorProps) {
                 <p role="alert" className="text-danger">
                   {error}
                 </p>
+                {issues.length > 0 ? (
+                  <ul className="mt-1 space-y-0.5">
+                    {issues.map((issue) => (
+                      <li key={`${issue.field}:${issue.message}`} className="text-danger">
+                        <span className="font-mono text-[11px]">{issue.field}</span> — {issue.message}
+                      </li>
+                    ))}
+                  </ul>
+                ) : null}
               </CardFooter>
             ) : null}
           </Card>

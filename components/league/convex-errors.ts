@@ -73,3 +73,51 @@ export async function readOrNull<T>(read: () => Promise<T>): Promise<T | null> {
     throw error;
   }
 }
+
+// ---------------------------------------------------------------------------
+// Write paths (client components)
+// ---------------------------------------------------------------------------
+
+/** One field-level complaint from a mutation, e.g. `configs.save` validation. */
+export type ConvexIssue = { field: string; message: string };
+
+/**
+ * The message to show a human after a failed `useMutation(...)` call.
+ *
+ * Convex rethrows a server `ConvexError` on the client with its `data` intact,
+ * so the `{ code, message }` payload from `convex/lib/errors.ts` is what the UI
+ * renders — exactly the string the tRPC `TRPCError` used to carry. Anything else
+ * (a dropped connection, a validator rejection) falls back to the raw message.
+ */
+export function mutationErrorMessage(
+  error: unknown,
+  fallback = "Something went wrong. Try again.",
+): string {
+  if (error instanceof ConvexError) {
+    const data = error.data as { message?: unknown } | string | undefined;
+    if (typeof data === "string" && data.length > 0) return data;
+    if (data && typeof data === "object" && typeof data.message === "string" && data.message) {
+      return data.message;
+    }
+  }
+  if (error instanceof Error && error.message) return error.message;
+  return fallback;
+}
+
+/**
+ * The structured `issues` a validation error carries (`configs.save` attaches
+ * one per rejected field), so a form can point at the field that failed rather
+ * than only showing the joined sentence.
+ */
+export function mutationErrorIssues(error: unknown): ConvexIssue[] {
+  if (!(error instanceof ConvexError)) return [];
+  const data = error.data as { issues?: unknown } | string | undefined;
+  if (!data || typeof data !== "object" || !Array.isArray(data.issues)) return [];
+  return data.issues.filter(
+    (issue): issue is ConvexIssue =>
+      typeof issue === "object" &&
+      issue !== null &&
+      typeof (issue as ConvexIssue).field === "string" &&
+      typeof (issue as ConvexIssue).message === "string",
+  );
+}

@@ -1,6 +1,6 @@
 "use client";
 
-import { usePaginatedQuery } from "convex/react";
+import { usePaginatedQuery, useQuery } from "convex/react";
 
 import { TraceRow } from "@/components/traces/trace-row";
 import { Button, Card, CardBody, CardFooter, CardHeader, EmptyState } from "@/components/ui";
@@ -26,6 +26,9 @@ const PAGE_SIZE = 25;
  * "load more" button — page sizes are hints, and there is no total to count.
  * `initialRuns` is the same first page fetched on the server, so the list is
  * real content before the subscription attaches rather than a spinner.
+ *
+ * The "Player matches" line above the card is its own live query
+ * (`runs.searchPlayers`), so it tracks the term the way the list does.
  */
 export function TraceList({
   leagueId,
@@ -50,48 +53,68 @@ export function TraceList({
     { initialNumItems: PAGE_SIZE },
   );
 
+  // Skipped when the URL carries no term, so an unfiltered list runs one query.
+  const matchedPlayers = useQuery(
+    api.runs.searchPlayers,
+    searching ? { leagueId: leagueId as Id<"leagues">, q: q as string } : "skip",
+  );
+
   const { results, status, isLoading, loadMore } = searching ? found : listed;
   const firstPage = status === "LoadingFirstPage";
   const runs: RunListItem[] = firstPage ? initialRuns : results;
 
   return (
-    <Card>
-      <CardHeader
-        title={`${runs.length}${status === "Exhausted" ? "" : "+"} run${
-          runs.length === 1 ? "" : "s"
-        }`}
-        description={searching ? `Matching “${q}”` : undefined}
-      />
-      {runs.length === 0 ? (
-        <CardBody>
-          <EmptyState
-            title="No matching runs"
-            description={
-              q
-                ? `Nothing matched “${q}”. Try a player's full name, a tool name like set_lineup, or a phrase from a rationale.`
-                : "Runs appear here as soon as a decision window opens."
-            }
-          />
-        </CardBody>
-      ) : (
-        <div>
-          {runs.map((run) => (
-            <TraceRow key={run.id} run={run} leagueId={leagueId} />
-          ))}
-        </div>
-      )}
-      {status === "CanLoadMore" || status === "LoadingMore" ? (
-        <CardFooter className="flex justify-center">
-          <Button
-            size="sm"
-            variant="secondary"
-            disabled={isLoading}
-            onClick={() => loadMore(PAGE_SIZE)}
-          >
-            {status === "LoadingMore" ? "Loading…" : "Load more"}
-          </Button>
-        </CardFooter>
+    <>
+      {matchedPlayers && matchedPlayers.length > 0 ? (
+        <p className="mb-4 px-1 font-mono text-[10px] text-ink-faint">
+          Player matches:{" "}
+          {matchedPlayers
+            .map(
+              (player) =>
+                `${player.fullName} (${player.position}${player.nflTeam ? ` · ${player.nflTeam}` : ""})`,
+            )
+            .join(", ")}
+        </p>
       ) : null}
-    </Card>
+
+      <Card>
+        <CardHeader
+          title={`${runs.length}${status === "Exhausted" ? "" : "+"} run${
+            runs.length === 1 ? "" : "s"
+          }`}
+          description={searching ? `Matching “${q}”` : undefined}
+        />
+        {runs.length === 0 ? (
+          <CardBody>
+            <EmptyState
+              title="No matching runs"
+              description={
+                q
+                  ? `Nothing matched “${q}”. Try a player's full name, a tool name like set_lineup, or a phrase from a rationale.`
+                  : "Runs appear here as soon as a decision window opens."
+              }
+            />
+          </CardBody>
+        ) : (
+          <div>
+            {runs.map((run) => (
+              <TraceRow key={run.id} run={run} leagueId={leagueId} />
+            ))}
+          </div>
+        )}
+        {status === "CanLoadMore" || status === "LoadingMore" ? (
+          <CardFooter className="flex justify-center">
+            <Button
+              size="sm"
+              variant="secondary"
+              disabled={isLoading}
+              onClick={() => loadMore(PAGE_SIZE)}
+            >
+              {status === "LoadingMore" ? "Loading…" : "Load more"}
+            </Button>
+          </CardFooter>
+        ) : null}
+      </Card>
+    </>
   );
 }

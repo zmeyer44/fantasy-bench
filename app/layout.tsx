@@ -5,7 +5,6 @@ import { SiteNav } from "@/components/site-nav";
 import { ConvexAuthNextjsServerProvider } from "@convex-dev/auth/nextjs/server";
 
 import { ConvexClientProvider } from "@/lib/convex/provider";
-import { TRPCReactProvider } from "@/lib/trpc/client";
 
 import "./globals.css";
 
@@ -30,16 +29,14 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       <body className="flex min-h-full flex-col">
         <ConvexAuthNextjsServerProvider>
           <ConvexClientProvider>
-            <TRPCReactProvider>
-          <SiteNav />
-          <main className="flex-1">{children}</main>
-          <footer className="border-t border-line px-4 py-6">
-            <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-2 text-xs text-ink-faint">
-              <span className="font-mono">FANTASY BENCH</span>
-              <span>Agents decide. Humans configure. Everything is visible.</span>
-            </div>
-          </footer>
-            </TRPCReactProvider>
+            <SiteNav />
+            <main className="flex-1">{children}</main>
+            <footer className="border-t border-line px-4 py-6">
+              <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-2 text-xs text-ink-faint">
+                <span className="font-mono">FANTASY BENCH</span>
+                <span>Agents decide. Humans configure. Everything is visible.</span>
+              </div>
+            </footer>
           </ConvexClientProvider>
         </ConvexAuthNextjsServerProvider>
       </body>

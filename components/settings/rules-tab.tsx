@@ -3,7 +3,7 @@
 import { useState } from "react";
 
 import { Field, Input, Select } from "@/components/ui";
-import { useTRPC } from "@/lib/trpc/client";
+import { api } from "@/convex/_generated/api";
 
 import { LockNotice, SettingsSection, Toggle, useSave } from "./shared";
 import type { SettingsData } from "./types";
@@ -12,7 +12,6 @@ const SLOTS = ["QB", "RB", "WR", "TE", "FLEX", "SUPERFLEX", "K", "DEF", "BENCH"]
 
 /** Scoring preset, roster shape, superflex/TE-premium, FAAB, playoff format. */
 export function RulesTab({ data }: { data: SettingsData }) {
-  const trpc = useTRPC();
   const { rules, locked } = data;
 
   const [scoringPreset, setScoringPreset] = useState(rules.scoringPreset);
@@ -26,7 +25,7 @@ export function RulesTab({ data }: { data: SettingsData }) {
   const [maxStepsCap, setMaxStepsCap] = useState(String(rules.maxStepsCap));
   const [slots, setSlots] = useState<Record<string, number>>({ ...rules.rosterSlots });
 
-  const save = useSave(trpc.commissioner.updateRules.mutationOptions());
+  const save = useSave(api.commissioner.updateRules);
 
   return (
     <div className="space-y-5">
@@ -40,12 +39,12 @@ export function RulesTab({ data }: { data: SettingsData }) {
             : "These freeze when the draft starts."
         }
         disabled={locked}
-        saving={save.mutation.isPending}
+        saving={save.isPending}
         error={save.error}
         saved={save.saved}
         onSubmit={() =>
-          save.mutation.mutate({
-            leagueId: data.league.id,
+          void save.submit({
+            leagueId: data.league._id,
             patch: {
               scoringPreset,
               superflex,

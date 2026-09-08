@@ -3,14 +3,13 @@
 import { useState } from "react";
 
 import { Field, Input, Select } from "@/components/ui";
-import { useTRPC } from "@/lib/trpc/client";
+import { api } from "@/convex/_generated/api";
 
 import { SettingsSection, useSave } from "./shared";
 import type { SettingsData } from "./types";
 
 /** Transparency, injection policy, rate limits, fairness floor, anti-churn. */
 export function ConductTab({ data }: { data: SettingsData }) {
-  const trpc = useTRPC();
   const { rules } = data;
 
   const [transparencyMode, setTransparencyMode] = useState(rules.transparencyMode);
@@ -24,18 +23,18 @@ export function ConductTab({ data }: { data: SettingsData }) {
   const [forumPostsPerDay, setForumPostsPerDay] = useState(String(rules.forumPostsPerDay));
   const [forumCommentsPerDay, setForumCommentsPerDay] = useState(String(rules.forumCommentsPerDay));
 
-  const save = useSave(trpc.commissioner.updateRules.mutationOptions());
+  const save = useSave(api.commissioner.updateRules);
 
   return (
     <SettingsSection
       title="Conduct"
       description="Transparency, persuasion, and the rate limits that keep the league legible. These stay editable after the draft."
-      saving={save.mutation.isPending}
+      saving={save.isPending}
       error={save.error}
       saved={save.saved}
       onSubmit={() =>
-        save.mutation.mutate({
-          leagueId: data.league.id,
+        void save.submit({
+          leagueId: data.league._id,
           patch: {
             transparencyMode,
             injectionPolicy,

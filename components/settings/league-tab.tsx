@@ -3,7 +3,7 @@
 import { useState } from "react";
 
 import { Badge, Button, Field, Input, Select } from "@/components/ui";
-import { useTRPC } from "@/lib/trpc/client";
+import { api } from "@/convex/_generated/api";
 import { formatET } from "@/lib/time";
 
 import { SettingsSection, Toggle, useSave } from "./shared";
@@ -11,7 +11,6 @@ import type { SettingsData } from "./types";
 
 /** Name, visibility, draft format/time, invite link, and starting the draft. */
 export function LeagueTab({ data }: { data: SettingsData }) {
-  const trpc = useTRPC();
   const { league, locked } = data;
 
   const [name, setName] = useState(league.name);
@@ -22,25 +21,26 @@ export function LeagueTab({ data }: { data: SettingsData }) {
   );
   const [copied, setCopied] = useState(false);
 
-  const save = useSave(trpc.commissioner.updateLeague.mutationOptions());
-  const start = useSave(trpc.commissioner.startDraft.mutationOptions());
-  const rotate = useSave(trpc.commissioner.rotateJoinCode.mutationOptions());
+  const save = useSave(api.commissioner.updateLeague);
+  const start = useSave(api.commissioner.startDraft);
+  const rotate = useSave(api.commissioner.rotateJoinCode);
 
   return (
     <div className="space-y-5">
       <SettingsSection
         title="League"
         description="Public leagues render every spectator page without a login."
-        saving={save.mutation.isPending}
+        saving={save.isPending}
         error={save.error}
         saved={save.saved}
         onSubmit={() =>
-          save.mutation.mutate({
-            leagueId: league.id,
+          void save.submit({
+            leagueId: league._id,
             name,
             isPublic,
             draftType,
-            draftScheduledAt: draftAt ? new Date(draftAt) : null,
+            // Convex stores dates as epoch ms; the input is local wall-clock.
+            draftScheduledAt: draftAt ? new Date(draftAt).getTime() : null,
           })
         }
       >
@@ -111,8 +111,8 @@ export function LeagueTab({ data }: { data: SettingsData }) {
           <Button
             size="sm"
             variant="ghost"
-            disabled={rotate.mutation.isPending}
-            onClick={() => rotate.mutation.mutate({ leagueId: league.id })}
+            disabled={rotate.isPending}
+            onClick={() => void rotate.submit({ leagueId: league._id })}
           >
             Rotate
           </Button>
@@ -142,15 +142,15 @@ export function LeagueTab({ data }: { data: SettingsData }) {
           {league.status === "setup" ? (
             <Button
               size="sm"
-              disabled={start.mutation.isPending}
+              disabled={start.isPending}
               onClick={() =>
-                start.mutation.mutate({
-                  leagueId: league.id,
-                  scheduledAt: draftAt ? new Date(draftAt) : null,
+                void start.submit({
+                  leagueId: league._id,
+                  scheduledAt: draftAt ? new Date(draftAt).getTime() : null,
                 })
               }
             >
-              {start.mutation.isPending ? "Starting…" : "Start the draft"}
+              {start.isPending ? "Starting…" : "Start the draft"}
             </Button>
           ) : null}
           {start.error ? <span className="text-xs text-danger">{start.error}</span> : null}
