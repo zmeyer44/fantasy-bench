@@ -15,16 +15,29 @@
  *     Steps are now paginated (`runs.steps`) and large tool results are lazy
  *     (`runs.stepPayload`), so the viewer subscribes to a small document.
  */
+import { type WorkId } from "@convex-dev/workpool";
 import { paginationOptsValidator } from "convex/server";
 import { v } from "convex/values";
 
 import type { TraceListItem as LegacyListItem } from "../lib/services/views/traces";
-import type { Doc, Id } from "./_generated/dataModel";
-import { internalMutation, query, type QueryCtx } from "./_generated/server";
+import { internal } from "./_generated/api";
+import type { DataModel, Doc, Id } from "./_generated/dataModel";
+import {
+  internalMutation,
+  internalQuery,
+  query,
+  type MutationCtx,
+  type QueryCtx,
+} from "./_generated/server";
+import { agentCtxValidator, withAgentAction, type AgentCtx } from "./lib/agent_action";
 import { requireLeagueRead } from "./lib/auth";
 import { appError } from "./lib/errors";
+import { round8 } from "./lib/pricing_pure";
+import { paginationResult } from "./lib/validators";
 import { modelLabel, windowLabelText } from "./lib/views_shared";
-import { runStatus, windowType } from "./schema";
+import { runPool } from "./runtime/pool";
+import type { ExecuteRunSummary } from "./runtime/types";
+import { promptSection, runStatus, stepUsage, windowType } from "./schema";
 
 export const TRACE_PAGE_SIZE = 25;
 /** Whole-team export cap, unchanged from `TEAM_EXPORT_RUN_LIMIT`. */
@@ -69,6 +82,8 @@ export type TraceStep = {
   finishReason: string | null;
   latencyMs: number | null;
   costUsd: number;
+  /** Gateway-reported cost for this call when the provider returned one. */
+  gatewayCostUsd: number | null;
   createdAt: number;
   /** True when any tool result in this step reports a validation failure. */
   hasValidationError: boolean;
@@ -410,6 +425,7 @@ function toStep(step: Doc<"run_steps">): TraceStep {
     finishReason: step.finishReason ?? null,
     latencyMs: step.latencyMs ?? null,
     costUsd: step.costUsd ?? 0,
+    gatewayCostUsd: step.gatewayCostUsd ?? null,
     createdAt: step._creationTime,
     hasValidationError: Array.isArray(toolResults) && toolResults.some(resultHasError),
   };
@@ -531,6 +547,61 @@ export const steps = query({
   },
 });
 
+/**
+ * The run's usage ledger, paginated.
+ *
+ * The viewer used to rebuild these rows from the loaded steps, which meant the
+ * ledger only ever showed the pages of steps that happened to be open and could
+ * not show the gateway's own figure. `usage_events` is the authoritative
+ * per-model-call record (one row per step, written by `ledger.recordStep`), so
+ * the table subscribes to it directly.
+ */
+export const usageEvents = query({
+  args: { runId: v.id("runs"), paginationOpts: paginationOptsValidator },
+  returns: paginationResult(
+    v.object({
+      stepIndex: v.number(),
+      modelId: v.string(),
+      provider: v.string(),
+      inputTokens: v.number(),
+      outputTokens: v.number(),
+      cachedInputTokens: v.number(),
+      reasoningTokens: v.number(),
+      latencyMs: v.union(v.number(), v.null()),
+      costUsd: v.number(),
+      computedCostUsd: v.number(),
+      gatewayCostUsd: v.union(v.number(), v.null()),
+      createdAt: v.number(),
+    }),
+  ),
+  handler: async (ctx, { runId, paginationOpts }) => {
+    const run = await ctx.db.get("runs", runId);
+    if (!run) throw appError("NOT_FOUND", "Run not found");
+    await requireLeagueRead(ctx, run.leagueId);
+    const page = await ctx.db
+      .query("usage_events")
+      .withIndex("by_runId_stepIndex", (q) => q.eq("runId", runId))
+      .paginate(paginationOpts);
+    return {
+      ...page,
+      page: page.page.map((event) => ({
+        stepIndex: event.stepIndex,
+        modelId: event.modelId,
+        provider: event.provider,
+        inputTokens: event.inputTokens,
+        outputTokens: event.outputTokens,
+        cachedInputTokens: event.cachedInputTokens,
+        reasoningTokens: event.reasoningTokens,
+        latencyMs: event.latencyMs ?? null,
+        costUsd: event.costUsd,
+        computedCostUsd: event.computedCostUsd,
+        gatewayCostUsd: event.gatewayCostUsd ?? null,
+        createdAt: event.createdAt,
+      })),
+    };
+  },
+});
+
 /** One overflowed tool result, loaded on demand by the trace viewer. */
 export const stepPayload = query({
   args: { payloadId: v.id("run_step_payloads") },
@@ -549,6 +620,39 @@ export const stepPayload = query({
       payload: payload.payload as unknown,
       bytes: payload.bytes,
     };
+  },
+});
+
+/**
+ * Player names matching a search term — the "Player matches:" line under the
+ * trace filters. `runs.search` resolves the same names for its own page, but the
+ * line has to stay live as the term changes, so the UI subscribes to this
+ * instead of re-reading a server-rendered page.
+ */
+export const searchPlayers = query({
+  args: { leagueId: v.id("leagues"), q: v.string() },
+  returns: v.array(
+    v.object({
+      playerId: v.id("players"),
+      fullName: v.string(),
+      position: v.string(),
+      nflTeam: v.union(v.string(), v.null()),
+    }),
+  ),
+  handler: async (ctx, { leagueId, q }) => {
+    await requireLeagueRead(ctx, leagueId);
+    const term = q.trim();
+    if (term.length === 0) return [];
+    const rows = await ctx.db
+      .query("players")
+      .withSearchIndex("search_fullName", (search) => search.search("fullName", term))
+      .take(10);
+    return rows.map((player) => ({
+      playerId: player._id,
+      fullName: player.fullName,
+      position: player.position,
+      nflTeam: player.nflTeam ?? null,
+    }));
   },
 });
 
@@ -769,3 +873,650 @@ function collectPlayerIds(
     for (const item of Object.values(value)) collectPlayerIds(ctx, item, out, depth + 1);
   }
 }
+
+// ===========================================================================
+// Phase 5a — the write half: the runtime's persistence contract.
+//
+// Ownership note: everything above this line is the Phase 2 read half and is
+// untouched. Everything below is written by (or for) the agent runtime in
+// `convex/runtime/**`, plus the two entry points the scheduler package calls:
+// `enqueueRun` and `internal.runs.cancelForWindow`.
+//
+// The division of labour is deliberate and load-bearing:
+//
+//  - `internal.runtime.execute.executeRun` (an action) does the model work and
+//    calls `markRunning` once and `persistStep` once per step. It NEVER writes a
+//    terminal status.
+//  - `internal.runs.onComplete` (the Workpool completion mutation) is the ONLY
+//    writer of a terminal status, of `runs.finishedAt`, of
+//    `windows.terminalRunCount`, and the only place the fallback model is
+//    enqueued or the safety autopilot is scheduled.
+//  - `internal.runs.cancelForWindow` is the escape hatch `windows.close` uses for
+//    runs that are still in flight when the window shuts.
+// ===========================================================================
+
+/** Tool results larger than this move to `run_step_payloads` (PRD 5.8). */
+export const PAYLOAD_INLINE_LIMIT = 64 * 1024;
+/** Runs per window: one per team, with headroom for fallback-model retries. */
+const MAX_RUNS_PER_WINDOW = 64;
+/** Actions scanned when deciding whether a run committed its window's primary action. */
+const MAX_ACTIONS_SCAN = 200;
+
+const TERMINAL_STATUSES = new Set<Doc<"runs">["status"]>([
+  "succeeded",
+  "partial",
+  "failed",
+  "timed_out",
+  "fallback",
+  "skipped",
+]);
+
+export function isTerminalRunStatus(status: Doc<"runs">["status"]): boolean {
+  return TERMINAL_STATUSES.has(status);
+}
+
+// ------------------------------------------------------------------ enqueue
+
+/**
+ * Put a pending run on the Workpool and remember its work id.
+ *
+ * The scheduler package (`windows.dispatch`) calls exactly this; nothing else
+ * should call `runPool.enqueueAction` for a run, because `runs.workId` is what
+ * `cancelForWindow` cancels and what the retry accounting hangs off.
+ */
+export async function enqueueRun(ctx: MutationCtx, runId: Id<"runs">): Promise<WorkId> {
+  const workId = await runPool.enqueueAction(
+    ctx,
+    internal.runtime.execute.executeRun,
+    { runId },
+    { onComplete: internal.runs.onComplete, context: { runId } },
+  );
+  await ctx.db.patch("runs", runId, { workId });
+  return workId;
+}
+
+/** `npx convex run runs:enqueue '{"runId":"…"}'` — the dev/smoke entry point. */
+export const enqueue = internalMutation({
+  args: { runId: v.id("runs") },
+  returns: v.string(),
+  handler: async (ctx, { runId }) => enqueueRun(ctx, runId),
+});
+
+// ------------------------------------------------------------- run lifecycle
+
+/**
+ * Mark a claimed run running and stamp what the executor resolved.
+ *
+ * Replaces the Postgres `claimRun` conditional UPDATE: the Workpool owns the
+ * claim, so this only records the model, config version and prompt sections and
+ * bumps `attempt` (one bump per Workpool attempt, so a retry is visible in the
+ * trace).
+ */
+export const markRunning = internalMutation({
+  args: {
+    runId: v.id("runs"),
+    modelId: v.string(),
+    configVersionId: v.optional(v.id("config_versions")),
+    promptSections: v.optional(v.array(promptSection)),
+    now: v.optional(v.number()),
+  },
+  returns: v.object({ attempt: v.number(), running: v.boolean() }),
+  handler: async (ctx, args) => {
+    const run = await ctx.db.get("runs", args.runId);
+    if (!run) throw appError("NOT_FOUND", "Run not found");
+    if (isTerminalRunStatus(run.status)) return { attempt: run.attempt, running: false };
+    const now = args.now ?? Date.now();
+    const attempt = run.attempt + 1;
+    await ctx.db.patch("runs", args.runId, {
+      status: "running",
+      startedAt: run.startedAt ?? now,
+      modelId: args.modelId,
+      attempt,
+      ...(args.configVersionId ? { configVersionId: args.configVersionId } : {}),
+      ...(args.promptSections ? { promptSections: args.promptSections } : {}),
+    });
+    return { attempt, running: true };
+  },
+});
+
+// ------------------------------------------------------------- write actions
+
+/**
+ * The replay check every write tool makes before it commits.
+ *
+ * `run_actions` is written by the service mutations themselves
+ * (`convex/lib/agent_action.ts`), inside the same transaction as the domain
+ * write. This query is the read side of that contract: a hit means the tool call
+ * already happened and its stored result must be replayed verbatim.
+ */
+export const actionResult = internalQuery({
+  args: { runId: v.id("runs"), toolCallId: v.string() },
+  // Documented v.any(): the stored tool result, replayed verbatim to the model.
+  returns: v.object({
+    found: v.boolean(),
+    committed: v.boolean(),
+    result: v.optional(v.any()),
+  }),
+  handler: async (ctx, { runId, toolCallId }) => {
+    const row = await ctx.db
+      .query("run_actions")
+      .withIndex("by_runId_toolCallId", (q) => q.eq("runId", runId).eq("toolCallId", toolCallId))
+      .first();
+    if (!row) return { found: false, committed: false };
+    return { found: true, committed: row.committedAt != null, result: row.result };
+  },
+});
+
+/**
+ * Record a write-tool call that was rejected before it reached a service
+ * mutation — a snapshot-level validation failure, or a mutation that threw so
+ * its own transaction (and its `run_actions` row) rolled back.
+ *
+ * Idempotent on `(runId, toolCallId)`: a no-op when the mutation already wrote
+ * the row itself, which is the common case.
+ */
+export const recordRejectedAction = internalMutation({
+  args: {
+    runId: v.id("runs"),
+    toolCallId: v.string(),
+    stepIndex: v.number(),
+    actionType: v.string(),
+    payload: v.record(v.string(), v.any()),
+    errors: v.array(v.string()),
+  },
+  returns: v.object({ recorded: v.boolean() }),
+  handler: async (ctx, args) => {
+    const existing = await ctx.db
+      .query("run_actions")
+      .withIndex("by_runId_toolCallId", (q) =>
+        q.eq("runId", args.runId).eq("toolCallId", args.toolCallId),
+      )
+      .first();
+    if (existing) return { recorded: false };
+    const run = await ctx.db.get("runs", args.runId);
+    if (!run) return { recorded: false };
+    await ctx.db.insert("run_actions", {
+      runId: args.runId,
+      leagueId: run.leagueId,
+      teamId: run.teamId,
+      toolCallId: args.toolCallId,
+      stepIndex: args.stepIndex,
+      actionType: args.actionType,
+      payload: args.payload,
+      validationResult: { ok: false, errors: args.errors },
+      result: { ok: false, errors: args.errors },
+    });
+    await ctx.db.patch("runs", args.runId, {
+      rejectedActionCount: run.rejectedActionCount + 1,
+    });
+    return { recorded: true };
+  },
+});
+
+/**
+ * `set_rationale`. The only write tool with no service of its own: the rationale
+ * lives on the run document, so it is written here, under the same
+ * `(runId, toolCallId)` contract as every other write tool.
+ */
+export const setRationale = internalMutation({
+  args: { runId: v.id("runs"), text: v.string(), agentCtx: agentCtxValidator },
+  returns: v.union(
+    v.object({ ok: v.literal(true), chars: v.number() }),
+    v.object({ ok: v.literal(false), errors: v.array(v.string()) }),
+  ),
+  handler: async (ctx, args) => {
+    return withAgentAction(
+      ctx,
+      args.agentCtx as AgentCtx,
+      { actionType: "set_rationale", payload: { text: args.text } },
+      async () => {
+        const text = args.text.trim();
+        if (!text) return { ok: false as const, errors: ["Rationale text cannot be empty."] };
+        await ctx.db.patch("runs", args.runId, { rationale: text });
+        return { ok: true as const, chars: text.length };
+      },
+    );
+  },
+});
+
+// --------------------------------------------------------------- persistStep
+
+function byteLength(value: unknown): number {
+  try {
+    return JSON.stringify(value ?? null)?.length ?? 0;
+  } catch {
+    return 0;
+  }
+}
+
+/**
+ * Commit one model step: the `run_steps` document, its oversized tool results,
+ * and the run's running totals — in one transaction.
+ *
+ * `internal.ledger.recordStep` is called from inside this mutation via
+ * `ctx.runMutation`, which joins the same transaction: the step document, the
+ * usage event and the rollups commit together or not at all.
+ *
+ * Idempotent on `(runId, stepIndex)`: a replayed step writes nothing.
+ */
+export const persistStep = internalMutation({
+  args: {
+    runId: v.id("runs"),
+    stepIndex: v.number(),
+    modelId: v.string(),
+    text: v.optional(v.string()),
+    reasoning: v.optional(v.string()),
+    // Documented v.any(): AI SDK payloads, exactly as the schema stores them.
+    responseMessages: v.any(),
+    toolCalls: v.any(),
+    toolResults: v.any(),
+    usage: stepUsage,
+    finishReason: v.optional(v.string()),
+    latencyMs: v.optional(v.number()),
+    gatewayCostUsd: v.optional(v.number()),
+    rationale: v.optional(v.string()),
+    /** The run is executing on the league's fallback model. */
+    isFallbackStep: v.optional(v.boolean()),
+    /** Write-tool calls rejected by validation during this step. */
+    invalidActionCount: v.optional(v.number()),
+  },
+  returns: v.object({
+    persisted: v.boolean(),
+    stepCount: v.number(),
+    lastPersistedStep: v.number(),
+    offloadedPayloads: v.number(),
+    costUsd: v.number(),
+  }),
+  // Explicit annotation: this mutation cross-calls `internal.ledger.recordStep`;
+  // without it the generated `api` type collapses to `any` (type cycle).
+  handler: async (
+    ctx,
+    args,
+  ): Promise<{
+    persisted: boolean;
+    stepCount: number;
+    lastPersistedStep: number;
+    offloadedPayloads: number;
+    costUsd: number;
+  }> => {
+    const run = await ctx.db.get("runs", args.runId);
+    if (!run) throw appError("NOT_FOUND", "Run not found");
+
+    const existing = await ctx.db
+      .query("run_steps")
+      .withIndex("by_runId_stepIndex", (q) =>
+        q.eq("runId", args.runId).eq("stepIndex", args.stepIndex),
+      )
+      .first();
+    if (existing) {
+      return {
+        persisted: false,
+        stepCount: run.stepCount,
+        lastPersistedStep: run.lastPersistedStep,
+        offloadedPayloads: 0,
+        costUsd: existing.costUsd,
+      };
+    }
+
+    // Ledger first, in this same transaction (PRD 5.9 / brief §7 "all of that is
+    // one transaction"): the usage event and the three rollups commit with the
+    // step document or not at all. `recordStep` is idempotent on (runId, stepIndex).
+    const ledger: { costUsd: number } = await ctx.runMutation(internal.ledger.recordStep, {
+      runId: args.runId,
+      stepIndex: args.stepIndex,
+      modelId: args.modelId,
+      usage: {
+        inputTokens: args.usage.inputTokens,
+        outputTokens: args.usage.outputTokens,
+        cachedInputTokens: args.usage.cachedInputTokens,
+        reasoningTokens: args.usage.reasoningTokens,
+      },
+      ...(args.latencyMs === undefined ? {} : { latencyMs: args.latencyMs }),
+      ...(args.gatewayCostUsd === undefined ? {} : { gatewayCostUsd: args.gatewayCostUsd }),
+      ...(args.isFallbackStep ? { isFallbackStep: true } : {}),
+      ...(args.invalidActionCount ? { invalidActionCount: args.invalidActionCount } : {}),
+    });
+    const costUsd = ledger.costUsd;
+
+    // Oversized tool results move to `run_step_payloads` and leave a reference
+    // behind, so a 400 KB search result cannot push the step past 1 MiB.
+    const rawResults = Array.isArray(args.toolResults)
+      ? (args.toolResults as Array<Record<string, unknown>>)
+      : [];
+    const storedResults: unknown[] = [];
+    let offloadedPayloads = 0;
+    for (const result of rawResults) {
+      const bytes = byteLength(result);
+      if (bytes <= PAYLOAD_INLINE_LIMIT) {
+        storedResults.push(result);
+        continue;
+      }
+      const toolCallId = typeof result?.toolCallId === "string" ? result.toolCallId : "unknown";
+      const toolName = typeof result?.toolName === "string" ? result.toolName : "unknown";
+      const payloadRef = await ctx.db.insert("run_step_payloads", {
+        runId: args.runId,
+        stepIndex: args.stepIndex,
+        toolCallId,
+        toolName,
+        payload: result,
+        bytes,
+      });
+      storedResults.push({
+        type: "tool-result",
+        toolCallId,
+        toolName,
+        payloadRef,
+        bytes,
+        truncated: true,
+      });
+      offloadedPayloads += 1;
+    }
+
+    const doc = {
+      runId: args.runId,
+      leagueId: run.leagueId,
+      stepIndex: args.stepIndex,
+      modelId: args.modelId,
+      responseMessages: args.responseMessages ?? [],
+      toolCalls: args.toolCalls ?? [],
+      toolResults: storedResults,
+      usage: args.usage,
+      costUsd: round8(costUsd),
+      ...(args.text ? { text: args.text } : {}),
+      ...(args.reasoning ? { reasoning: args.reasoning } : {}),
+      ...(args.finishReason ? { finishReason: args.finishReason } : {}),
+      ...(args.latencyMs === undefined ? {} : { latencyMs: args.latencyMs }),
+      ...(args.gatewayCostUsd === undefined ? {} : { gatewayCostUsd: args.gatewayCostUsd }),
+    };
+    await ctx.db.insert("run_steps", { ...doc, bytes: byteLength(doc) });
+
+    const stepCount = Math.max(run.stepCount, args.stepIndex + 1);
+    const lastPersistedStep = Math.max(run.lastPersistedStep, args.stepIndex);
+    await ctx.db.patch("runs", args.runId, {
+      stepCount,
+      lastPersistedStep,
+      totalCostUsd: round8(run.totalCostUsd + costUsd),
+      totalInputTokens: run.totalInputTokens + args.usage.inputTokens,
+      totalOutputTokens: run.totalOutputTokens + args.usage.outputTokens,
+      ...(args.rationale ? { rationale: args.rationale } : {}),
+    });
+
+    return { persisted: true, stepCount, lastPersistedStep, offloadedPayloads, costUsd };
+  },
+});
+
+// ---------------------------------------------------------------- completion
+
+/** Did this run land the action its window exists for? */
+async function committedActionTypes(
+  ctx: MutationCtx,
+  runId: Id<"runs">,
+): Promise<Set<string>> {
+  // Bounded: one run's actions.
+  const rows = await ctx.db
+    .query("run_actions")
+    .withIndex("by_runId_stepIndex", (q) => q.eq("runId", runId))
+    .take(MAX_ACTIONS_SCAN);
+  const out = new Set<string>();
+  for (const row of rows) if (row.committedAt != null) out.add(row.actionType);
+  return out;
+}
+
+/**
+ * Schedule the lineup safety autopilot for a run that ended without a lineup.
+ *
+ * PRD 5.4 fallbacks: a lineup window must never leave a team with an illegal or
+ * empty lineup, whatever the agent did or failed to do.
+ */
+async function scheduleSafetyAutopilot(
+  ctx: MutationCtx,
+  run: Doc<"runs">,
+  window: Doc<"windows">,
+): Promise<boolean> {
+  if (window.type !== "lineup" || !run.teamId || !window.snapshotId) return false;
+  const rules = await ctx.db
+    .query("league_rules")
+    .withIndex("by_leagueId", (q) => q.eq("leagueId", run.leagueId))
+    .unique();
+  if (rules && rules.safetyAutopilot === false) return false;
+  const committed = await committedActionTypes(ctx, run._id);
+  if (committed.has("set_lineup")) return false;
+  await ctx.scheduler.runAfter(0, internal.lineups.applySafetyAutopilot, {
+    snapshotId: window.snapshotId,
+    teamId: run.teamId,
+    weekNo: run.weekNo,
+    runId: run._id,
+  });
+  return true;
+}
+
+/** Read the action's return value defensively — the Workpool types it as `any`. */
+function readSummary(value: unknown): Partial<ExecuteRunSummary> {
+  if (!value || typeof value !== "object") return {};
+  return value as Partial<ExecuteRunSummary>;
+}
+
+async function finishRun(
+  ctx: MutationCtx,
+  run: Doc<"runs">,
+  patch: {
+    status: Doc<"runs">["status"];
+    outcome?: string | null;
+    error?: string | null;
+    fallbackApplied?: Doc<"runs">["fallbackApplied"] | null;
+    modelId?: string;
+  },
+): Promise<void> {
+  const window = await ctx.db.get("windows", run.windowId);
+  await ctx.db.patch("runs", run._id, {
+    status: patch.status,
+    finishedAt: Date.now(),
+    ...(patch.modelId ? { modelId: patch.modelId } : {}),
+    ...(patch.outcome ? { outcome: patch.outcome } : {}),
+    ...(patch.error ? { error: patch.error } : {}),
+    ...(patch.fallbackApplied ? { fallbackApplied: patch.fallbackApplied } : {}),
+  });
+  if (window) {
+    await ctx.db.patch("windows", window._id, {
+      terminalRunCount: window.terminalRunCount + 1,
+    });
+    if (patch.status !== "succeeded") await scheduleSafetyAutopilot(ctx, run, window);
+  }
+  // `internal.ledger.recordRunOutcome` is a mutation, so it cannot be called
+  // inline from another mutation; scheduling from a mutation is transactional and
+  // exactly-once, which is the guarantee the ledger's idempotency needs.
+  await ctx.scheduler.runAfter(0, internal.ledger.recordRunOutcome, {
+    runId: run._id,
+    status: patch.status,
+    fallbackApplied: patch.fallbackApplied != null,
+  });
+  await ctx.scheduler.runAfter(0, internal.runs.upsertSearchDoc, { runId: run._id });
+}
+
+/**
+ * Create and enqueue the fallback-model retry of a failed run.
+ *
+ * A new `runs` document rather than a mutation of the old one: the failed
+ * attempt keeps its trace, and the fallback run carries `fallbackOfRunId` plus
+ * `fallbackApplied.kind = 'fallback_model'` so the disclosure PRD 5.4 asks for is
+ * in the data, not in prose.
+ */
+export async function enqueueFallbackRunFor(
+  ctx: MutationCtx,
+  run: Doc<"runs">,
+  toModelId: string,
+  detail: string,
+): Promise<Id<"runs"> | null> {
+  if (run.fallbackOfRunId) return null;
+  if (!toModelId || toModelId === run.modelId) return null;
+  const newRunId = await ctx.db.insert("runs", {
+    windowId: run.windowId,
+    leagueId: run.leagueId,
+    ...(run.teamId ? { teamId: run.teamId } : {}),
+    ...(run.configVersionId ? { configVersionId: run.configVersionId } : {}),
+    modelId: toModelId,
+    kind: run.kind,
+    status: "pending",
+    windowType: run.windowType,
+    windowLabel: run.windowLabel,
+    weekNo: run.weekNo,
+    attempt: 0,
+    lastPersistedStep: -1,
+    totalCostUsd: 0,
+    totalInputTokens: 0,
+    totalOutputTokens: 0,
+    stepCount: 0,
+    committedActionCount: 0,
+    rejectedActionCount: 0,
+    fallbackOfRunId: run._id,
+    fallbackApplied: {
+      kind: "fallback_model" as const,
+      detail,
+      fromModelId: run.modelId,
+      toModelId,
+    },
+  });
+  const window = await ctx.db.get("windows", run.windowId);
+  if (window) await ctx.db.patch("windows", window._id, { runCount: window.runCount + 1 });
+  await enqueueRun(ctx, newRunId);
+  return newRunId;
+}
+
+export const enqueueFallbackRun = internalMutation({
+  args: { runId: v.id("runs"), toModelId: v.string(), detail: v.optional(v.string()) },
+  returns: v.union(v.null(), v.id("runs")),
+  handler: async (ctx, { runId, toModelId, detail }) => {
+    const run = await ctx.db.get("runs", runId);
+    if (!run) return null;
+    return enqueueFallbackRunFor(ctx, run, toModelId, detail ?? "primary run failed");
+  },
+});
+
+/**
+ * The Workpool completion mutation — the ONLY writer of a terminal run status.
+ *
+ *  - `success` → the status the action decided (`succeeded` / `partial` /
+ *    `fallback` / `timed_out` / `skipped`), plus its outcome, error and fallback
+ *    disclosure.
+ *  - `failed`  → `failed` after the pool exhausted its retries; if the league
+ *    names a fallback model and this run is not itself a fallback, a fresh run on
+ *    that model is enqueued.
+ *  - `canceled` → `timed_out`: the only thing that cancels a run is
+ *    `windows.close`.
+ *
+ * It runs in its own transaction, after the action's, so everything it needs
+ * about what the run did is already in `run_steps` / `run_actions`.
+ */
+const onCompleteContext = v.object({ runId: v.id("runs") });
+
+export const onComplete = runPool.defineOnComplete<DataModel, typeof onCompleteContext>({
+  context: onCompleteContext,
+  handler: async (ctx, { context, result }) => {
+    const run = await ctx.db.get("runs", context.runId);
+    if (!run) return;
+
+    // `windows.close` may have finalised this run already (it cancels the work
+    // item and marks it `timed_out` in one transaction). Never double-count.
+    if (isTerminalRunStatus(run.status)) {
+      await ctx.scheduler.runAfter(0, internal.runs.upsertSearchDoc, { runId: run._id });
+      return;
+    }
+
+    if (result.kind === "success") {
+      const summary = readSummary(result.returnValue);
+      await finishRun(ctx, run, {
+        status: summary.status ?? "succeeded",
+        outcome: summary.outcome ?? null,
+        error: summary.error ?? null,
+        fallbackApplied: summary.fallbackApplied ?? null,
+        ...(summary.modelId ? { modelId: summary.modelId } : {}),
+      });
+      return;
+    }
+
+    if (result.kind === "canceled") {
+      await finishRun(ctx, run, {
+        status: "timed_out",
+        outcome: "window_closed",
+        error: "the run was cancelled when its window closed",
+      });
+      return;
+    }
+
+    const error = result.error;
+    await finishRun(ctx, run, { status: "failed", outcome: "failed", error });
+
+    const rules = await ctx.db
+      .query("league_rules")
+      .withIndex("by_leagueId", (q) => q.eq("leagueId", run.leagueId))
+      .unique();
+    const fallbackModelId = rules?.fallbackModelId;
+    if (fallbackModelId) {
+      await enqueueFallbackRunFor(
+        ctx,
+        run,
+        fallbackModelId,
+        `primary model failed (${error.slice(0, 500)})`,
+      );
+    }
+  },
+});
+
+/**
+ * Time out every run of a window that is still in flight, cancelling its
+ * Workpool job first. Called by `windows.close`.
+ *
+ * Marking the status here (rather than waiting for the cancellation to surface
+ * in `onComplete`) is what makes the close deterministic: the window is closed
+ * with every run terminal, and `onComplete` sees a terminal run and does nothing.
+ *
+ * The lineup fallback is deliberately NOT applied here — `windows.close`
+ * schedules `internal.windows.autopilotForTeam` for every team in the window
+ * immediately after this call, which also covers teams whose run never started.
+ */
+export const cancelForWindow = internalMutation({
+  args: { windowId: v.id("windows"), now: v.optional(v.number()) },
+  returns: v.object({ cancelled: v.number() }),
+  handler: async (ctx, { windowId, now }) => {
+    const window = await ctx.db.get("windows", windowId);
+    let cancelled = 0;
+    for (const status of ["pending", "running"] as const) {
+      // Bounded: one window's runs (one per team, plus fallback retries).
+      const rows = await ctx.db
+        .query("runs")
+        .withIndex("by_windowId_status", (q) => q.eq("windowId", windowId).eq("status", status))
+        .take(MAX_RUNS_PER_WINDOW);
+      for (const run of rows) {
+        if (run.workId) {
+          try {
+            await runPool.cancel(ctx, run.workId as WorkId);
+          } catch {
+            // Already finished or expired from the pool's status table; the
+            // status write below is what matters.
+          }
+        }
+        await ctx.db.patch("runs", run._id, {
+          status: "timed_out",
+          outcome: run.outcome ?? "window_closed",
+          error: run.error ?? "the window closed before the run finished",
+          finishedAt: now ?? Date.now(),
+        });
+        cancelled += 1;
+        // No safety autopilot here: `internal.windows.close` schedules one per
+        // team right after calling this, for every team in the window, which
+        // covers runs that never started as well as these.
+        await ctx.scheduler.runAfter(0, internal.ledger.recordRunOutcome, {
+          runId: run._id,
+          status: "timed_out" as const,
+        });
+        await ctx.scheduler.runAfter(0, internal.runs.upsertSearchDoc, { runId: run._id });
+      }
+    }
+    if (window && cancelled > 0) {
+      await ctx.db.patch("windows", windowId, {
+        terminalRunCount: window.terminalRunCount + cancelled,
+      });
+    }
+    return { cancelled };
+  },
+});
