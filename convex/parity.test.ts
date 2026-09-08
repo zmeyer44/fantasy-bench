@@ -23,6 +23,11 @@
  * Deviations that Phase 2 accepted on purpose are asserted *as deviations*, each
  * with a `DEVIATION:` comment naming it. Anything else that differs is a failure.
  *
+ * Bounds (does a read stay capped when the data is pathological?) are a separate
+ * question, checked in `convex/limits.test.ts`; whether the real deployment ever
+ * hits a limit is checked by `scripts/limits-check.ts`. Results of all three:
+ * `docs/verification/phase2.md`.
+ *
  * The fixture is the whole golden dump — 3,230 players, 38 runs, 194 steps, 4
  * snapshots, 12 teams, one league — mapped to Convex documents by the same rules
  * `scripts/seed-convex.ts` applies (that script is a program, not a module, so the
@@ -2949,7 +2954,7 @@ describe("views.* (was views.*)", () => {
  * totals: a count over an unbounded index range is exactly the read the limits
  * work is trying to remove. Callers get `{ page, isDone, continueCursor }`.
  */
-function assertPaginationEnvelope(actual: unknown, path: string): void {
+function assertPaginationEnvelope(actual: unknown): void {
   expect(isPlainObject(actual)).toBe(true);
   const keys = liveKeys(actual as Record<string, unknown>);
   expect(keys).toContain("page");
@@ -2957,7 +2962,6 @@ function assertPaginationEnvelope(actual: unknown, path: string): void {
   expect(keys).toContain("continueCursor");
   expect(keys).not.toContain("total");
   expect(keys).not.toContain("pageCount");
-  void path;
 }
 
 describe("runs.* (was traces.*)", () => {
@@ -2966,7 +2970,7 @@ describe("runs.* (was traces.*)", () => {
       leagueId: fx.leagueId,
       paginationOpts: PAGE,
     });
-    assertPaginationEnvelope(first, "traces.list");
+    assertPaginationEnvelope(first);
     assertSameKeys(TRACE_LIST_ITEM, normalize(first.page[0]), "traces.list.items[0]");
 
     expect(first.page).toHaveLength(25);
@@ -3003,7 +3007,7 @@ describe("runs.* (was traces.*)", () => {
       q: "FAAB",
       paginationOpts: PAGE,
     });
-    assertPaginationEnvelope(actual, "traces.search");
+    assertPaginationEnvelope(actual);
     expect(actual.page.length).toBeGreaterThan(0);
     assertSameKeys(TRACE_LIST_ITEM, normalize(actual.page[0]), "traces.search.items[0]");
   });
@@ -3100,7 +3104,7 @@ describe("runs.* (was traces.*)", () => {
     expect(actual.team?.name).not.toBe("");
 
     const steps = await asDemo().query(api.runs.steps, { runId, paginationOpts: PAGE });
-    assertPaginationEnvelope(steps, "traces.get.steps");
+    assertPaginationEnvelope(steps);
     assertSameKeysExcept(
       {
         id: LEAF,
@@ -3178,7 +3182,7 @@ describe("runs.* (was traces.*)", () => {
       teamId,
       paginationOpts: PAGE,
     });
-    assertPaginationEnvelope(actual, "traces.exportTeam");
+    assertPaginationEnvelope(actual);
     expect(actual.page.length).toBeGreaterThan(0);
   });
 });
@@ -3251,7 +3255,7 @@ describe("commissioner.* (was commissioner.*)", () => {
       leagueId: fx.leagueId,
       paginationOpts: PAGE,
     });
-    assertPaginationEnvelope(actual, "commissioner.changeLog");
+    assertPaginationEnvelope(actual);
     // The golden dump has no rule changes.
     expect(actual.page).toEqual([]);
     expect(actual.isDone).toBe(true);
@@ -3441,7 +3445,7 @@ describe("messaging.* (was messaging.*)", () => {
       ],
     );
 
-    assertPaginationEnvelope(actual.messages, "messaging.getThread.messages");
+    assertPaginationEnvelope(actual.messages);
     assertSameKeys(
       THREAD_MESSAGE,
       normalize(actual.messages.page[0]),
@@ -3482,7 +3486,7 @@ describe("forum.* (was forum.*)", () => {
       sort: "hot",
       paginationOpts: PAGE,
     });
-    assertPaginationEnvelope(actual, "forum.list");
+    assertPaginationEnvelope(actual);
     assertSameKeysExcept(FORUM_POST, normalize(actual.page[0]), "forum.list.posts[0]", [
       // `comments` was only ever populated by `forum.get`; the list query omits the
       // key entirely rather than returning `undefined`.
