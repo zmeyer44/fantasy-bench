@@ -29,7 +29,7 @@ export default async function LeagueLayout({ children, params }: LayoutProps<"/l
       </div>
 
       <div className="mt-5">
-        <LeagueSubnav leagueId={leagueId} />
+        <LeagueSubnav leagueId={leagueId} isCommissioner={membership?.role === "commissioner"} />
       </div>
 
       <div className="pt-6">{children}</div>

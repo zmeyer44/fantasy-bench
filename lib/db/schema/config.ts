@@ -25,20 +25,34 @@ import { teams } from "./league";
 
 export const skillVisibilityEnum = pgEnum("skill_visibility", ["public", "private"]);
 
-/** Owner-tunable runtime knobs, bounded by `league_rules`. */
+/** Reasoning effort, where the model supports it. `null` = not requested. */
+export type ReasoningEffort = "low" | "medium" | "high";
+
+/**
+ * Owner-tunable runtime knobs, bounded by `league_rules`.
+ *
+ * `reasoningEffort` accepts `null` as well as `undefined` so a saved version can
+ * record "explicitly off" — `lib/services/config` normalises both to `null`.
+ */
 export type HarnessSettings = {
   maxSteps: number;
   tokenBudget: number;
   temperature: number;
-  reasoningEffort?: "low" | "medium" | "high";
+  reasoningEffort?: ReasoningEffort | null;
   /** Ask the model for an explicit plan step before it may call tools. */
   deliberateMode: boolean;
 };
 
+/**
+ * The single source of truth for default harness settings. Used as the column
+ * default, by `createDefaultAgentConfig` for version 1, and by the console's
+ * `parseHarness` normaliser (which re-exports it as `DEFAULT_HARNESS_SETTINGS`).
+ */
 export const DEFAULT_HARNESS: HarnessSettings = {
   maxSteps: 12,
-  tokenBudget: 120_000,
-  temperature: 0.7,
+  tokenBudget: 60_000,
+  temperature: 0.3,
+  reasoningEffort: null,
   deliberateMode: false,
 };
 
@@ -98,10 +112,17 @@ export const skills = pgTable(
     description: text("description").notNull().default(""),
     bodyMd: text("body_md").notNull(),
     visibility: skillVisibilityEnum("visibility").notNull().default("public"),
+    /** Set when this skill was created with `forkSkill`; points at the original. */
+    forkedFromSkillId: uuid("forked_from_skill_id").references((): AnyPgColumn => skills.id, {
+      onDelete: "set null",
+    }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
-  (t) => [index("skills_visibility_idx").on(t.visibility)],
+  (t) => [
+    index("skills_visibility_idx").on(t.visibility),
+    index("skills_author_idx").on(t.authorUserId),
+  ],
 );
 
 export const configVersionSkills = pgTable(
@@ -150,6 +171,12 @@ export const configVersionsRelations = relations(configVersions, ({ one, many })
 
 export const skillsRelations = relations(skills, ({ one, many }) => ({
   author: one(user, { fields: [skills.authorUserId], references: [user.id] }),
+  forkedFrom: one(skills, {
+    fields: [skills.forkedFromSkillId],
+    references: [skills.id],
+    relationName: "skill_forks",
+  }),
+  forks: many(skills, { relationName: "skill_forks" }),
   configVersions: many(configVersionSkills),
 }));
 

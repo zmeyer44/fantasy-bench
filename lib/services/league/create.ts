@@ -85,15 +85,31 @@ export function currentSeason(now = new Date()): number {
 }
 
 /**
- * Week 1 starts on the first Tuesday at 06:00 ET on or after September 1 —
- * the waiver-open boundary defined in ARCHITECTURE.md. Each week is 7 days.
+ * NFL week 1 opens on the Tuesday at 06:00 ET after Labor Day (the first Monday
+ * of September); the season kicks off that Thursday. Each week is 7 days and the
+ * Tuesday 06:00 ET boundary is the waiver-open instant (ARCHITECTURE.md).
+ *
+ * 2024 → Tue Sep 3 · 2025 → Tue Sep 2 · 2026 → Tue Sep 8.
+ * Pass `week1Start` to anchor to a known kickoff instead (e.g. from `nfl_games`).
  */
-export function weekBoundaries(season: number, weekNo: number): { startsAt: Date; endsAt: Date } {
-  const septemberFirst = fromET({ year: season, month: 9, day: 1, hour: 0, minute: 0 });
-  const week1Start = nextWeekdayAtET(septemberFirst, "tue", 6, 0);
-  const startsAt = new Date(week1Start.getTime() + (weekNo - 1) * 7 * 24 * 60 * 60 * 1000);
+export function weekBoundaries(
+  season: number,
+  weekNo: number,
+  week1Start?: Date,
+): { startsAt: Date; endsAt: Date } {
+  const anchor = week1Start ?? seasonWeek1Start(season);
+  const startsAt = new Date(anchor.getTime() + (weekNo - 1) * 7 * 24 * 60 * 60 * 1000);
   const endsAt = new Date(startsAt.getTime() + 7 * 24 * 60 * 60 * 1000);
   return { startsAt, endsAt };
+}
+
+/** Tuesday 06:00 ET after Labor Day for the given season. */
+export function seasonWeek1Start(season: number): Date {
+  // Labor Day = first Monday of September (`nextWeekdayAtET` is on-or-after, so a
+  // September 1 Monday counts).
+  const septemberFirst = fromET({ year: season, month: 9, day: 1, hour: 0, minute: 0 });
+  const laborDay = nextWeekdayAtET(septemberFirst, "mon", 0, 0);
+  return nextWeekdayAtET(laborDay, "tue", 6, 0);
 }
 
 async function uniqueSlug(base: string, executor: DbOrTx): Promise<string> {

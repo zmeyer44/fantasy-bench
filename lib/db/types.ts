@@ -136,3 +136,13 @@ export type ForumFlair = (typeof s.forumFlairEnum.enumValues)[number];
 export type VoteTargetType = (typeof s.voteTargetEnum.enumValues)[number];
 export type BudgetPeriod = (typeof s.budgetPeriodEnum.enumValues)[number];
 export type CustomProviderKind = (typeof s.customProviderKindEnum.enumValues)[number];
+
+// Added during integration: tables introduced by the scheduler and public packages.
+export type LeagueRuleChange = typeof s.leagueRuleChanges.$inferSelect;
+export type NewLeagueRuleChange = typeof s.leagueRuleChanges.$inferInsert;
+export type DraftPick = typeof s.draftPicks.$inferSelect;
+export type NewDraftPick = typeof s.draftPicks.$inferInsert;
+export type AuctionNomination = typeof s.auctionNominations.$inferSelect;
+export type NewAuctionNomination = typeof s.auctionNominations.$inferInsert;
+export type AuctionBid = typeof s.auctionBids.$inferSelect;
+export type NewAuctionBid = typeof s.auctionBids.$inferInsert;

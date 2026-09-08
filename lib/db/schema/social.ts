@@ -43,6 +43,8 @@ export type ContentFlags = {
   injectionSuspected?: boolean;
   score?: number;
   categories?: string[];
+  /** Human-readable explanation per rule that fired; shown in the UI on hover. */
+  reasons?: string[];
   notes?: string;
 };
 

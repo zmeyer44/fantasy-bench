@@ -96,6 +96,15 @@ export const windows = pgTable(
     index("windows_league_status_idx").on(t.leagueId, t.status),
     index("windows_opens_at_idx").on(t.opensAt),
     index("windows_league_week_idx").on(t.leagueId, t.weekNo, t.type),
+    // `materializeWindows` is idempotent by way of this constraint: one window
+    // per (league, template label, week, round). `week_no` is nullable, so the
+    // scheduler writes 0 rather than NULL for week-less windows (drafts).
+    uniqueIndex("windows_league_label_week_round_unique").on(
+      t.leagueId,
+      t.label,
+      t.weekNo,
+      t.roundNo,
+    ),
   ],
 );
 
@@ -121,6 +130,21 @@ export const snapshots = pgTable(
     index("snapshots_window_idx").on(t.windowId),
   ],
 );
+
+/**
+ * One assembled prompt section (PRD 5.4 step 2), stored on the run so the trace
+ * viewer can render the system prompt collapsed by section. Added by the runtime
+ * package; `lib/agent/prompt.ts` is the producer.
+ */
+export type PromptSection = {
+  id: string;
+  title: string;
+  /** "system" sections are concatenated into `instructions`, "user" into the first user message. */
+  role: "system" | "user";
+  chars: number;
+  tokenEstimate: number;
+  text: string;
+};
 
 /** What the runtime substituted when the primary path failed. */
 export type FallbackApplied = {
@@ -163,6 +187,10 @@ export const runs = pgTable(
     stepCount: integer("step_count").notNull().default(0),
     error: text("error"),
     fallbackApplied: jsonb("fallback_applied").$type<FallbackApplied>(),
+    /** Assembled prompt sections (runtime package; see lib/agent/prompt.ts). */
+    promptSections: jsonb("prompt_sections").$type<PromptSection[]>(),
+    /** Full AI SDK message array for the trace (instructions + user + response messages). */
+    messages: jsonb("messages").$type<StepMessages>(),
     attempt: integer("attempt").notNull().default(1),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
@@ -236,6 +264,8 @@ export const runActions = pgTable(
       .$type<ValidationResult>()
       .notNull()
       .default({ ok: true }),
+    /** Structured tool result handed back to the model. Replayed verbatim on an idempotent retry. */
+    result: jsonb("result").$type<Record<string, unknown>>(),
     committedAt: timestamp("committed_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },

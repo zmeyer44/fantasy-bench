@@ -63,6 +63,8 @@ export const nflGames = pgTable(
     season: integer("season").notNull(),
     week: integer("week").notNull(),
     gameId: text("game_id").notNull().unique(),
+    /** ESPN event id, when the scoreboard supplied this row (scheduler package). */
+    espnId: text("espn_id"),
     homeTeam: text("home_team").notNull(),
     awayTeam: text("away_team").notNull(),
     kickoffAt: timestamp("kickoff_at", { withTimezone: true }).notNull(),

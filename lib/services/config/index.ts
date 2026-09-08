@@ -1,26 +1,88 @@
 /**
- * CONTRACT STUB — owned by the owner-console package, which replaces this file.
+ * Agent configuration service (owner console).
+ *
+ * The public surface other packages depend on:
+ *   - `getCurrentConfigVersion(teamId)` — the runtime's prompt-assembly input.
+ *   - `applyPendingConfigVersions(leagueId)` — the scheduler's unlock hook.
+ * Everything else backs the console UI.
+ *
+ * Read models are deliberately viewer-free: configs, versions and diffs are
+ * public within the league (PRD 5.5 / 7). Only the write paths check identity.
  */
-import type { DbOrTx } from "@/lib/db";
-import type { ConfigVersion, Skill } from "@/lib/db/types";
+export {
+  ConfigForbiddenError,
+  ConfigNotFoundError,
+  ConfigValidationError,
+  type ConfigIssue,
+} from "./errors";
 
-export type HarnessSettings = {
-  maxSteps: number;
-  tokenBudget: number;
-  temperature: number;
-  reasoningEffort?: "low" | "medium" | "high" | null;
-  deliberateMode: boolean;
-};
+export {
+  DEFAULT_HARNESS_SETTINGS,
+  MAX_STEPS_CEILING,
+  MAX_STEPS_FLOOR,
+  REASONING_EFFORTS,
+  TEMPERATURE_MAX,
+  TEMPERATURE_MIN,
+  TOKEN_BUDGET_MAX,
+  TOKEN_BUDGET_MIN,
+  harnessInputSchema,
+  modelSupportsReasoning,
+  parseHarness,
+  type HarnessSettings,
+} from "./harness";
 
-/** The applied config version for a team plus its attached skills, in order. Null if none. */
-export async function getCurrentConfigVersion(
-  _teamId: string,
-  _executor?: DbOrTx,
-): Promise<(ConfigVersion & { skills: Skill[]; harness: HarnessSettings }) | null> {
-  throw new Error("not implemented (console package)");
-}
+export {
+  editLockStatusFor,
+  ensureAgentConfig,
+  getConfigForTeam,
+  getCurrentConfigVersion,
+  getEditLockStatus,
+  getPreviousVersion,
+  getVersion,
+  getVersionContext,
+  listPendingConfigs,
+  listVersions,
+  toEditLock,
+  type ConfigVersionSummary,
+  type ConfigVersionWithSkills,
+  type EditLockStatus,
+  type TeamConfigView,
+} from "./queries";
 
-/** Apply any pending (queued-during-lock) versions for every team in the league. Called by the tick at unlock. */
-export async function applyPendingConfigVersions(_leagueId: string, _executor?: DbOrTx): Promise<number> {
-  throw new Error("not implemented (console package)");
-}
+export {
+  diffContext,
+  diffHarness,
+  diffSkills,
+  diffVersionRows,
+  diffVersions,
+  type ConfigDiff,
+  type ContextDiff,
+  type DiffHunk,
+  type DiffLine,
+  type FieldDiff,
+  type SkillDiff,
+  type VersionStamp,
+} from "./diff";
+
+export {
+  ASSUMED_OUTPUT_TOKENS_PER_STEP,
+  ASSUMED_STEPS,
+  BASE_PROMPT_TOKENS,
+  CHARS_PER_TOKEN,
+  estimatePromptSize,
+  estimateTokens,
+  type EstimateInput,
+  type PromptEstimate,
+} from "./estimate";
+
+export {
+  MAX_ATTACHED_SKILLS,
+  applyPendingConfigVersions,
+  assertMayEdit,
+  canEditConfig,
+  saveVersion,
+  setNoteToAgent,
+  validateAgainstRules,
+  type SaveVersionInput,
+  type SaveVersionResult,
+} from "./save";

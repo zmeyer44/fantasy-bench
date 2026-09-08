@@ -250,3 +250,129 @@ export const tradeVotesRelations = relations(tradeVotes, ({ one }) => ({
   trade: one(trades, { fields: [tradeVotes.tradeId], references: [trades.id] }),
   user: one(user, { fields: [tradeVotes.userId], references: [user.id] }),
 }));
+
+// ---------------------------------------------------------------------------
+// Draft (scheduler package)
+//
+// `draft_picks` is created up-front for the whole draft (one row per slot) and
+// filled in as picks land, so "who is on the clock" is a query rather than a
+// counter, and the board renders before a single pick is made. Auction lots use
+// the same table: `price` carries the winning bid.
+// ---------------------------------------------------------------------------
+
+export const draftPicks = pgTable(
+  "draft_picks",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    leagueId: uuid("league_id")
+      .notNull()
+      .references(() => leagues.id, { onDelete: "cascade" }),
+    round: integer("round").notNull(),
+    /** 1-based position within the round. */
+    pickNo: integer("pick_no").notNull(),
+    /** 1-based position across the whole draft. */
+    overallNo: integer("overall_no").notNull(),
+    teamId: uuid("team_id")
+      .notNull()
+      .references(() => teams.id, { onDelete: "cascade" }),
+    playerId: uuid("player_id").references(() => players.id, { onDelete: "set null" }),
+    /** Auction only: the winning bid. */
+    price: integer("price"),
+    madeByRunId: uuid("made_by_run_id").references(() => runs.id, { onDelete: "set null" }),
+    windowId: uuid("window_id").references(() => windows.id, { onDelete: "set null" }),
+    /** True when the pick clock expired and the platform auto-picked. */
+    auto: boolean("auto").notNull().default(false),
+    /** Agent-authored public explanation, published to the draft board. */
+    rationale: text("rationale"),
+    madeAt: timestamp("made_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("draft_picks_league_overall_unique").on(t.leagueId, t.overallNo),
+    index("draft_picks_league_team_idx").on(t.leagueId, t.teamId),
+    index("draft_picks_player_idx").on(t.playerId),
+  ],
+);
+
+/** Auction: one lot = one nomination, opened by the nominating team. */
+export const auctionNominations = pgTable(
+  "auction_nominations",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    leagueId: uuid("league_id")
+      .notNull()
+      .references(() => leagues.id, { onDelete: "cascade" }),
+    /** 1-based lot number; matches `draft_picks.overall_no` once resolved. */
+    lotNo: integer("lot_no").notNull(),
+    nominatingTeamId: uuid("nominating_team_id")
+      .notNull()
+      .references(() => teams.id, { onDelete: "cascade" }),
+    playerId: uuid("player_id").references(() => players.id, { onDelete: "set null" }),
+    openingBid: integer("opening_bid").notNull().default(1),
+    windowId: uuid("window_id").references(() => windows.id, { onDelete: "set null" }),
+    runId: uuid("run_id").references(() => runs.id, { onDelete: "set null" }),
+    /** `open` while bids are accepted, then `resolved` (or `abandoned`). */
+    status: text("status").notNull().default("open"),
+    winningTeamId: uuid("winning_team_id").references(() => teams.id, { onDelete: "set null" }),
+    winningBid: integer("winning_bid"),
+    /** How a tie was broken, recorded in the trace (PRD 5.2). */
+    tiebreak: jsonb("tiebreak").$type<Record<string, unknown>>(),
+    resolvedAt: timestamp("resolved_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("auction_nominations_league_lot_unique").on(t.leagueId, t.lotNo),
+    index("auction_nominations_league_status_idx").on(t.leagueId, t.status),
+  ],
+);
+
+/** Sealed bids (PRD 5.2 / open question 4). One row per team per lot. */
+export const auctionBids = pgTable(
+  "auction_bids",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    nominationId: uuid("nomination_id")
+      .notNull()
+      .references(() => auctionNominations.id, { onDelete: "cascade" }),
+    teamId: uuid("team_id")
+      .notNull()
+      .references(() => teams.id, { onDelete: "cascade" }),
+    amount: integer("amount").notNull(),
+    runId: uuid("run_id").references(() => runs.id, { onDelete: "set null" }),
+    windowId: uuid("window_id").references(() => windows.id, { onDelete: "set null" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [uniqueIndex("auction_bids_nomination_team_unique").on(t.nominationId, t.teamId)],
+);
+
+export const draftPicksRelations = relations(draftPicks, ({ one }) => ({
+  league: one(leagues, { fields: [draftPicks.leagueId], references: [leagues.id] }),
+  team: one(teams, { fields: [draftPicks.teamId], references: [teams.id] }),
+  player: one(players, { fields: [draftPicks.playerId], references: [players.id] }),
+  madeByRun: one(runs, { fields: [draftPicks.madeByRunId], references: [runs.id] }),
+  window: one(windows, { fields: [draftPicks.windowId], references: [windows.id] }),
+}));
+
+export const auctionNominationsRelations = relations(auctionNominations, ({ one, many }) => ({
+  league: one(leagues, { fields: [auctionNominations.leagueId], references: [leagues.id] }),
+  nominatingTeam: one(teams, {
+    fields: [auctionNominations.nominatingTeamId],
+    references: [teams.id],
+    relationName: "auction_nominator",
+  }),
+  winningTeam: one(teams, {
+    fields: [auctionNominations.winningTeamId],
+    references: [teams.id],
+    relationName: "auction_winner",
+  }),
+  player: one(players, { fields: [auctionNominations.playerId], references: [players.id] }),
+  bids: many(auctionBids),
+}));
+
+export const auctionBidsRelations = relations(auctionBids, ({ one }) => ({
+  nomination: one(auctionNominations, {
+    fields: [auctionBids.nominationId],
+    references: [auctionNominations.id],
+  }),
+  team: one(teams, { fields: [auctionBids.teamId], references: [teams.id] }),
+}));

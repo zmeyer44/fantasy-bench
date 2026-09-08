@@ -14,7 +14,10 @@
     "db:migrate": "tsx --env-file-if-exists=.env.local scripts/migrate.ts",
     "db:push": "drizzle-kit push",
     "db:seed": "tsx --env-file-if-exists=.env.local scripts/seed.ts",
-    "db:reset": "tsx --env-file-if-exists=.env.local scripts/reset.ts && npm run db:migrate && npm run db:seed"
+    "db:seed-demo": "tsx --env-file-if-exists=.env.local scripts/seed-demo.ts",
+    "ingest": "tsx --env-file-if-exists=.env.local scripts/ingest.ts",
+    "db:reset": "tsx --env-file-if-exists=.env.local scripts/reset.ts && npm run db:migrate && npm run db:seed",
+    "smoke": "tsx --env-file-if-exists=.env.local scripts/smoke-e2e.ts"
   },
   "dependencies": {
     "@ai-sdk/gateway": "^4.0.75",

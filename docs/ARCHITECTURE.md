@@ -119,7 +119,10 @@ npm run db:generate | db:migrate | db:push | db:seed | db:reset
 
 ## Work packages & ownership (parallel build)
 
-Five packages build concurrently in this working tree. Each owns the paths below exclusively.
+> Status: all five packages have landed and are integrated (Sept 2026). The table remains the
+> map of where each domain lives; the CONTRACT STUB files are now real implementations.
+
+Five packages were built concurrently in this working tree. Each owns the paths below exclusively.
 Cross-package calls go through the **contract stubs** (files marked `CONTRACT STUB`); the owner
 replaces the stub with the real implementation keeping the exported signatures. Callers code
 against the stub signatures and must not edit them.

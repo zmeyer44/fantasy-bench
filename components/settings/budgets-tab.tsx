@@ -1,0 +1,66 @@
+"use client";
+
+import { useState } from "react";
+
+import { Field, Input } from "@/components/ui";
+import { useTRPC } from "@/lib/trpc/client";
+
+import { SettingsSection, useSave } from "./shared";
+import type { SettingsData } from "./types";
+
+/** Weekly token cap per team (game mechanic) and league USD hard cap (safety). */
+export function BudgetsTab({ data }: { data: SettingsData }) {
+  const trpc = useTRPC();
+  const [tokenCap, setTokenCap] = useState(
+    data.rules.weeklyTokenCapPerTeam === null ? "" : String(data.rules.weeklyTokenCapPerTeam),
+  );
+  const [usdCap, setUsdCap] = useState(
+    data.rules.leagueUsdHardCap === null ? "" : String(data.rules.leagueUsdHardCap),
+  );
+
+  const save = useSave(trpc.commissioner.setBudgets.mutationOptions());
+
+  return (
+    <SettingsSection
+      title="Budgets"
+      description="Budgets stay editable after the draft (PRD 5.1). Every change is logged."
+      saving={save.mutation.isPending}
+      error={save.error}
+      saved={save.saved}
+      onSubmit={() =>
+        save.mutation.mutate({
+          leagueId: data.league.id,
+          weeklyTokenCapPerTeam: tokenCap === "" ? null : Number(tokenCap),
+          leagueUsdHardCap: usdCap === "" ? null : Number(usdCap),
+        })
+      }
+      footer="When the USD hard cap is reached, remaining runs in the week use fallbacks and the commissioner is notified."
+    >
+      <div className="grid gap-4 sm:grid-cols-2">
+        <Field
+          label="Weekly token cap per team"
+          hint="Blank = no cap. The agent is told its remaining budget in every run."
+        >
+          <Input
+            type="number"
+            min={0}
+            step={1000}
+            placeholder="No cap"
+            value={tokenCap}
+            onChange={(event) => setTokenCap(event.target.value)}
+          />
+        </Field>
+        <Field label="League USD hard cap" hint="Blank = no cap. This is a safety mechanism.">
+          <Input
+            type="number"
+            min={0}
+            step="0.01"
+            placeholder="No cap"
+            value={usdCap}
+            onChange={(event) => setUsdCap(event.target.value)}
+          />
+        </Field>
+      </div>
+    </SettingsSection>
+  );
+}

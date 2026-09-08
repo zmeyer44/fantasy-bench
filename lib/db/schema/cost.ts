@@ -51,6 +51,14 @@ export const usageEvents = pgTable(
       .default(0),
     /** As reported by the gateway, when available. Preferred for reconciliation. */
     gatewayCostUsd: numeric("gateway_cost_usd", { precision: 14, scale: 8, mode: "number" }),
+    /**
+     * Always the figure derived from `model_prices` / the model catalog, kept even
+     * when the gateway reported a cost (PRD 5.9 "store both"). `cost_usd` is the
+     * preferred figure: gateway when present, else this one.
+     */
+    computedCostUsd: numeric("computed_cost_usd", { precision: 14, scale: 8, mode: "number" })
+      .notNull()
+      .default(0),
     /** Set on a correcting row; points at the row being superseded. */
     correctsEventId: uuid("corrects_event_id").references((): AnyPgColumn => usageEvents.id, {
       onDelete: "set null",
@@ -125,6 +133,8 @@ export const budgetRollups = pgTable(
       .notNull()
       .default(0),
     runCount: integer("run_count").notNull().default(0),
+    /** Set once when the league USD hard cap notification was posted for this league-week. */
+    capNotifiedAt: timestamp("cap_notified_at", { withTimezone: true }),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [

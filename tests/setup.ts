@@ -44,6 +44,10 @@ let migrated = false;
 beforeAll(async () => {
   if (migrated) return;
   const { pushSchema } = await import("drizzle-kit/api");
+  // Start from an empty schema: pushSchema prompts interactively when a diff
+  // would lose data, and a test database has nothing worth keeping.
+  await pgClient.unsafe("drop schema if exists public cascade; create schema public;");
+  await pgClient.unsafe("drop schema if exists drizzle cascade;");
   // drizzle-kit expects node-postgres style `{ rows }` from `execute`; postgres-js
   // returns the row array directly, so adapt it.
   const shim = {

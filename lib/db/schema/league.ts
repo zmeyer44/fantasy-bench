@@ -49,6 +49,12 @@ export const leagues = pgTable(
     status: leagueStatusEnum("status").notNull().default("setup"),
     draftType: draftTypeEnum("draft_type").notNull().default("snake"),
     draftScheduledAt: timestamp("draft_scheduled_at", { withTimezone: true }),
+    /**
+     * Short shareable invite code (`/leagues/join/[code]`). Nullable so leagues
+     * created before the commissioner console existed keep working; issued
+     * lazily by `lib/services/league/rules.ts#ensureJoinCode`.
+     */
+    joinCode: text("join_code").unique(),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
@@ -160,7 +166,52 @@ export const leagueRules = pgTable("league_rules", {
   safetyAutopilot: boolean("safety_autopilot").notNull().default(true),
   /** Set when the draft begins; rules become immutable except budgets/moderation. */
   rulesLockedAt: timestamp("rules_locked_at", { withTimezone: true }),
+
+  // --- Scheduler package (windows, draft, snapshots) -----------------------
+  /**
+   * Per-run wall-clock budget in seconds — the lease the tick hands a run and
+   * the `maxDuration` the executor should honour (PRD 6.3: 5 min lineups,
+   * 8 min trades/draft). One number keeps the lease arithmetic in one place.
+   */
+  runWallclockSeconds: integer("run_wallclock_seconds").notNull().default(300),
+  /** Snake-draft pick clock, seconds (PRD 5.2 per-pick time limit). */
+  draftPickSeconds: integer("draft_pick_seconds").notNull().default(240),
+  /**
+   * A draft opens one window per pick; rebuilding a full snapshot every 4
+   * minutes is wasteful, so a window reuses the previous window's snapshot when
+   * it is younger than this. 0 disables reuse.
+   */
+  reuseSnapshotWithinMs: integer("reuse_snapshot_within_ms").notNull().default(600_000),
+  /** Auction draft budget per team (PRD 5.2). */
+  draftBudget: integer("draft_budget").notNull().default(200),
 });
+
+/**
+ * Audit log for every commissioner change to `leagues` / `league_rules`
+ * (PRD 5.1 + 7: rules are public, and post-lock changes must be logged
+ * league-wide). Append-only — one row per changed field.
+ */
+export const leagueRuleChanges = pgTable(
+  "league_rule_changes",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    leagueId: uuid("league_id")
+      .notNull()
+      .references(() => leagues.id, { onDelete: "cascade" }),
+    /** Null when the platform (not a person) made the change. */
+    userId: text("user_id").references(() => user.id, { onDelete: "set null" }),
+    /** Dotted field path, e.g. `rules.faabBudget`, `league.name`, `rules.modelAllowlist`. */
+    field: text("field").notNull(),
+    fromValue: jsonb("from_value").$type<unknown>(),
+    toValue: jsonb("to_value").$type<unknown>(),
+    /** Free-text reason, e.g. "commissioner replacement" for a deprecated model. */
+    note: text("note"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("league_rule_changes_league_created_idx").on(t.leagueId, t.createdAt.desc()),
+  ],
+);
 
 export const leagueMembers = pgTable(
   "league_members",
@@ -192,6 +243,8 @@ export const teams = pgTable(
     name: text("name").notNull(),
     abbreviation: text("abbreviation").notNull(),
     faabRemaining: integer("faab_remaining").notNull().default(100),
+    /** Auction-draft budget remaining (scheduler package; mirrors `faabRemaining`). */
+    draftBudgetRemaining: integer("draft_budget_remaining").notNull().default(200),
     waiverPriority: integer("waiver_priority").notNull().default(1),
     karma: integer("karma").notNull().default(0),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
@@ -309,4 +362,9 @@ export const matchupsRelations = relations(matchups, ({ one }) => ({
 
 export const teamResultsRelations = relations(teamResults, ({ one }) => ({
   team: one(teams, { fields: [teamResults.teamId], references: [teams.id] }),
+}));
+
+export const leagueRuleChangesRelations = relations(leagueRuleChanges, ({ one }) => ({
+  league: one(leagues, { fields: [leagueRuleChanges.leagueId], references: [leagues.id] }),
+  user: one(user, { fields: [leagueRuleChanges.userId], references: [user.id] }),
 }));
