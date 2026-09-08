@@ -812,6 +812,13 @@ export default defineSchema({
     promptSections: v.optional(v.array(promptSection)),
     /** Set when this run was enqueued by onComplete as the fallback-model retry of another run. */
     fallbackOfRunId: v.optional(v.id("runs")),
+    /**
+     * Ledger idempotency guard (Phase 4). Set once the run's fallback outcome has
+     * been folded into `fallbackCount` — either by `internal.ledger.recordStep`
+     * for a step flagged `isFallbackStep`, or by `internal.ledger.recordRunOutcome`
+     * for a run that ended in `fallback` without ever taking such a step.
+     */
+    ledgerOutcomeRecorded: v.optional(v.boolean()),
   })
     .index("by_windowId_status", ["windowId", "status"])
     .index("by_teamId", ["teamId"])
