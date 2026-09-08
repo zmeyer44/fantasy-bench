@@ -7,24 +7,45 @@
  * proposal) are withheld from everyone except a party to the thread and the
  * commissioner — see `isThreadRevealed` in `lib/social_pure.ts`.
  *
- * Phase 3 adds `messaging.send` to this file. It must maintain
- * `threads.lastMessageAt`, `threads.messageCount` and `threads.flaggedCount`,
- * which the list below reads instead of scanning every thread's messages.
+ * The write half (`messaging.send`, plus the `resolveThread` /
+ * `insertThreadMessage` helpers `trades.ts` posts its offer summaries with) is
+ * at the bottom of the file. It is the only writer of `messages` and it keeps
+ * `threads.lastMessageAt` / `messageCount` / `flaggedCount` in step, because the
+ * feed reads those instead of scanning every thread's messages.
+ *
+ * This module and `trades.ts` import each other (the feed renders a thread's
+ * proposals; a proposal opens a thread). Every cross-reference is inside a
+ * function body, so the cycle resolves at call time, never at module init.
  */
 import { paginationOptsValidator, type PaginationResult } from "convex/server";
 import { v } from "convex/values";
 
 import type { Doc, Id } from "./_generated/dataModel";
-import { internalQuery, query, type QueryCtx } from "./_generated/server";
+import {
+  internalMutation,
+  internalQuery,
+  query,
+  type MutationCtx,
+  type QueryCtx,
+} from "./_generated/server";
 import { requireLeagueRead, viewerTeamIds, type LeagueAccess } from "./lib/auth";
 import { appError } from "./lib/errors";
+import { buildContentFlags, type ContentFlags } from "./lib/moderation_pure";
 import {
+  actionErrors,
+  agentCtxValidator,
+  canonicalPair,
   isThreadRevealed,
   isOpenTradeStatus,
   isUnresolvedTradeStatus,
   isWindowOpen,
+  rateLimitExceeded,
+  socialRulesFrom,
   toAgentFlags,
+  type ActionResult,
+  type AgentCtx,
   type EpochDates,
+  type SocialRules,
 } from "./lib/social_pure";
 import { tradeDocsForThread, tradesForThread, type TradeSummary } from "./trades";
 
@@ -474,3 +495,368 @@ async function readWatermark(
   }
   return latest;
 }
+
+// ---------------------------------------------------------------------------
+// Write path (Phase 3)
+// ---------------------------------------------------------------------------
+
+/** Longest body we accept; keeps a runaway agent from writing a novel. */
+export const MAX_MESSAGE_LENGTH = 4000;
+
+/** Threads scanned per side when counting this window's new threads. */
+const THREAD_LIMIT_SCAN = 50;
+
+/** Messages scanned when counting a run's sends (a cap is single digits). */
+const RUN_MESSAGE_SCAN = 100;
+
+/**
+ * `league_rules` with the social defaults applied — port of
+ * `loadSocialRules` in `lib/services/messaging/shared.ts`.
+ *
+ * Lives here (as it did in Postgres) because messaging is the social package's
+ * root module; `trades.ts` and `forum.ts` import it from here.
+ * Index: `league_rules.by_leagueId`, `.unique()`.
+ */
+export async function loadSocialRules(
+  ctx: QueryCtx,
+  leagueId: Id<"leagues">,
+): Promise<SocialRules> {
+  return socialRulesFrom(
+    await ctx.db
+      .query("league_rules")
+      .withIndex("by_leagueId", (q) => q.eq("leagueId", leagueId))
+      .unique(),
+  );
+}
+
+/** Drop `undefined` values so an object is a legal Convex record. */
+export function compact(payload: Record<string, unknown>): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(payload)) {
+    if (value !== undefined) out[key] = value;
+  }
+  return out;
+}
+
+/**
+ * The idempotency ledger every runtime-facing mutation runs inside (PRD 6.2).
+ *
+ * `(runId, toolCallId)` is the key. A replayed tool call — a Workpool retry, a
+ * resumed run — finds its `run_actions` row and gets the **stored result back
+ * verbatim**, writing nothing a second time. Otherwise the domain write and the
+ * `run_actions` row land in the same transaction (this is one mutation, so that
+ * is free), and `runs.committedActionCount` / `rejectedActionCount` move with
+ * them.
+ *
+ * A validation failure is data, not an exception: it is stored with
+ * `validationResult.ok = false`, counted as a rejected action, and returned to
+ * the agent as `{ ok: false, errors }`.
+ *
+ * Index: `run_actions.by_runId_toolCallId`, `.unique()`.
+ */
+export async function commitAction<T>(
+  ctx: MutationCtx,
+  spec: {
+    agentCtx: AgentCtx;
+    leagueId: Id<"leagues">;
+    teamId?: Id<"teams">;
+    actionType: string;
+    payload: Record<string, unknown>;
+  },
+  perform: () => Promise<ActionResult<T>>,
+): Promise<ActionResult<T>> {
+  const { agentCtx } = spec;
+  const existing = await ctx.db
+    .query("run_actions")
+    .withIndex("by_runId_toolCallId", (q) =>
+      q.eq("runId", agentCtx.runId).eq("toolCallId", agentCtx.toolCallId),
+    )
+    .unique();
+  if (existing && existing.result !== undefined) {
+    return existing.result as ActionResult<T>;
+  }
+
+  const result = await perform();
+  const validationResult = result.ok
+    ? { ok: true as const }
+    : { ok: false as const, errors: result.errors };
+  const fields = {
+    stepIndex: agentCtx.stepIndex,
+    actionType: spec.actionType,
+    payload: compact(spec.payload),
+    validationResult,
+    result: result as unknown,
+    ...(result.ok ? { committedAt: Date.now() } : {}),
+  };
+
+  if (existing) {
+    await ctx.db.patch("run_actions", existing._id, fields);
+  } else {
+    await ctx.db.insert("run_actions", {
+      runId: agentCtx.runId,
+      leagueId: spec.leagueId,
+      ...(spec.teamId ? { teamId: spec.teamId } : {}),
+      toolCallId: agentCtx.toolCallId,
+      ...fields,
+    });
+  }
+
+  // The run counters the trace list reads. A commissioner-agent action can be
+  // recorded before its run row exists in a test fixture; tolerate that.
+  const run = await ctx.db.get("runs", agentCtx.runId);
+  if (run) {
+    await ctx.db.patch(
+      "runs",
+      agentCtx.runId,
+      result.ok
+        ? { committedActionCount: run.committedActionCount + 1 }
+        : { rejectedActionCount: run.rejectedActionCount + 1 },
+    );
+  }
+  return result;
+}
+
+/** A team, but only if it belongs to `leagueId`. */
+export async function loadLeagueTeam(
+  ctx: QueryCtx,
+  leagueId: Id<"leagues">,
+  teamId: Id<"teams">,
+): Promise<Doc<"teams"> | null> {
+  const team = await ctx.db.get("teams", teamId);
+  return team && team.leagueId === leagueId ? team : null;
+}
+
+/**
+ * Find or create the canonical thread for a message or a proposal.
+ *
+ * Exported for `trades.ts`, which attaches a thread to every proposal and posts
+ * the offer summary into it (proposals bypass the new-thread cap).
+ *
+ * Indexes/bounds: `threads.by_leagueId_teamAId_teamBId` `.unique()` for the
+ * canonical pair; the per-window cap ranges `threads.by_teamAId` and
+ * `by_teamBId` `take(50)` each and filters on `createdInWindowId`.
+ */
+export async function resolveThread(
+  ctx: MutationCtx,
+  args: {
+    leagueId: Id<"leagues">;
+    fromTeamId: Id<"teams">;
+    toTeamId?: Id<"teams">;
+    threadId?: Id<"threads">;
+    windowId: Id<"windows"> | null;
+    rules: SocialRules;
+    /** New-thread cap is a messaging rule; proposals bypass it. */
+    skipThreadLimit?: boolean;
+  },
+): Promise<ActionResult<{ threadId: Id<"threads">; otherTeamId: Id<"teams"> }>> {
+  if (args.threadId) {
+    const thread = await ctx.db.get("threads", args.threadId);
+    if (!thread || thread.leagueId !== args.leagueId) {
+      return { ok: false, errors: ["Thread not found in this league"] };
+    }
+    if (thread.teamAId !== args.fromTeamId && thread.teamBId !== args.fromTeamId) {
+      return { ok: false, errors: ["You are not a party to this thread"] };
+    }
+    const otherTeamId =
+      thread.teamAId === args.fromTeamId ? thread.teamBId : thread.teamAId;
+    if (args.toTeamId && args.toTeamId !== otherTeamId) {
+      return { ok: false, errors: ["toTeamId does not match this thread"] };
+    }
+    return { ok: true, threadId: thread._id, otherTeamId };
+  }
+
+  if (!args.toTeamId) return { ok: false, errors: ["toTeamId or threadId is required"] };
+  if (args.toTeamId === args.fromTeamId) {
+    return { ok: false, errors: ["A team cannot message itself"] };
+  }
+
+  const recipient = await loadLeagueTeam(ctx, args.leagueId, args.toTeamId);
+  if (!recipient) return { ok: false, errors: ["Recipient team is not in this league"] };
+
+  const [teamAId, teamBId] = canonicalPair(args.fromTeamId, args.toTeamId);
+  const existing = await ctx.db
+    .query("threads")
+    .withIndex("by_leagueId_teamAId_teamBId", (q) =>
+      q.eq("leagueId", args.leagueId).eq("teamAId", teamAId).eq("teamBId", teamBId),
+    )
+    .unique();
+  if (existing) return { ok: true, threadId: existing._id, otherTeamId: args.toTeamId };
+
+  if (!args.skipThreadLimit && args.windowId) {
+    const asA = await ctx.db
+      .query("threads")
+      .withIndex("by_teamAId", (q) => q.eq("teamAId", args.fromTeamId))
+      .order("desc")
+      .take(THREAD_LIMIT_SCAN);
+    const asB = await ctx.db
+      .query("threads")
+      .withIndex("by_teamBId", (q) => q.eq("teamBId", args.fromTeamId))
+      .order("desc")
+      .take(THREAD_LIMIT_SCAN);
+    const openedThisWindow = [...asA, ...asB].filter(
+      (t) => t.leagueId === args.leagueId && t.createdInWindowId === args.windowId,
+    ).length;
+    if (rateLimitExceeded(openedThisWindow, args.rules.maxThreadsPerWindow)) {
+      return {
+        ok: false,
+        errors: [
+          `New-thread limit reached for this window (${args.rules.maxThreadsPerWindow})`,
+        ],
+      };
+    }
+  }
+
+  const threadId = await ctx.db.insert("threads", {
+    leagueId: args.leagueId,
+    teamAId,
+    teamBId,
+    ...(args.windowId ? { createdInWindowId: args.windowId } : {}),
+    messageCount: 0,
+    flaggedCount: 0,
+  });
+  return { ok: true, threadId, otherTeamId: args.toTeamId };
+}
+
+/**
+ * Insert a message without rate limits — used for the system/offer summaries
+ * `trades.ts` posts into a negotiation — and move the thread's counters.
+ *
+ * `threads.lastMessageAt` / `messageCount` / `flaggedCount` are what
+ * `listThreads` renders instead of reading every thread's messages, so this is
+ * the only place messages are created.
+ */
+export async function insertThreadMessage(
+  ctx: MutationCtx,
+  args: {
+    threadId: Id<"threads">;
+    leagueId: Id<"leagues">;
+    senderTeamId: Id<"teams">;
+    body: string;
+    runId?: Id<"runs">;
+    stepIndex?: number;
+    configVersionId?: Id<"config_versions">;
+    windowId?: Id<"windows">;
+    flags?: ContentFlags;
+  },
+): Promise<Id<"messages">> {
+  const createdAt = Date.now();
+  const messageId = await ctx.db.insert("messages", {
+    threadId: args.threadId,
+    leagueId: args.leagueId,
+    senderTeamId: args.senderTeamId,
+    ...(args.runId ? { runId: args.runId } : {}),
+    ...(args.stepIndex !== undefined ? { stepIndex: args.stepIndex } : {}),
+    ...(args.configVersionId ? { configVersionId: args.configVersionId } : {}),
+    ...(args.windowId ? { windowId: args.windowId } : {}),
+    body: args.body,
+    ...(args.flags ? { flags: args.flags } : {}),
+    createdAt,
+  });
+
+  const thread = await ctx.db.get("threads", args.threadId);
+  if (thread) {
+    await ctx.db.patch("threads", args.threadId, {
+      lastMessageAt: createdAt,
+      messageCount: thread.messageCount + 1,
+      flaggedCount: (thread.flaggedCount ?? 0) + (args.flags?.injectionSuspected ? 1 : 0),
+    });
+  }
+  return messageId;
+}
+
+/**
+ * Send a DM (the runtime's `send_message` tool).
+ *
+ * Resolves (or creates) the two-party thread, enforces the league's per-run
+ * message cap and per-window new-thread cap, classifies the body for prompt
+ * injection, and moves the thread counters. Idempotent on
+ * `(agentCtx.runId, agentCtx.toolCallId)`.
+ *
+ * Indexes/bounds: `league_rules.by_leagueId`; `messages.by_runId` `take(100)`
+ * for the per-run cap; the thread lookups in `resolveThread`.
+ */
+export const send = internalMutation({
+  args: {
+    leagueId: v.id("leagues"),
+    fromTeamId: v.id("teams"),
+    toTeamId: v.optional(v.id("teams")),
+    threadId: v.optional(v.id("threads")),
+    body: v.string(),
+    agentCtx: agentCtxValidator,
+  },
+  returns: v.union(
+    v.object({
+      ok: v.literal(true),
+      threadId: v.id("threads"),
+      messageId: v.id("messages"),
+    }),
+    actionErrors,
+  ),
+  handler: async (ctx, args) => {
+    return commitAction<{ threadId: Id<"threads">; messageId: Id<"messages"> }>(
+      ctx,
+      {
+        agentCtx: args.agentCtx,
+        leagueId: args.leagueId,
+        teamId: args.fromTeamId,
+        actionType: "send_message",
+        payload: {
+          toTeamId: args.toTeamId,
+          threadId: args.threadId,
+          body: args.body,
+        },
+      },
+      async () => {
+        const body = (args.body ?? "").trim();
+        if (body.length === 0) return { ok: false, errors: ["Message body is empty"] };
+        if (body.length > MAX_MESSAGE_LENGTH) {
+          return {
+            ok: false,
+            errors: [`Message exceeds ${MAX_MESSAGE_LENGTH} characters`],
+          };
+        }
+
+        const rules = await loadSocialRules(ctx, args.leagueId);
+        const sender = await loadLeagueTeam(ctx, args.leagueId, args.fromTeamId);
+        if (!sender) return { ok: false, errors: ["Sending team is not in this league"] };
+
+        // Per-run message cap (PRD 5.6 "max messages per run"). Counts every
+        // message the run wrote, trade system messages included, as Postgres did.
+        const sentThisRun = await ctx.db
+          .query("messages")
+          .withIndex("by_runId", (q) => q.eq("runId", args.agentCtx.runId))
+          .take(RUN_MESSAGE_SCAN);
+        if (rateLimitExceeded(sentThisRun.length, rules.maxMessagesPerRun)) {
+          return {
+            ok: false,
+            errors: [`Message limit reached for this run (${rules.maxMessagesPerRun})`],
+          };
+        }
+
+        const resolved = await resolveThread(ctx, {
+          leagueId: args.leagueId,
+          fromTeamId: args.fromTeamId,
+          toTeamId: args.toTeamId,
+          threadId: args.threadId,
+          windowId: args.agentCtx.windowId,
+          rules,
+        });
+        if (!resolved.ok) return resolved;
+
+        const messageId = await insertThreadMessage(ctx, {
+          threadId: resolved.threadId,
+          leagueId: args.leagueId,
+          senderTeamId: args.fromTeamId,
+          body,
+          runId: args.agentCtx.runId,
+          stepIndex: args.agentCtx.stepIndex,
+          configVersionId: args.agentCtx.configVersionId,
+          windowId: args.agentCtx.windowId,
+          flags: buildContentFlags(body),
+        });
+
+        return { ok: true, threadId: resolved.threadId, messageId };
+      },
+    );
+  },
+});

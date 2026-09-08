@@ -223,12 +223,38 @@ async function uniqueSlug(ctx: MutationCtx, base: string): Promise<string> {
 }
 
 /**
- * Build a league skeleton: league, rules, commissioner membership, 17 weeks,
- * N unowned teams and one default agent config per team. Port of
- * `lib/services/league/create.ts`; no scheduling (Phase 5 owns windows).
+ * Invite codes are 8 characters from an alphabet with no look-alikes, so a code
+ * read aloud or typed from a screenshot survives. Shared with
+ * `commissioner.rotateJoinCode`.
  */
-export const createLeague = internalMutation({
-  args: {
+const CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+
+export function randomJoinCode(length = 8): string {
+  const bytes = new Uint8Array(length);
+  crypto.getRandomValues(bytes);
+  let out = "";
+  for (let i = 0; i < length; i++) out += CODE_ALPHABET[bytes[i] % CODE_ALPHABET.length];
+  return out;
+}
+
+/**
+ * Mint a code for a league that has none, retrying on the (vanishingly
+ * unlikely) collision. Port of `ensureJoinCode` in `lib/services/league/rules.ts`.
+ */
+export async function mintJoinCode(ctx: MutationCtx): Promise<string> {
+  for (let attempt = 0; attempt < 8; attempt++) {
+    const code = randomJoinCode();
+    const clash = await ctx.db
+      .query("leagues")
+      .withIndex("by_joinCode", (q) => q.eq("joinCode", code))
+      .unique();
+    if (!clash) return code;
+  }
+  throw appError("BAD_REQUEST", "Could not mint an invite code; try again.");
+}
+
+/** Everything `createLeague`/`create` accept. Optionals fall back to PRD defaults. */
+const createLeagueArgs = {
     name: v.string(),
     commissionerUserId: v.id("users"),
     teamCount: v.optional(v.number()),
@@ -245,13 +271,38 @@ export const createLeague = internalMutation({
     regularSeasonWeeks: v.optional(v.number()),
     modelAllowlist: v.optional(v.array(v.string())),
     draftScheduledAt: v.optional(v.number()),
-  },
-  returns: v.object({
-    leagueId: v.id("leagues"),
-    rulesId: v.id("league_rules"),
-    teamIds: v.array(v.id("teams")),
-  }),
-  handler: async (ctx, args) => {
+} as const;
+
+type BuildLeagueArgs = {
+  name: string;
+  commissionerUserId: Id<"users">;
+  teamCount?: number;
+  season?: number;
+  scoringPreset?: Doc<"league_rules">["scoringPreset"];
+  draftType?: Doc<"leagues">["draftType"];
+  isPublic?: boolean;
+  superflex?: boolean;
+  tePremium?: boolean;
+  rosterSlots?: Record<string, number>;
+  faabBudget?: number;
+  playoffTeams?: number;
+  playoffStartWeek?: number;
+  regularSeasonWeeks?: number;
+  modelAllowlist?: string[];
+  draftScheduledAt?: number;
+  /** Public `leagues.create` mints an invite code; the seed path does not. */
+  joinCode?: string;
+};
+
+/**
+ * Build a league skeleton: league, rules, commissioner membership, 17 weeks,
+ * N unowned teams and one default agent config per team. Port of
+ * `lib/services/league/create.ts`; no scheduling (Phase 5 owns windows).
+ */
+async function buildLeague(
+  ctx: MutationCtx,
+  args: BuildLeagueArgs,
+): Promise<{ leagueId: Id<"leagues">; rulesId: Id<"league_rules">; teamIds: Id<"teams">[]; slug: string }> {
     const teamCount = args.teamCount ?? 12;
     if (teamCount < MIN_TEAMS || teamCount > MAX_TEAMS) {
       throw appError("BAD_REQUEST", `teamCount must be between ${MIN_TEAMS} and ${MAX_TEAMS}`);
@@ -266,9 +317,10 @@ export const createLeague = internalMutation({
     const playoffStartWeek = args.playoffStartWeek ?? regularSeasonWeeks + 1;
     const modelAllowlist = args.modelAllowlist ?? DEFAULT_MODEL_ALLOWLIST;
 
+    const slug = await uniqueSlug(ctx, name);
     const leagueId = await ctx.db.insert("leagues", {
       name,
-      slug: await uniqueSlug(ctx, name),
+      slug,
       commissionerUserId: args.commissionerUserId,
       season,
       teamCount,
@@ -276,6 +328,7 @@ export const createLeague = internalMutation({
       status: "setup",
       draftType: args.draftType ?? "snake",
       draftScheduledAt: args.draftScheduledAt,
+      joinCode: args.joinCode,
       createdAt: now,
       updatedAt: now,
     });
@@ -332,7 +385,71 @@ export const createLeague = internalMutation({
       await createAgentConfig(ctx, teamId, leagueId, modelAllowlist[0] ?? DEFAULT_MODEL_ID);
     }
 
+  return { leagueId, rulesId, teamIds, slug };
+}
+
+/**
+ * Internal builder, kept for the seed and for tests that need a league skeleton
+ * without a signed-in commissioner. `leagues.create` is the public front door.
+ */
+export const createLeague = internalMutation({
+  args: createLeagueArgs,
+  returns: v.object({
+    leagueId: v.id("leagues"),
+    rulesId: v.id("league_rules"),
+    teamIds: v.array(v.id("teams")),
+  }),
+  handler: async (ctx, args) => {
+    const { leagueId, rulesId, teamIds } = await buildLeague(ctx, args);
     return { leagueId, rulesId, teamIds };
+  },
+});
+
+/**
+ * `league.create` (tRPC `protectedProcedure`): the signed-in caller becomes the
+ * commissioner of a brand-new league skeleton and gets its invite code minted up
+ * front, so the settings console can hand out a link immediately.
+ *
+ * Bounds mirror `createLeagueSchema` in `lib/trpc/routers/league.ts`; the tRPC
+ * version returned the whole league row, the client only ever used id + slug.
+ */
+export const create = mutation({
+  args: {
+    name: v.string(),
+    teamCount: v.optional(v.number()),
+    scoringPreset: v.optional(scoringPreset),
+    draftType: v.optional(draftType),
+    isPublic: v.optional(v.boolean()),
+    superflex: v.optional(v.boolean()),
+    tePremium: v.optional(v.boolean()),
+    faabBudget: v.optional(v.number()),
+  },
+  returns: v.object({ leagueId: v.id("leagues"), slug: v.string() }),
+  handler: async (ctx, args) => {
+    const viewer = await requireUser(ctx);
+
+    const name = args.name.trim();
+    if (name.length < 3 || name.length > 60) {
+      throw appError("BAD_REQUEST", "League names are 3-60 characters.");
+    }
+    const faabBudget = args.faabBudget ?? DEFAULT_LEAGUE_RULES.faabBudget;
+    if (!Number.isInteger(faabBudget) || faabBudget < 0 || faabBudget > 1_000) {
+      throw appError("BAD_REQUEST", "FAAB budget must be a whole number between 0 and 1,000.");
+    }
+
+    const { leagueId, slug } = await buildLeague(ctx, {
+      name,
+      commissionerUserId: viewer.userId,
+      teamCount: args.teamCount ?? 12,
+      scoringPreset: args.scoringPreset ?? "ppr",
+      draftType: args.draftType ?? "snake",
+      isPublic: args.isPublic ?? true,
+      superflex: args.superflex ?? false,
+      tePremium: args.tePremium ?? false,
+      faabBudget,
+      joinCode: await mintJoinCode(ctx),
+    });
+    return { leagueId, slug };
   },
 });
 

@@ -4,8 +4,11 @@ import { notFound } from "next/navigation";
 
 import { ConfigNav } from "@/components/config/config-nav";
 import { DiffView } from "@/components/config/diff-view";
+import { readOrNull } from "@/components/league/convex-errors";
 import { Card, CardBody, EmptyState, PageHeader } from "@/components/ui";
-import { diffVersionRows, getConfigForTeam, getVersion } from "@/lib/services/config";
+import { api } from "@/convex/_generated/api";
+import type { Id } from "@/convex/_generated/dataModel";
+import { fetchAuthQuery } from "@/lib/convex/server";
 import { formatET } from "@/lib/time";
 
 export const metadata: Metadata = { title: "Compare config versions" };
@@ -22,20 +25,29 @@ export default async function CompareVersionsPage({
   const { leagueId, teamId } = await params;
   const query = await searchParams;
 
-  const view = await getConfigForTeam(teamId).catch(() => null);
-  if (!view || view.team.leagueId !== leagueId) notFound();
+  const view = await readOrNull(() =>
+    fetchAuthQuery(api.configs.versions, {
+      leagueId: leagueId as Id<"leagues">,
+      teamId: teamId as Id<"teams">,
+    }),
+  );
+  if (!view) notFound();
 
   const base = `/leagues/${leagueId}/teams/${teamId}/config/versions`;
   const aId = first(query.a);
   const bId = first(query.b);
+  const known = new Set(view.versions.map((v) => v._id as string));
 
-  const [a, b] = await Promise.all([
-    aId ? getVersion(aId) : Promise.resolve(null),
-    bId ? getVersion(bId) : Promise.resolve(null),
-  ]);
-
-  const valid =
-    a && b && view.versions.some((v) => v.id === a.id) && view.versions.some((v) => v.id === b.id);
+  // `configs.diff` re-checks the league; the id pair is validated here so a
+  // bookmarked link to another team's version renders the picker, not an error.
+  const diff =
+    aId && bId && known.has(aId) && known.has(bId)
+      ? await fetchAuthQuery(api.configs.diff, {
+          leagueId: leagueId as Id<"leagues">,
+          a: aId as Id<"config_versions">,
+          b: bId as Id<"config_versions">,
+        })
+      : null;
 
   return (
     <div className="space-y-6">
@@ -56,24 +68,24 @@ export default async function CompareVersionsPage({
           <VersionColumn
             title="Base (a)"
             base={base}
-            selectedId={a?.id ?? null}
-            otherId={b?.id ?? null}
+            selectedId={diff ? (aId ?? null) : null}
+            otherId={bId && known.has(bId) ? bId : null}
             side="a"
             versions={view.versions}
           />
           <VersionColumn
             title="Compare (b)"
             base={base}
-            selectedId={b?.id ?? null}
-            otherId={a?.id ?? null}
+            selectedId={diff ? (bId ?? null) : null}
+            otherId={aId && known.has(aId) ? aId : null}
             side="b"
             versions={view.versions}
           />
         </CardBody>
       </Card>
 
-      {valid ? (
-        <DiffView diff={diffVersionRows(a, b)} leagueId={leagueId} teamId={teamId} />
+      {diff ? (
+        <DiffView diff={diff} leagueId={leagueId} teamId={teamId} />
       ) : (
         <EmptyState
           title="Pick two versions"
@@ -97,7 +109,13 @@ function VersionColumn({
   side: "a" | "b";
   selectedId: string | null;
   otherId: string | null;
-  versions: Array<{ id: string; versionNo: number; createdAt: Date; changeSummary: string | null }>;
+  versions: Array<{
+    _id: string;
+    _creationTime: number;
+    versionNo: number;
+    createdAt?: number;
+    changeSummary?: string;
+  }>;
 }) {
   return (
     <div>
@@ -106,11 +124,11 @@ function VersionColumn({
         {versions.map((v) => {
           const href =
             side === "a"
-              ? `${base}/compare?a=${v.id}${otherId ? `&b=${otherId}` : ""}`
-              : `${base}/compare?${otherId ? `a=${otherId}&` : ""}b=${v.id}`;
-          const selected = v.id === selectedId;
+              ? `${base}/compare?a=${v._id}${otherId ? `&b=${otherId}` : ""}`
+              : `${base}/compare?${otherId ? `a=${otherId}&` : ""}b=${v._id}`;
+          const selected = v._id === selectedId;
           return (
-            <li key={v.id}>
+            <li key={v._id}>
               <Link
                 href={href}
                 className={
@@ -120,7 +138,9 @@ function VersionColumn({
                 }
               >
                 <span className="font-mono">v{v.versionNo}</span>
-                <span className="text-ink-faint">{formatET(v.createdAt, "MMM d, HH:mm")}</span>
+                <span className="text-ink-faint">
+                  {formatET(v.createdAt ?? v._creationTime, "MMM d, HH:mm")}
+                </span>
                 <span className="truncate text-ink-muted">{v.changeSummary ?? ""}</span>
               </Link>
             </li>

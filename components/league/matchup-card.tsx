@@ -1,7 +1,10 @@
 import Link from "next/link";
 
 import { Badge } from "@/components/ui";
-import type { MatchupCard as MatchupCardData } from "@/lib/services/views";
+import type { api } from "@/convex/_generated/api";
+import type { FunctionReturnType } from "convex/server";
+
+export type MatchupCardData = FunctionReturnType<typeof api.views.matchups>[number];
 
 export function MatchupCard({
   leagueId,

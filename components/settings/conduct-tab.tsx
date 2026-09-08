@@ -15,7 +15,7 @@ export function ConductTab({ data }: { data: SettingsData }) {
 
   const [transparencyMode, setTransparencyMode] = useState(rules.transparencyMode);
   const [injectionPolicy, setInjectionPolicy] = useState(rules.injectionPolicy);
-  const [fairnessFloor, setFairnessFloor] = useState(String(rules.fairnessFloor));
+  const [fairnessFloor, setFairnessFloor] = useState(String(rules.fairnessFloor ?? ""));
   const [antiChurnWeeks, setAntiChurnWeeks] = useState(String(rules.antiChurnWeeks));
   const [tradeReviewHours, setTradeReviewHours] = useState(String(rules.tradeReviewHours));
   const [maxOpenProposals, setMaxOpenProposals] = useState(String(rules.maxOpenProposals));

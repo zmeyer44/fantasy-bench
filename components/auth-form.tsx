@@ -1,10 +1,11 @@
 "use client";
 
+import { useAuthActions } from "@convex-dev/auth/react";
+import { ConvexError } from "convex/values";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useState } from "react";
 
-import { authClient } from "@/lib/auth/client";
 import { Button, Card, CardBody, Field, Input } from "@/components/ui";
 
 type Mode = "login" | "signup";
@@ -26,9 +27,16 @@ const COPY: Record<Mode, { title: string; cta: string; altText: string; altHref:
   },
 };
 
+/**
+ * The Convex Auth password form. `signIn("password", …)` takes the sign-up /
+ * sign-in decision as a `flow` field, so one component covers both routes; on
+ * success the session cookie is already set (the proxy writes it) and we push
+ * to `next`.
+ */
 export function AuthForm({ mode }: { mode: Mode }) {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const { signIn } = useAuthActions();
   const next = searchParams.get("next") ?? "/leagues";
 
   const [name, setName] = useState("");
@@ -44,19 +52,21 @@ export function AuthForm({ mode }: { mode: Mode }) {
     setPending(true);
     setError(null);
 
-    // better-auth returns `{ data, error }` unless `fetchOptions.throw` is set.
-    const result =
-      mode === "signup"
-        ? await authClient.signUp.email({ email, password, name })
-        : await authClient.signIn.email({ email, password });
-
-    setPending(false);
-    if (result.error) {
-      setError(result.error.message ?? "Something went wrong. Try again.");
+    try {
+      await signIn("password", {
+        email: email.trim(),
+        password,
+        flow: mode === "signup" ? "signUp" : "signIn",
+        ...(mode === "signup" ? { name: name.trim() } : {}),
+      });
+    } catch (caught) {
+      setPending(false);
+      setError(providerMessage(caught, mode));
       return;
     }
+
+    // `useQuery(api.users.me)` in the nav picks the new identity up on its own.
     router.push(next);
-    router.refresh();
   }
 
   return (
@@ -132,4 +142,20 @@ export function AuthForm({ mode }: { mode: Mode }) {
       </CardBody>
     </Card>
   );
+}
+
+/**
+ * Convex Auth surfaces provider failures as an opaque server error unless the
+ * provider threw a `ConvexError` (ours does for password rules), so the generic
+ * case gets a message that says what the visitor can actually do about it.
+ */
+function providerMessage(error: unknown, mode: Mode): string {
+  if (error instanceof ConvexError) {
+    const data = error.data as { message?: string } | string | undefined;
+    if (typeof data === "string") return data;
+    if (data && typeof data.message === "string") return data.message;
+  }
+  return mode === "signup"
+    ? "Could not create that account. The email may already be registered, or the password is too weak."
+    : "Could not sign in. Check the email and password and try again.";
 }

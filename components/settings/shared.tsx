@@ -1,7 +1,6 @@
 "use client";
 
 import { useMutation, type UseMutationOptions } from "@tanstack/react-query";
-import { useRouter } from "next/navigation";
 import { useState, type ReactNode } from "react";
 
 import { Button, Card, CardBody, CardFooter, CardHeader } from "@/components/ui";
@@ -14,7 +13,6 @@ import { Button, Card, CardBody, CardFooter, CardHeader } from "@/components/ui"
 export function useSave<TData, TError, TVariables>(
   options: UseMutationOptions<TData, TError, TVariables>,
 ) {
-  const router = useRouter();
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
 
@@ -24,7 +22,8 @@ export function useSave<TData, TError, TVariables>(
       setError(null);
       setSaved(true);
       options.onSuccess?.(data, variables, onMutateResult, context);
-      router.refresh();
+      // The console reads `commissioner.settings` live, so the saved values
+      // arrive on their own — nothing to refresh.
       setTimeout(() => setSaved(false), 2500);
     },
     onError: (err, variables, onMutateResult, context) => {

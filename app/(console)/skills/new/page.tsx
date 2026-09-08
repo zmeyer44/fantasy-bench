@@ -2,12 +2,12 @@ import type { Metadata } from "next";
 
 import { SkillForm } from "@/components/config/skill-form";
 import { PageHeader } from "@/components/ui";
-import { requireUser } from "@/lib/auth";
+import { requireViewer } from "@/lib/convex/require-viewer";
 
 export const metadata: Metadata = { title: "New skill" };
 
 export default async function NewSkillPage() {
-  await requireUser("/skills/new");
+  await requireViewer("/skills/new");
 
   return (
     <div className="mx-auto max-w-3xl space-y-8">

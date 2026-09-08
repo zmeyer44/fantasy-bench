@@ -1,7 +1,10 @@
 import { Card, CardBody, CardHeader } from "@/components/ui";
-import type { PromptSection } from "@/lib/db/schema/runs";
+import type { api } from "@/convex/_generated/api";
+import type { FunctionReturnType } from "convex/server";
 
 import { Collapsible } from "./collapsible";
+
+export type PromptSection = FunctionReturnType<typeof api.runs.get>["promptSections"][number];
 
 /**
  * The assembled prompt, collapsed by default (PRD 5.8): base prompt, owner

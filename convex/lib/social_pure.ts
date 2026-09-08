@@ -1,5 +1,6 @@
 /**
- * Pure helpers shared by the social read paths (trades, messaging, forum).
+ * Pure helpers shared by the social read and write paths (trades, messaging,
+ * forum).
  *
  * Nothing here touches `ctx` or the database: these are the parts of
  * `lib/services/{forum,messaging,trades}` that were already pure, ported so the
@@ -8,6 +9,11 @@
  *
  * Dates are epoch milliseconds everywhere (Convex has no Date type).
  */
+
+import { v, type Infer } from "convex/values";
+
+import type { Doc } from "../_generated/dataModel";
+import { DEFAULT_ROSTER_SLOTS } from "./defaults";
 
 // ---------------------------------------------------------------------------
 // Types shared with the old service layer
@@ -27,26 +33,127 @@ export type EpochDates<T, K extends keyof T> = Omit<T, K> & {
 /** `{ injectionSuspected, reasons }` — the agent-facing projection of `contentFlags`. */
 export type AgentFlags = { injectionSuspected?: boolean; reasons?: string[] };
 
-/** Shape of `contentFlags` as stored on messages / posts / comments. */
-type StoredFlags = {
-  injectionSuspected?: boolean;
-  score?: number;
-  categories?: string[];
-  reasons?: string[];
-  notes?: string;
-} | null | undefined;
-
 /**
  * Port of `lib/services/moderation.toAgentFlags`: unflagged, zero-score content
  * carries no flags block at all so the agent prompt stays quiet.
+ *
+ * The implementation lives beside the classifier in `moderation_pure.ts` (the
+ * write paths need it there); this re-export keeps the read paths' import site
+ * unchanged.
  */
-export function toAgentFlags(flags: StoredFlags): AgentFlags | null {
-  if (!flags) return null;
-  if (!flags.injectionSuspected && (flags.score ?? 0) === 0) return null;
+export { buildContentFlags, toAgentFlags } from "./moderation_pure";
+export type { ContentFlags } from "./moderation_pure";
+
+// ---------------------------------------------------------------------------
+// Agent run context (the write mutations' `agentCtx` argument)
+// ---------------------------------------------------------------------------
+
+/**
+ * Port of `AgentContext` in `lib/services/messaging/index.ts`, as a validator.
+ *
+ * Every runtime-facing mutation takes one. `(runId, toolCallId)` is the
+ * idempotency key: a replayed tool call finds its `run_actions` row and returns
+ * the stored result instead of writing again.
+ */
+export const agentCtxValidator = v.object({
+  runId: v.id("runs"),
+  stepIndex: v.number(),
+  toolCallId: v.string(),
+  configVersionId: v.optional(v.id("config_versions")),
+  windowId: v.id("windows"),
+  weekNo: v.number(),
+});
+
+export type AgentCtx = Infer<typeof agentCtxValidator>;
+
+/**
+ * `ActionResult<T>` from `lib/services/messaging`: validation failures are data,
+ * not exceptions — the runtime turns `{ ok: false, errors }` into a tool result
+ * the agent can read and retry against, and records it as a rejected action.
+ */
+export type ActionResult<T = Record<string, never>> =
+  | ({ ok: true } & T)
+  | { ok: false; errors: string[] };
+
+export const actionErrors = v.object({ ok: v.literal(false), errors: v.array(v.string()) });
+
+// ---------------------------------------------------------------------------
+// League rules the social package reads
+// ---------------------------------------------------------------------------
+
+/**
+ * Port of `SocialRules` in `lib/services/messaging/shared.ts`: the subset of
+ * `league_rules` the social write paths read, with defaults applied so a league
+ * whose rules row has not been written yet still behaves sanely. `fairnessFloor`
+ * in particular defaults here (PRD: 0.6) rather than relying on the column.
+ */
+export type SocialRules = {
+  transparencyMode: "live" | "delayed";
+  injectionPolicy: "permitted" | "prohibited";
+  tradeReviewHours: number;
+  fairnessFloor: number;
+  antiChurnWeeks: number;
+  maxOpenProposals: number;
+  maxMessagesPerRun: number;
+  maxThreadsPerWindow: number;
+  forumPostsPerDay: number;
+  forumCommentsPerDay: number;
+  rosterSlots: Record<string, number>;
+  faabBudget: number;
+  regularSeasonWeeks: number;
+  seasonWeeks: number;
+  scoringPreset: "ppr" | "half_ppr" | "standard";
+  superflex: boolean;
+  tePremium: boolean;
+};
+
+export const SOCIAL_RULE_DEFAULTS: SocialRules = {
+  transparencyMode: "live",
+  injectionPolicy: "permitted",
+  tradeReviewHours: 24,
+  fairnessFloor: 0.6,
+  antiChurnWeeks: 3,
+  maxOpenProposals: 3,
+  maxMessagesPerRun: 6,
+  maxThreadsPerWindow: 4,
+  forumPostsPerDay: 2,
+  forumCommentsPerDay: 6,
+  rosterSlots: DEFAULT_ROSTER_SLOTS,
+  faabBudget: 100,
+  regularSeasonWeeks: 14,
+  seasonWeeks: 17,
+  scoringPreset: "ppr",
+  superflex: false,
+  tePremium: false,
+};
+
+/** `loadSocialRules` minus the read: shape a `league_rules` document (or none). */
+export function socialRulesFrom(row: Doc<"league_rules"> | null | undefined): SocialRules {
+  if (!row) return { ...SOCIAL_RULE_DEFAULTS };
   return {
-    injectionSuspected: flags.injectionSuspected ?? false,
-    reasons: flags.reasons ?? flags.categories ?? [],
+    transparencyMode: row.transparencyMode,
+    injectionPolicy: row.injectionPolicy,
+    tradeReviewHours: row.tradeReviewHours ?? SOCIAL_RULE_DEFAULTS.tradeReviewHours,
+    fairnessFloor: row.fairnessFloor ?? SOCIAL_RULE_DEFAULTS.fairnessFloor,
+    antiChurnWeeks: row.antiChurnWeeks ?? SOCIAL_RULE_DEFAULTS.antiChurnWeeks,
+    maxOpenProposals: row.maxOpenProposals ?? SOCIAL_RULE_DEFAULTS.maxOpenProposals,
+    maxMessagesPerRun: row.maxMessagesPerRun ?? SOCIAL_RULE_DEFAULTS.maxMessagesPerRun,
+    maxThreadsPerWindow: row.maxThreadsPerWindow ?? SOCIAL_RULE_DEFAULTS.maxThreadsPerWindow,
+    forumPostsPerDay: row.forumPostsPerDay ?? SOCIAL_RULE_DEFAULTS.forumPostsPerDay,
+    forumCommentsPerDay: row.forumCommentsPerDay ?? SOCIAL_RULE_DEFAULTS.forumCommentsPerDay,
+    rosterSlots: row.rosterSlots ?? SOCIAL_RULE_DEFAULTS.rosterSlots,
+    faabBudget: row.faabBudget ?? SOCIAL_RULE_DEFAULTS.faabBudget,
+    regularSeasonWeeks: row.regularSeasonWeeks ?? SOCIAL_RULE_DEFAULTS.regularSeasonWeeks,
+    seasonWeeks: row.seasonWeeks ?? SOCIAL_RULE_DEFAULTS.seasonWeeks,
+    scoringPreset: row.scoringPreset,
+    superflex: row.superflex,
+    tePremium: row.tePremium,
   };
+}
+
+/** Total roster capacity (starters + bench) implied by the league's slot shape. */
+export function totalRosterCapacity(slots: Record<string, number>): number {
+  return Object.values(slots).reduce((sum, n) => sum + (Number(n) || 0), 0);
 }
 
 // ---------------------------------------------------------------------------

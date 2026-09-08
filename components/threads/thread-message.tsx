@@ -1,7 +1,7 @@
 import { FlagPill } from "@/components/threads/flag-pill";
 import { TraceLink } from "@/components/trades/trace-link";
 import { cn } from "@/components/ui";
-import type { ThreadMessageView } from "@/lib/services/messaging";
+import type { ThreadMessageView } from "@/convex/messaging";
 import { formatET } from "@/lib/time";
 
 /**

@@ -13,6 +13,7 @@ import { findModel } from "@/lib/models";
 import {
   DEFAULT_EDIT_LOCK,
   WEEKDAYS,
+  formatET,
   isWithinEditWindow,
   nextWeekdayAtET,
   weekStartET,
@@ -550,4 +551,42 @@ export function validateAgainstRules(ctx: ValidationContext): ConfigIssue[] {
   }
 
   return issues;
+}
+
+// ------------------------------------------------------- save-path helpers (Phase 3)
+
+/**
+ * Fill defaults then coerce, but do NOT clamp — out-of-range values must surface
+ * as validation issues from `validateAgainstRules` rather than being silently
+ * fixed. Port of `parseHarnessStrictly` in `lib/services/config/save.ts`.
+ */
+export function parseHarnessStrictly(partial: Partial<HarnessSettings>): HarnessSettings {
+  const base = parseHarness({});
+  return {
+    maxSteps: partial.maxSteps ?? base.maxSteps,
+    tokenBudget: partial.tokenBudget ?? base.tokenBudget,
+    temperature: partial.temperature ?? base.temperature,
+    reasoningEffort: partial.reasoningEffort ?? null,
+    deliberateMode: partial.deliberateMode ?? base.deliberateMode,
+  };
+}
+
+/**
+ * The heading the owner's note-to-agent is folded into on save (PRD 5.5).
+ * Byte-identical to `noteBlock` in `lib/services/config/save.ts`.
+ */
+export function noteBlock(note: string, nowMs: number): string {
+  return `## Note from my owner (${formatET(new Date(nowMs), "MMM d, yyyy")})\n\n${note}`;
+}
+
+/** Preserve first-seen order, drop repeats. `dedupe` from the save path. */
+export function dedupeIds<T extends string>(ids: readonly T[]): T[] {
+  const seen = new Set<string>();
+  const out: T[] = [];
+  for (const id of ids) {
+    if (seen.has(id)) continue;
+    seen.add(id);
+    out.push(id);
+  }
+  return out;
 }

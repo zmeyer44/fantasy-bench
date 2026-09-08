@@ -38,9 +38,9 @@ export function ChangeLogTab({ data }: { data: SettingsData }) {
         </THead>
         <TBody>
           {data.changes.map((change) => (
-            <TR key={change.id}>
+            <TR key={change._id}>
               <TD className="whitespace-nowrap font-mono text-[10px] text-ink-muted">
-                {formatET(change.createdAt, "MMM d HH:mm")} ET
+                {formatET(change.createdAt ?? change._creationTime, "MMM d HH:mm")} ET
               </TD>
               <TD className="text-xs text-ink">{change.userName ?? "platform"}</TD>
               <TD className="font-mono text-[10px] text-ink">{change.field}</TD>

@@ -1,7 +1,7 @@
 /**
  * `convex/trades.ts` — feed filters, detail tally and the agent inbox query.
  */
-import { convexTest } from "convex-test";
+import { convexTest, type TestConvex } from "convex-test";
 import { describe, expect, test } from "vitest";
 
 import { api, internal } from "./_generated/api";
@@ -296,5 +296,762 @@ describe("trades.listOpenForTeam (internal)", () => {
       teamId: s.teamA,
     });
     expect(fromA).toHaveLength(2);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Write path
+// ---------------------------------------------------------------------------
+
+/**
+ * `convexTest` bound to our schema, so `ctx.db` inside the helpers below keeps
+ * its table and index types.
+ */
+type SchemaTest = TestConvex<typeof schema>;
+
+const SEASON = 2025;
+const WEEK = 1;
+/** `seasonWeeks (17) - weekNo (1) + 1` — what a weekly projection is multiplied by. */
+const REMAINING_WEEKS = 17;
+
+/**
+ * A league that can actually trade: three owners (so a veto majority is two),
+ * two teams with two rostered players each, a trade window and a run to hang
+ * `agentCtx` off.
+ */
+async function seedTrading(t: SchemaTest) {
+  return t.run(async (ctx) => {
+    const ownerA = await ctx.db.insert("users", { email: `a-${Math.random()}@x.dev` });
+    const ownerB = await ctx.db.insert("users", { email: `b-${Math.random()}@x.dev` });
+    const ownerC = await ctx.db.insert("users", { email: `c-${Math.random()}@x.dev` });
+    const sessionOf = (userId: Id<"users">) =>
+      ctx.db.insert("authSessions", { userId, expirationTime: Date.now() + 86_400_000 });
+
+    const leagueId = await ctx.db.insert("leagues", {
+      name: "Trade League", slug: `t-${Math.random()}`, commissionerUserId: ownerA,
+      season: SEASON, teamCount: 2, isPublic: true, status: "in_season",
+      draftType: "snake", updatedAt: Date.now(),
+    });
+    await ctx.db.insert("league_rules", { leagueId, ...RULES });
+    await ctx.db.insert("league_members", { leagueId, userId: ownerA, role: "commissioner" });
+    await ctx.db.insert("league_members", { leagueId, userId: ownerB, role: "owner" });
+    await ctx.db.insert("league_members", { leagueId, userId: ownerC, role: "owner" });
+
+    const team = (name: string, ownerUserId: Id<"users">) =>
+      ctx.db.insert("teams", {
+        leagueId, ownerUserId, name, abbreviation: name.slice(0, 3).toUpperCase(),
+        faabRemaining: 100, waiverPriority: 1, karma: 0, draftBudgetRemaining: 200,
+      });
+    const teamA = await team("Alpha", ownerA);
+    const teamB = await team("Bravo", ownerB);
+
+    const player = (fullName: string, position: "QB" | "RB" | "WR") =>
+      ctx.db.insert("players", {
+        sleeperId: `${fullName}-${Math.random()}`, fullName, position, nflTeam: "SF",
+        fantasyPositions: [position], externalIds: {}, updatedAt: Date.now(),
+      });
+    const rbA = await player("Rick Alpha", "RB");
+    const wrA = await player("Wide Alpha", "WR");
+    const rbB = await player("Rick Bravo", "RB");
+    const wrB = await player("Wide Bravo", "WR");
+
+    const roster = (teamId: Id<"teams">, playerId: Id<"players">) =>
+      ctx.db.insert("roster_slots", {
+        leagueId, teamId, playerId, acquiredAt: Date.now(), acquiredVia: "draft" as const,
+      });
+    await roster(teamA, rbA);
+    await roster(teamA, wrA);
+    await roster(teamB, rbB);
+    await roster(teamB, wrB);
+
+    const windowId = await ctx.db.insert("windows", {
+      leagueId, type: "trade" as const, label: "trade", weekNo: WEEK, roundNo: 1,
+      opensAt: Date.now() - 1000, submissionDeadlineAt: Date.now() + 1000,
+      closesAt: Date.now() + 2000, status: "open" as const, scope: {},
+      runCount: 0, terminalRunCount: 0,
+    });
+    const runId = await ctx.db.insert("runs", {
+      windowId, leagueId, teamId: teamA, modelId: "mock/scripted",
+      kind: "team" as const, status: "running" as const, windowType: "trade" as const,
+      windowLabel: "trade", weekNo: WEEK, attempt: 1, lastPersistedStep: -1,
+      totalCostUsd: 0, totalInputTokens: 0, totalOutputTokens: 0, stepCount: 0,
+      committedActionCount: 0, rejectedActionCount: 0,
+    });
+
+    return {
+      ownerA, ownerB, ownerC, leagueId, teamA, teamB, rbA, wrA, rbB, wrB, windowId, runId,
+      sessionA: await sessionOf(ownerA),
+      sessionB: await sessionOf(ownerB),
+      sessionC: await sessionOf(ownerC),
+    };
+  });
+}
+
+type TradeSeed = Awaited<ReturnType<typeof seedTrading>>;
+
+function ctxFor(s: TradeSeed, toolCallId: string) {
+  return { runId: s.runId, stepIndex: 0, toolCallId, windowId: s.windowId, weekNo: WEEK };
+}
+
+/** Dial a player's rest-of-season value through `player_projection_latest`. */
+async function setProjection(
+  t: SchemaTest,
+  playerId: Id<"players">,
+  points: number,
+  position: "QB" | "RB" | "WR" = "RB",
+) {
+  await t.run(async (ctx) => {
+    const existing = await ctx.db
+      .query("player_projection_latest")
+      .withIndex("by_playerId_season_week_source", (q) =>
+        q
+          .eq("playerId", playerId)
+          .eq("season", SEASON)
+          .eq("week", WEEK)
+          .eq("source", "sleeper_rotowire"),
+      )
+      .unique();
+    const row = {
+      playerId, season: SEASON, week: WEEK, source: "sleeper_rotowire", position,
+      projectedPointsPpr: points, projectedPointsHalf: points, projectedPointsStd: points,
+      stats: {}, effectiveAt: Date.now(),
+    };
+    if (existing) await ctx.db.patch("player_projection_latest", existing._id, row);
+    else await ctx.db.insert("player_projection_latest", row);
+  });
+}
+
+/** A team's roster as sorted player ids (a `Set` is not a Convex value). */
+async function rosterOf(t: SchemaTest, teamId: Id<"teams">): Promise<string[]> {
+  const ids = await t.run(async (ctx) => {
+    const slots = await ctx.db
+      .query("roster_slots")
+      .withIndex("by_teamId", (q) => q.eq("teamId", teamId))
+      .collect();
+    return slots.map((slot) => slot.playerId as string);
+  });
+  return ids.sort();
+}
+
+function sortedIds(...ids: Id<"players">[]): string[] {
+  return ids.map((id) => id as string).sort();
+}
+
+async function eventsOf(t: SchemaTest, tradeId: Id<"trades">) {
+  return t.run(async (ctx) => {
+    const rows = await ctx.db
+      .query("trade_events")
+      .withIndex("by_tradeId", (q) => q.eq("tradeId", tradeId))
+      .collect();
+    return rows.map((r) => r.type);
+  });
+}
+
+describe("trades.propose", () => {
+  test("creates the proposal, opens the thread and posts the offer summary", async () => {
+    const t = convexTest(schema, modules);
+    const s = await seedTrading(t);
+
+    const result = await t.mutation(internal.trades.propose, {
+      leagueId: s.leagueId,
+      proposerTeamId: s.teamA,
+      toTeamId: s.teamB,
+      give: [s.rbA],
+      receive: [s.rbB],
+      faab: 5,
+      message: "Straight RB swap.",
+      agentCtx: ctxFor(s, "propose-1"),
+    });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+
+    const state = await t.run(async (ctx) => ({
+      trade: await ctx.db.get("trades", result.tradeId),
+      thread: await ctx.db.get("threads", result.threadId),
+      messages: await ctx.db
+        .query("messages")
+        .withIndex("by_threadId_createdAt", (q) => q.eq("threadId", result.threadId))
+        .collect(),
+    }));
+    expect(state.trade?.status).toBe("proposed");
+    expect(state.trade?.weekNo).toBe(WEEK);
+    expect(state.trade?.windowId).toBe(s.windowId);
+    expect(state.trade?.createdByRunId).toBe(s.runId);
+    expect(state.trade?.vetoCount).toBe(0);
+    expect(state.trade?.items).toHaveLength(3); // two players + the FAAB leg
+    expect(state.thread?.messageCount).toBe(1);
+    expect(state.messages[0].body).toContain("Trade offer to Bravo");
+    expect(state.messages[0].body).toContain("Plus $5 FAAB");
+    expect(state.messages[0].body).toContain("Straight RB swap.");
+    expect(await eventsOf(t, result.tradeId)).toEqual(["proposed"]);
+  });
+
+  test("rejects players the two sides do not own, and over-budget FAAB", async () => {
+    const t = convexTest(schema, modules);
+    const s = await seedTrading(t);
+
+    const wrongRoster = await t.mutation(internal.trades.propose, {
+      leagueId: s.leagueId, proposerTeamId: s.teamA, toTeamId: s.teamB,
+      give: [s.rbB], receive: [s.rbA], faab: 500,
+      agentCtx: ctxFor(s, "bad-1"),
+    });
+    expect(wrongRoster.ok).toBe(false);
+    if (wrongRoster.ok) return;
+    expect(wrongRoster.errors).toContain("Not on your roster: Rick Bravo");
+    expect(wrongRoster.errors).toContain("Not on Bravo's roster: Rick Alpha");
+    expect(wrongRoster.errors).toContain(
+      "FAAB offer of $500 exceeds your remaining $100",
+    );
+
+    expect(
+      await t.mutation(internal.trades.propose, {
+        leagueId: s.leagueId, proposerTeamId: s.teamA, toTeamId: s.teamA,
+        give: [s.rbA], receive: [s.rbA], agentCtx: ctxFor(s, "bad-2"),
+      }),
+    ).toEqual({ ok: false, errors: ["A team cannot trade with itself"] });
+
+    const empty = await t.mutation(internal.trades.propose, {
+      leagueId: s.leagueId, proposerTeamId: s.teamA, toTeamId: s.teamB,
+      give: [s.rbA], receive: [], agentCtx: ctxFor(s, "bad-3"),
+    });
+    expect(empty).toEqual({
+      ok: false,
+      errors: ["A trade must move at least one player in each direction"],
+    });
+  });
+
+  test("enforces the open-proposal cap", async () => {
+    const t = convexTest(schema, modules);
+    const s = await seedTrading(t);
+    await t.run(async (ctx) => {
+      const rules = await ctx.db
+        .query("league_rules")
+        .withIndex("by_leagueId", (q) => q.eq("leagueId", s.leagueId))
+        .unique();
+      await ctx.db.patch("league_rules", rules!._id, { maxOpenProposals: 1 });
+    });
+
+    const first = await t.mutation(internal.trades.propose, {
+      leagueId: s.leagueId, proposerTeamId: s.teamA, toTeamId: s.teamB,
+      give: [s.rbA], receive: [s.rbB], agentCtx: ctxFor(s, "cap-1"),
+    });
+    expect(first.ok).toBe(true);
+
+    const second = await t.mutation(internal.trades.propose, {
+      leagueId: s.leagueId, proposerTeamId: s.teamA, toTeamId: s.teamB,
+      give: [s.wrA], receive: [s.wrB], agentCtx: ctxFor(s, "cap-2"),
+    });
+    expect(second.ok).toBe(false);
+    if (second.ok) return;
+    expect(second.errors[0]).toMatch(/You already have 1 open proposals \(limit 1\)/);
+  });
+
+  test("blocks a player being traded straight back (anti-churn)", async () => {
+    const t = convexTest(schema, modules);
+    const s = await seedTrading(t);
+    // A completed trade inside the horizon already moved Rick Alpha B → A.
+    await t.run(async (ctx) => {
+      await ctx.db.insert("trades", {
+        leagueId: s.leagueId, proposerTeamId: s.teamB, recipientTeamId: s.teamA,
+        weekNo: WEEK, status: "completed" as const,
+        items: [
+          { fromTeamId: s.teamB, toTeamId: s.teamA, playerId: s.rbA },
+          { fromTeamId: s.teamA, toTeamId: s.teamB, playerId: s.rbB },
+        ],
+        flagged: false, vetoCount: 0, approveCount: 0,
+      });
+    });
+
+    const churned = await t.mutation(internal.trades.propose, {
+      leagueId: s.leagueId, proposerTeamId: s.teamA, toTeamId: s.teamB,
+      give: [s.rbA], receive: [s.rbB], agentCtx: ctxFor(s, "churn-1"),
+    });
+    expect(churned.ok).toBe(false);
+    if (churned.ok) return;
+    expect(churned.errors[0]).toMatch(/Anti-churn: Rick Alpha/);
+
+    // A different player is unaffected.
+    const clean = await t.mutation(internal.trades.propose, {
+      leagueId: s.leagueId, proposerTeamId: s.teamA, toTeamId: s.teamB,
+      give: [s.wrA], receive: [s.wrB], agentCtx: ctxFor(s, "churn-2"),
+    });
+    expect(clean.ok).toBe(true);
+  });
+
+  test("replaying the same (runId, toolCallId) returns the stored result", async () => {
+    const t = convexTest(schema, modules);
+    const s = await seedTrading(t);
+    const args = {
+      leagueId: s.leagueId, proposerTeamId: s.teamA, toTeamId: s.teamB,
+      give: [s.rbA], receive: [s.rbB], agentCtx: ctxFor(s, "replay"),
+    };
+    const first = await t.mutation(internal.trades.propose, args);
+    const second = await t.mutation(internal.trades.propose, args);
+    expect(second).toEqual(first);
+
+    const state = await t.run(async (ctx) => ({
+      trades: await ctx.db
+        .query("trades")
+        .withIndex("by_leagueId", (q) => q.eq("leagueId", s.leagueId))
+        .collect(),
+      run: await ctx.db.get("runs", s.runId),
+    }));
+    expect(state.trades).toHaveLength(1);
+    expect(state.run?.committedActionCount).toBe(1);
+  });
+});
+
+describe("trades.respond", () => {
+  test("propose → counter → accept → review → complete moves the rosters", async () => {
+    const t = convexTest(schema, modules);
+    const s = await seedTrading(t);
+    await setProjection(t, s.rbA, 10);
+    await setProjection(t, s.rbB, 10);
+    await setProjection(t, s.wrA, 10, "WR");
+    await setProjection(t, s.wrB, 10, "WR");
+
+    const proposed = await t.mutation(internal.trades.propose, {
+      leagueId: s.leagueId, proposerTeamId: s.teamA, toTeamId: s.teamB,
+      give: [s.rbA], receive: [s.rbB], agentCtx: ctxFor(s, "flow-propose"),
+    });
+    expect(proposed.ok).toBe(true);
+    if (!proposed.ok) return;
+
+    const countered = await t.mutation(internal.trades.respond, {
+      leagueId: s.leagueId, teamId: s.teamB, tradeId: proposed.tradeId, action: "counter",
+      counter: { give: [s.wrB], receive: [s.wrA] },
+      message: "Wide receivers instead.",
+      agentCtx: ctxFor(s, "flow-counter"),
+    });
+    expect(countered.ok).toBe(true);
+    if (!countered.ok) return;
+    expect(countered.status).toBe("countered");
+    const childId = countered.counterTradeId!;
+
+    const child = await t.run(async (ctx) => ctx.db.get("trades", childId));
+    expect(child?.parentTradeId).toBe(proposed.tradeId);
+    expect(child?.proposerTeamId).toBe(s.teamB);
+    expect(child?.threadId).toBe(proposed.threadId);
+    expect(await eventsOf(t, proposed.tradeId)).toEqual(["proposed", "countered"]);
+    expect(await eventsOf(t, childId)).toEqual(["countered"]);
+
+    const accepted = await t.mutation(internal.trades.respond, {
+      leagueId: s.leagueId, teamId: s.teamA, tradeId: childId, action: "accept",
+      agentCtx: ctxFor(s, "flow-accept"),
+    });
+    expect(accepted.ok).toBe(true);
+    if (!accepted.ok) return;
+    expect(accepted.status).toBe("in_review");
+
+    const inReview = await t.run(async (ctx) => ctx.db.get("trades", childId));
+    expect(inReview?.status).toBe("in_review");
+    expect(inReview?.fairnessScore).toBe(1);
+    expect(inReview?.flagged).toBe(false);
+    expect(inReview?.reviewEndsAt).toBeGreaterThan(Date.now());
+    const detail = inReview?.fairnessDetail as { method: string; items: unknown[] };
+    expect(detail.method).toBe("ros_projection_v1");
+    expect(detail.items).toHaveLength(2);
+    expect(await eventsOf(t, childId)).toEqual(["countered", "accepted", "fairness_scored"]);
+
+    const resolved = await t.mutation(internal.trades.processReviews, {
+      leagueId: s.leagueId,
+      now: inReview!.reviewEndsAt!,
+    });
+    expect(resolved).toEqual({ resolved: 1 });
+
+    expect(await rosterOf(t, s.teamA)).toEqual(sortedIds(s.rbA, s.wrB));
+    expect(await rosterOf(t, s.teamB)).toEqual(sortedIds(s.rbB, s.wrA));
+
+    const done = await t.run(async (ctx) => ({
+      trade: await ctx.db.get("trades", childId),
+      transactions: await ctx.db
+        .query("transactions")
+        .withIndex("by_tradeId", (q) => q.eq("tradeId", childId))
+        .collect(),
+      messages: await ctx.db
+        .query("messages")
+        .withIndex("by_threadId_createdAt", (q) => q.eq("threadId", proposed.threadId))
+        .collect(),
+    }));
+    expect(done.trade?.status).toBe("completed");
+    expect(done.trade?.resolvedAt).toBeGreaterThan(0);
+    expect(done.transactions).toHaveLength(2);
+    expect(done.transactions.every((row) => row.type === "trade")).toBe(true);
+    expect(done.messages.at(-1)?.body).toBe("Trade completed — rosters updated.");
+    expect(await eventsOf(t, childId)).toEqual([
+      "countered", "accepted", "fairness_scored", "completed",
+    ]);
+  });
+
+  test("settles FAAB on completion", async () => {
+    const t = convexTest(schema, modules);
+    const s = await seedTrading(t);
+    const proposed = await t.mutation(internal.trades.propose, {
+      leagueId: s.leagueId, proposerTeamId: s.teamA, toTeamId: s.teamB,
+      give: [s.rbA], receive: [s.rbB], faab: 30, agentCtx: ctxFor(s, "faab-propose"),
+    });
+    expect(proposed.ok).toBe(true);
+    if (!proposed.ok) return;
+    await t.mutation(internal.trades.respond, {
+      leagueId: s.leagueId, teamId: s.teamB, tradeId: proposed.tradeId, action: "accept",
+      agentCtx: ctxFor(s, "faab-accept"),
+    });
+    const trade = await t.run(async (ctx) => ctx.db.get("trades", proposed.tradeId));
+    await t.mutation(internal.trades.processReviews, {
+      leagueId: s.leagueId, now: trade!.reviewEndsAt!,
+    });
+
+    const teams = await t.run(async (ctx) => ({
+      a: await ctx.db.get("teams", s.teamA),
+      b: await ctx.db.get("teams", s.teamB),
+    }));
+    expect(teams.a?.faabRemaining).toBe(70);
+    expect(teams.b?.faabRemaining).toBe(130);
+  });
+
+  test("only the recipient may answer, and only while the offer is open", async () => {
+    const t = convexTest(schema, modules);
+    const s = await seedTrading(t);
+    const proposed = await t.mutation(internal.trades.propose, {
+      leagueId: s.leagueId, proposerTeamId: s.teamA, toTeamId: s.teamB,
+      give: [s.rbA], receive: [s.rbB], agentCtx: ctxFor(s, "guard-propose"),
+    });
+    expect(proposed.ok).toBe(true);
+    if (!proposed.ok) return;
+
+    expect(
+      await t.mutation(internal.trades.respond, {
+        leagueId: s.leagueId, teamId: s.teamA, tradeId: proposed.tradeId, action: "accept",
+        agentCtx: ctxFor(s, "guard-wrong-side"),
+      }),
+    ).toEqual({ ok: false, errors: ["Only the recipient can respond to this proposal"] });
+
+    const rejected = await t.mutation(internal.trades.respond, {
+      leagueId: s.leagueId, teamId: s.teamB, tradeId: proposed.tradeId, action: "reject",
+      message: "No thanks.", agentCtx: ctxFor(s, "guard-reject"),
+    });
+    expect(rejected.ok).toBe(true);
+
+    expect(
+      await t.mutation(internal.trades.respond, {
+        leagueId: s.leagueId, teamId: s.teamB, tradeId: proposed.tradeId, action: "accept",
+        agentCtx: ctxFor(s, "guard-late"),
+      }),
+    ).toEqual({ ok: false, errors: ["This proposal is rejected and cannot be answered"] });
+  });
+
+  test("cancels rather than corrupts when a roster moved after acceptance", async () => {
+    const t = convexTest(schema, modules);
+    const s = await seedTrading(t);
+    const proposed = await t.mutation(internal.trades.propose, {
+      leagueId: s.leagueId, proposerTeamId: s.teamA, toTeamId: s.teamB,
+      give: [s.rbA], receive: [s.rbB], agentCtx: ctxFor(s, "stale-propose"),
+    });
+    expect(proposed.ok).toBe(true);
+    if (!proposed.ok) return;
+    await t.mutation(internal.trades.respond, {
+      leagueId: s.leagueId, teamId: s.teamB, tradeId: proposed.tradeId, action: "accept",
+      agentCtx: ctxFor(s, "stale-accept"),
+    });
+
+    // Rick Alpha is dropped between acceptance and completion.
+    await t.run(async (ctx) => {
+      const slot = await ctx.db
+        .query("roster_slots")
+        .withIndex("by_teamId_playerId", (q) =>
+          q.eq("teamId", s.teamA).eq("playerId", s.rbA),
+        )
+        .unique();
+      await ctx.db.delete("roster_slots", slot!._id);
+    });
+
+    const trade = await t.run(async (ctx) => ctx.db.get("trades", proposed.tradeId));
+    await t.mutation(internal.trades.processReviews, {
+      leagueId: s.leagueId, now: trade!.reviewEndsAt!,
+    });
+    const after = await t.run(async (ctx) => ctx.db.get("trades", proposed.tradeId));
+    expect(after?.status).toBe("cancelled");
+    expect(await eventsOf(t, proposed.tradeId)).toContain("invalidated");
+    // The other side's roster was left alone.
+    expect(await rosterOf(t, s.teamB)).toEqual(sortedIds(s.rbB, s.wrB));
+  });
+
+  test("a locked player still moves; the swap is recorded as locked", async () => {
+    const t = convexTest(schema, modules);
+    const s = await seedTrading(t);
+    await t.run(async (ctx) => {
+      await ctx.db.insert("nfl_games", {
+        season: SEASON, week: WEEK, gameId: `g-${Math.random()}`,
+        homeTeam: "SF", awayTeam: "SEA", kickoffAt: Date.now() - 60_000, status: "in_progress",
+      });
+    });
+    const proposed = await t.mutation(internal.trades.propose, {
+      leagueId: s.leagueId, proposerTeamId: s.teamA, toTeamId: s.teamB,
+      give: [s.rbA], receive: [s.rbB], agentCtx: ctxFor(s, "lock-propose"),
+    });
+    expect(proposed.ok).toBe(true);
+    if (!proposed.ok) return;
+    await t.mutation(internal.trades.respond, {
+      leagueId: s.leagueId, teamId: s.teamB, tradeId: proposed.tradeId, action: "accept",
+      agentCtx: ctxFor(s, "lock-accept"),
+    });
+    const trade = await t.run(async (ctx) => ctx.db.get("trades", proposed.tradeId));
+    await t.mutation(internal.trades.processReviews, {
+      leagueId: s.leagueId, now: trade!.reviewEndsAt!,
+    });
+
+    const after = await t.run(async (ctx) => ({
+      trade: await ctx.db.get("trades", proposed.tradeId),
+      transactions: await ctx.db
+        .query("transactions")
+        .withIndex("by_tradeId", (q) => q.eq("tradeId", proposed.tradeId))
+        .collect(),
+    }));
+    expect(after.trade?.status).toBe("completed");
+    expect(after.transactions.every((row) => row.details?.locked === true)).toBe(true);
+    expect(await rosterOf(t, s.teamA)).toEqual(sortedIds(s.rbB, s.wrA));
+  });
+});
+
+describe("trades fairness", () => {
+  test("is monotonic and honours the league's floor", async () => {
+    const t = convexTest(schema, modules);
+    const s = await seedTrading(t);
+    await setProjection(t, s.rbA, 4);
+    await setProjection(t, s.wrA, 4, "WR");
+    await setProjection(t, s.rbB, 20);
+
+    const thin = await t.query(internal.trades.scoreProposal, {
+      leagueId: s.leagueId, proposerTeamId: s.teamA, recipientTeamId: s.teamB,
+      weekNo: WEEK, give: [s.rbA], receive: [s.rbB],
+    });
+    const fatter = await t.query(internal.trades.scoreProposal, {
+      leagueId: s.leagueId, proposerTeamId: s.teamA, recipientTeamId: s.teamB,
+      weekNo: WEEK, give: [s.rbA, s.wrA], receive: [s.rbB],
+    });
+    const withFaab = await t.query(internal.trades.scoreProposal, {
+      leagueId: s.leagueId, proposerTeamId: s.teamA, recipientTeamId: s.teamB,
+      weekNo: WEEK, give: [s.rbA, s.wrA], receive: [s.rbB], faab: 20,
+    });
+    expect(fatter.score).toBeGreaterThan(thin.score);
+    expect(withFaab.score).toBeGreaterThan(fatter.score);
+    expect(withFaab.detail.faabPoints).toBeGreaterThan(0);
+
+    // The thin side is well under the default 0.6 floor.
+    expect(thin.flagged).toBe(true);
+    expect(thin.detail.floor).toBe(0.6);
+    expect(thin.detail.method).toBe("ros_projection_v1");
+    // Rest-of-season = this week's projection × the weeks that remain.
+    expect(thin.detail.items.find((i) => i.playerId === s.rbB)?.baseRos).toBe(
+      20 * REMAINING_WEEKS,
+    );
+
+    // An even swap clears the default floor but not a strict one.
+    await setProjection(t, s.rbA, 20);
+    const even = await t.query(internal.trades.scoreProposal, {
+      leagueId: s.leagueId, proposerTeamId: s.teamA, recipientTeamId: s.teamB,
+      weekNo: WEEK, give: [s.rbA], receive: [s.rbB],
+    });
+    expect(even.score).toBe(1);
+    expect(even.flagged).toBe(false);
+
+    await t.run(async (ctx) => {
+      const rules = await ctx.db
+        .query("league_rules")
+        .withIndex("by_leagueId", (q) => q.eq("leagueId", s.leagueId))
+        .unique();
+      await ctx.db.patch("league_rules", rules!._id, { fairnessFloor: 0.95 });
+    });
+    const strict = await t.query(internal.trades.scoreProposal, {
+      leagueId: s.leagueId, proposerTeamId: s.teamA, recipientTeamId: s.teamB,
+      weekNo: WEEK, give: [s.rbA, s.wrA], receive: [s.rbB],
+    });
+    expect(strict.detail.floor).toBe(0.95);
+    expect(strict.flagged).toBe(true);
+  });
+
+  test("scores a trade with no projection data as neutral rather than flagged", async () => {
+    const t = convexTest(schema, modules);
+    const s = await seedTrading(t);
+    const result = await t.query(internal.trades.scoreProposal, {
+      leagueId: s.leagueId, proposerTeamId: s.teamA, recipientTeamId: s.teamB,
+      weekNo: WEEK, give: [s.rbA], receive: [s.rbB],
+    });
+    expect(result.score).toBe(1);
+    expect(result.flagged).toBe(false);
+    expect(result.detail.notes.join(" ")).toMatch(/no projection data/i);
+  });
+});
+
+describe("trades.castVeto and the veto flow", () => {
+  test("a majority veto blocks a flagged trade at the end of review", async () => {
+    const t = convexTest(schema, modules);
+    const s = await seedTrading(t);
+    // Lopsided: Alpha sends a 1-point RB for a 20-point RB.
+    await setProjection(t, s.rbA, 1);
+    await setProjection(t, s.rbB, 20);
+
+    const proposed = await t.mutation(internal.trades.propose, {
+      leagueId: s.leagueId, proposerTeamId: s.teamA, toTeamId: s.teamB,
+      give: [s.rbA], receive: [s.rbB], agentCtx: ctxFor(s, "veto-propose"),
+    });
+    expect(proposed.ok).toBe(true);
+    if (!proposed.ok) return;
+    await t.mutation(internal.trades.respond, {
+      leagueId: s.leagueId, teamId: s.teamB, tradeId: proposed.tradeId, action: "accept",
+      agentCtx: ctxFor(s, "veto-accept"),
+    });
+
+    const flagged = await t.run(async (ctx) => ctx.db.get("trades", proposed.tradeId));
+    expect(flagged?.flagged).toBe(true);
+
+    const asA = t.withIdentity({ subject: `${s.ownerA}|${s.sessionA}` });
+    const asB = t.withIdentity({ subject: `${s.ownerB}|${s.sessionB}` });
+    const asC = t.withIdentity({ subject: `${s.ownerC}|${s.sessionC}` });
+
+    const one = await asA.mutation(api.trades.castVeto, {
+      leagueId: s.leagueId, tradeId: proposed.tradeId, vote: "veto",
+    });
+    expect(one).toEqual({
+      ok: true, vetoes: 1, approvals: 0, ownerCount: 3, threshold: 2, blocked: false,
+    });
+
+    await asC.mutation(api.trades.castVeto, {
+      leagueId: s.leagueId, tradeId: proposed.tradeId, vote: "approve",
+    });
+    // Changing a vote replaces it rather than adding one.
+    const two = await asC.mutation(api.trades.castVeto, {
+      leagueId: s.leagueId, tradeId: proposed.tradeId, vote: "veto",
+    });
+    expect(two.vetoes).toBe(2);
+    expect(two.approvals).toBe(0);
+    expect(two.blocked).toBe(true);
+
+    const counters = await t.run(async (ctx) => ctx.db.get("trades", proposed.tradeId));
+    expect(counters?.vetoCount).toBe(2);
+    expect(counters?.approveCount).toBe(0);
+
+    await asB.mutation(api.trades.castVeto, {
+      leagueId: s.leagueId, tradeId: proposed.tradeId, vote: "approve",
+    });
+
+    await t.mutation(internal.trades.processReviews, {
+      leagueId: s.leagueId, now: counters!.reviewEndsAt!,
+    });
+    const after = await t.run(async (ctx) => ctx.db.get("trades", proposed.tradeId));
+    expect(after?.status).toBe("vetoed");
+    // Rosters untouched.
+    expect(await rosterOf(t, s.teamA)).toEqual(sortedIds(s.rbA, s.wrA));
+  });
+
+  test("a flagged trade nobody blocks still completes", async () => {
+    const t = convexTest(schema, modules);
+    const s = await seedTrading(t);
+    await setProjection(t, s.rbA, 1);
+    await setProjection(t, s.rbB, 20);
+    const proposed = await t.mutation(internal.trades.propose, {
+      leagueId: s.leagueId, proposerTeamId: s.teamA, toTeamId: s.teamB,
+      give: [s.rbA], receive: [s.rbB], agentCtx: ctxFor(s, "pass-propose"),
+    });
+    expect(proposed.ok).toBe(true);
+    if (!proposed.ok) return;
+    await t.mutation(internal.trades.respond, {
+      leagueId: s.leagueId, teamId: s.teamB, tradeId: proposed.tradeId, action: "accept",
+      agentCtx: ctxFor(s, "pass-accept"),
+    });
+    const trade = await t.run(async (ctx) => ctx.db.get("trades", proposed.tradeId));
+    const asA = t.withIdentity({ subject: `${s.ownerA}|${s.sessionA}` });
+    await asA.mutation(api.trades.castVeto, {
+      leagueId: s.leagueId, tradeId: proposed.tradeId, vote: "veto",
+    });
+
+    await t.mutation(internal.trades.processReviews, {
+      leagueId: s.leagueId, now: trade!.reviewEndsAt!,
+    });
+    const after = await t.run(async (ctx) => ctx.db.get("trades", proposed.tradeId));
+    expect(after?.status).toBe("completed");
+  });
+
+  test("voting is member-only and closed outside review", async () => {
+    const t = convexTest(schema, modules);
+    const s = await seedTrading(t);
+    const proposed = await t.mutation(internal.trades.propose, {
+      leagueId: s.leagueId, proposerTeamId: s.teamA, toTeamId: s.teamB,
+      give: [s.rbA], receive: [s.rbB], agentCtx: ctxFor(s, "auth-propose"),
+    });
+    expect(proposed.ok).toBe(true);
+    if (!proposed.ok) return;
+
+    await expect(
+      t.mutation(api.trades.castVeto, {
+        leagueId: s.leagueId, tradeId: proposed.tradeId, vote: "veto",
+      }),
+    ).rejects.toThrow(/Sign in/);
+
+    const asA = t.withIdentity({ subject: `${s.ownerA}|${s.sessionA}` });
+    await expect(
+      asA.mutation(api.trades.castVeto, {
+        leagueId: s.leagueId, tradeId: proposed.tradeId, vote: "veto",
+      }),
+    ).rejects.toThrow(/voting is closed/);
+
+    // A spectator may watch but not vote.
+    const spectator = await t.run(async (ctx) => {
+      const userId = await ctx.db.insert("users", { email: `spec-${Math.random()}@x.dev` });
+      await ctx.db.insert("league_members", {
+        leagueId: s.leagueId, userId, role: "spectator" as const,
+      });
+      const sessionId = await ctx.db.insert("authSessions", {
+        userId, expirationTime: Date.now() + 86_400_000,
+      });
+      return { userId, sessionId };
+    });
+    await t.mutation(internal.trades.respond, {
+      leagueId: s.leagueId, teamId: s.teamB, tradeId: proposed.tradeId, action: "accept",
+      agentCtx: ctxFor(s, "auth-accept"),
+    });
+    const asSpectator = t.withIdentity({
+      subject: `${spectator.userId}|${spectator.sessionId}`,
+    });
+    await expect(
+      asSpectator.mutation(api.trades.castVeto, {
+        leagueId: s.leagueId, tradeId: proposed.tradeId, vote: "veto",
+      }),
+    ).rejects.toThrow(/Only league owners may vote/);
+  });
+});
+
+describe("trades.expireForWindow", () => {
+  test("expires the offers left open when the window closes", async () => {
+    const t = convexTest(schema, modules);
+    const s = await seedTrading(t);
+    const open = await t.mutation(internal.trades.propose, {
+      leagueId: s.leagueId, proposerTeamId: s.teamA, toTeamId: s.teamB,
+      give: [s.rbA], receive: [s.rbB], agentCtx: ctxFor(s, "expire-1"),
+    });
+    expect(open.ok).toBe(true);
+    if (!open.ok) return;
+    const settled = await t.mutation(internal.trades.propose, {
+      leagueId: s.leagueId, proposerTeamId: s.teamA, toTeamId: s.teamB,
+      give: [s.wrA], receive: [s.wrB], agentCtx: ctxFor(s, "expire-2"),
+    });
+    expect(settled.ok).toBe(true);
+    if (!settled.ok) return;
+    await t.mutation(internal.trades.respond, {
+      leagueId: s.leagueId, teamId: s.teamB, tradeId: settled.tradeId, action: "reject",
+      agentCtx: ctxFor(s, "expire-reject"),
+    });
+
+    expect(await t.mutation(internal.trades.expireForWindow, { windowId: s.windowId })).toEqual(
+      { expired: 1 },
+    );
+    const after = await t.run(async (ctx) => ({
+      open: await ctx.db.get("trades", open.tradeId),
+      settled: await ctx.db.get("trades", settled.tradeId),
+    }));
+    expect(after.open?.status).toBe("expired");
+    expect(after.open?.resolvedAt).toBeGreaterThan(0);
+    expect(after.settled?.status).toBe("rejected");
+    expect(await eventsOf(t, open.tradeId)).toEqual(["proposed", "expired"]);
   });
 });

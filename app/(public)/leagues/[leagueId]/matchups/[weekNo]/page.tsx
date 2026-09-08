@@ -1,13 +1,11 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 
-import { MatchupCard } from "@/components/league/matchup-card";
-import { WeekPicker } from "@/components/league/week-picker";
-import { Card, CardBody, CardHeader, EmptyState } from "@/components/ui";
-import { matchupsForWeek } from "@/lib/services/views";
-import { db } from "@/lib/db";
-import { weeks } from "@/lib/db/schema";
-import { eq } from "drizzle-orm";
+import { readOrNull } from "@/components/league/convex-errors";
+import { MatchupsWeekView } from "@/components/league/matchups-week";
+import { api } from "@/convex/_generated/api";
+import type { Id } from "@/convex/_generated/dataModel";
+import { fetchAuthQuery, preloadAuthQuery } from "@/lib/convex/server";
 
 export async function generateMetadata({
   params,
@@ -23,38 +21,24 @@ export default async function WeekMatchupsPage({
   const weekNo = Number(weekParam);
   if (!Number.isInteger(weekNo) || weekNo < 1 || weekNo > 18) notFound();
 
-  const [cards, weekRows] = await Promise.all([
-    matchupsForWeek(leagueId, weekNo),
-    db.select({ weekNo: weeks.weekNo }).from(weeks).where(eq(weeks.leagueId, leagueId)),
+  const id = leagueId as Id<"leagues">;
+  const [preloaded, league] = await Promise.all([
+    readOrNull(() => preloadAuthQuery(api.views.matchups, { leagueId: id, weekNo })),
+    readOrNull(() => fetchAuthQuery(api.leagues.get, { leagueId: id })),
   ]);
+  if (!preloaded || !league) notFound();
+
+  // No Convex query lists a league's week rows; the rule set is the source of
+  // truth for how many weeks exist, and the seed materialises exactly that many.
+  const seasonWeeks = league.rules?.seasonWeeks ?? 18;
+  const weeks = Array.from({ length: seasonWeeks }, (_, index) => index + 1);
 
   return (
-    <Card>
-      <CardHeader
-        title={`Week ${weekNo}`}
-        description="Click a matchup for both lineups and the agents' rationale."
-        action={
-          <WeekPicker
-            basePath={`/leagues/${leagueId}/matchups`}
-            weekNo={weekNo}
-            weeks={weekRows.map((w) => w.weekNo).sort((a, b) => a - b)}
-          />
-        }
-      />
-      <CardBody>
-        {cards.length === 0 ? (
-          <EmptyState
-            title={`No matchups for week ${weekNo}`}
-            description="The schedule is generated when the draft completes."
-          />
-        ) : (
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            {cards.map((matchup) => (
-              <MatchupCard key={matchup.id} leagueId={leagueId} matchup={matchup} />
-            ))}
-          </div>
-        )}
-      </CardBody>
-    </Card>
+    <MatchupsWeekView
+      leagueId={leagueId}
+      weekNo={weekNo}
+      weeks={weeks}
+      preloaded={preloaded}
+    />
   );
 }

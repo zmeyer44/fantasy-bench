@@ -52,8 +52,8 @@ export function SkillForm({ mode, skillId, initial, usageCount = 0 }: SkillFormP
     trpc.skills.update.mutationOptions({
       onSuccess: (skill) => {
         setToast({ message: "Saved.", tone: "success" });
+        // The skill page reads Convex live; navigating is enough.
         router.push(`/skills/${skill.slug}`);
-        router.refresh();
       },
       onError: (err) => setError(err.message),
     }),

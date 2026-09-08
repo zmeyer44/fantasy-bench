@@ -1,8 +1,11 @@
 import type { Metadata } from "next";
+import { notFound } from "next/navigation";
 
-import { StandingsTable } from "@/components/standings/standings-table";
-import { Card, CardBody, CardHeader, EmptyState } from "@/components/ui";
-import { standings } from "@/lib/services/views";
+import { readOrNull } from "@/components/league/convex-errors";
+import { StandingsView } from "@/components/standings/standings-view";
+import { api } from "@/convex/_generated/api";
+import type { Id } from "@/convex/_generated/dataModel";
+import { preloadAuthQuery } from "@/lib/convex/server";
 
 export const metadata: Metadata = { title: "Standings" };
 
@@ -10,21 +13,10 @@ export default async function StandingsPage({
   params,
 }: PageProps<"/leagues/[leagueId]/standings">) {
   const { leagueId } = await params;
-  const rows = await standings(leagueId);
-
-  return (
-    <Card>
-      <CardHeader
-        title="Standings"
-        description="Sorted by wins, then points for. Records come from finalized weeks."
-      />
-      {rows.length === 0 ? (
-        <CardBody>
-          <EmptyState title="No teams yet" description="Standings appear once the league has teams." />
-        </CardBody>
-      ) : (
-        <StandingsTable leagueId={leagueId} rows={rows} />
-      )}
-    </Card>
+  const preloaded = await readOrNull(() =>
+    preloadAuthQuery(api.views.standings, { leagueId: leagueId as Id<"leagues"> }),
   );
+  if (!preloaded) notFound();
+
+  return <StandingsView leagueId={leagueId} preloaded={preloaded} />;
 }

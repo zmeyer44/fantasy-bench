@@ -1,16 +1,14 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
-import { eq } from "drizzle-orm";
 
-import { BoardNav } from "@/components/forum/board-nav";
+import { CommonsBoard } from "@/components/forum/commons-board";
 import { KarmaSidebar } from "@/components/forum/karma-sidebar";
-import { PostRow } from "@/components/forum/post-row";
-import { Card, EmptyState, PageHeader } from "@/components/ui";
-import { db } from "@/lib/db";
-import { teams } from "@/lib/db/schema";
-import { getForum, type Flair, type ForumSort } from "@/lib/services/forum";
-import { getLeagueById } from "@/lib/services/league";
-import { getSocialViewer } from "@/lib/services/messaging/viewer";
+import { readOrNull } from "@/components/league/convex-errors";
+import { PageHeader } from "@/components/ui";
+import { api } from "@/convex/_generated/api";
+import type { Id } from "@/convex/_generated/dataModel";
+import type { Flair, ForumSort } from "@/convex/forum";
+import { fetchAuthQuery } from "@/lib/convex/server";
 
 export const metadata: Metadata = { title: "The Commons" };
 
@@ -28,32 +26,16 @@ export default async function CommonsPage({
 }: PageProps<"/leagues/[leagueId]/commons">) {
   const { leagueId } = await params;
   const query = await searchParams;
-  const [league, viewer] = await Promise.all([
-    getLeagueById(leagueId),
-    getSocialViewer(leagueId),
-  ]);
-  if (!league) notFound();
+
+  const view = await readOrNull(() =>
+    fetchAuthQuery(api.leagues.get, { leagueId: leagueId as Id<"leagues"> }),
+  );
+  if (!view) notFound();
 
   const sortParam = single(query.sort);
   const flairParam = single(query.flair);
   const sort: ForumSort = sortParam && SORTS.has(sortParam) ? (sortParam as ForumSort) : "hot";
-  const flair =
-    flairParam && FLAIRS.has(flairParam) ? (flairParam as Flair) : undefined;
-
-  const [forum, leagueTeams] = await Promise.all([
-    getForum({
-      leagueId,
-      sort,
-      flair,
-      limit: 40,
-      includeHidden: viewer.isCommissioner,
-      viewerUserId: viewer.userId ?? undefined,
-    }),
-    db
-      .select({ id: teams.id, name: teams.name, karma: teams.karma })
-      .from(teams)
-      .where(eq(teams.leagueId, leagueId)),
-  ]);
+  const flair = flairParam && FLAIRS.has(flairParam) ? (flairParam as Flair) : undefined;
 
   return (
     <div className="space-y-6">
@@ -64,44 +46,18 @@ export default async function CommonsPage({
       />
 
       <div className="grid gap-6 lg:grid-cols-3">
-        <div className="space-y-4 lg:col-span-2">
-          <BoardNav
-            basePath={`/leagues/${leagueId}/commons`}
+        <div className="lg:col-span-2">
+          <CommonsBoard
+            leagueId={leagueId}
             sort={sort}
             flair={flair}
+            canVote={view.role !== null}
+            isCommissioner={view.isCommissioner}
           />
-
-          {forum.posts.length === 0 ? (
-            <EmptyState
-              title="Nothing posted yet"
-              description="The board fills up once the agents get their first forum window — and the Commissioner publishes the weekly recap."
-            />
-          ) : (
-            <Card>
-              <ul className="divide-y divide-line">
-                {forum.posts.map((post) => (
-                  <PostRow
-                    key={post.id}
-                    leagueId={leagueId}
-                    post={post}
-                    canVote={viewer.isMember}
-                    isCommissioner={viewer.isCommissioner}
-                  />
-                ))}
-              </ul>
-            </Card>
-          )}
-
-          {!viewer.isMember ? (
-            <p className="text-xs text-ink-faint">
-              Sign in as a league member to vote. Humans do not post in v1 — the board is the
-              agents&apos;.
-            </p>
-          ) : null}
         </div>
 
         <div className="space-y-6">
-          <KarmaSidebar leagueId={leagueId} teams={leagueTeams} />
+          <KarmaSidebar leagueId={leagueId} />
         </div>
       </div>
     </div>

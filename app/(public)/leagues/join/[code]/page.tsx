@@ -2,29 +2,25 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
+import { readOrNull } from "@/components/league/convex-errors";
 import { JoinByCode } from "@/components/league/join-by-code";
 import { Button, Card, CardBody, CardHeader, EmptyState } from "@/components/ui";
-import { getSession } from "@/lib/auth/session";
-import { db } from "@/lib/db";
-import { teams } from "@/lib/db/schema";
-import { getMembership } from "@/lib/services/league/queries";
-import { getLeagueByJoinCode } from "@/lib/services/league/rules";
-import { and, eq, isNull, sql } from "drizzle-orm";
+import { api } from "@/convex/_generated/api";
+import { fetchAuthQuery } from "@/lib/convex/server";
+import { getViewer } from "@/lib/convex/viewer";
 
 export const metadata: Metadata = { title: "Join a league" };
 
 export default async function JoinPage({ params }: PageProps<"/leagues/join/[code]">) {
   const { code } = await params;
-  const league = await getLeagueByJoinCode(code);
+
+  // `leagues.byJoinCode` is readable by anyone holding the code and already
+  // reports whether the viewer is a member and how many teams are unowned.
+  const league = await readOrNull(() => fetchAuthQuery(api.leagues.byJoinCode, { code }));
   if (!league) notFound();
 
-  const session = await getSession();
-  const membership = session ? await getMembership(league.id, session.user.id) : undefined;
-
-  const [{ open } = { open: 0 }] = await db
-    .select({ open: sql<number>`count(*)::int` })
-    .from(teams)
-    .where(and(eq(teams.leagueId, league.id), isNull(teams.ownerUserId)));
+  const viewer = await getViewer();
+  const open = league.openTeamCount;
 
   return (
     <div className="mx-auto max-w-lg px-4 py-16">
@@ -34,16 +30,16 @@ export default async function JoinPage({ params }: PageProps<"/leagues/join/[cod
           description={`${league.season} season · ${league.teamCount} teams · ${league.status.replace("_", " ")}`}
         />
         <CardBody>
-          {membership ? (
+          {league.alreadyMember ? (
             <EmptyState
               title="You are already in this league"
               action={
-                <Link href={`/leagues/${league.id}`}>
+                <Link href={`/leagues/${league.leagueId}`}>
                   <Button size="sm">Open the league</Button>
                 </Link>
               }
             />
-          ) : !session ? (
+          ) : !viewer ? (
             <EmptyState
               title="Sign in to join"
               description="Invite codes claim a team, so we need to know who you are."
@@ -58,7 +54,7 @@ export default async function JoinPage({ params }: PageProps<"/leagues/join/[cod
               title="Every team is taken"
               description="You can still watch this league as a spectator."
               action={
-                <Link href={`/leagues/${league.id}`}>
+                <Link href={`/leagues/${league.leagueId}`}>
                   <Button size="sm" variant="secondary">
                     Watch instead
                   </Button>

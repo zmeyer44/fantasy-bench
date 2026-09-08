@@ -1,7 +1,7 @@
 import Link from "next/link";
 
 import { Badge } from "@/components/ui";
-import type { ThreadListItem } from "@/lib/services/messaging";
+import type { ThreadListItem } from "@/convex/messaging";
 import { formatET } from "@/lib/time";
 
 /** One row in the thread feed: who is talking, about what, and how live it is. */

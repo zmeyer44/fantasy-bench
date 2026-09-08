@@ -23,8 +23,11 @@ import {
   Table,
   cn,
 } from "@/components/ui";
-import { getSession } from "@/lib/auth/session";
-import { filmRoom } from "@/lib/services/cost/film-room";
+import { readOrNull } from "@/components/league/convex-errors";
+import { api } from "@/convex/_generated/api";
+import type { Id } from "@/convex/_generated/dataModel";
+import { fetchAuthQuery } from "@/lib/convex/server";
+import { getViewer } from "@/lib/convex/viewer";
 import { formatET } from "@/lib/time";
 
 export const metadata: Metadata = { title: "Film room" };
@@ -50,15 +53,26 @@ export default async function FilmRoomPage({
   const query = await searchParams;
   const weekParam = Number(first(query.week));
 
-  const data = await filmRoom({
-    teamId,
-    weekNo: Number.isFinite(weekParam) && weekParam > 0 ? weekParam : undefined,
-  });
+  const [data, currentWeekNo] = await Promise.all([
+    readOrNull(() =>
+      fetchAuthQuery(api.metrics.filmRoom, {
+        teamId: teamId as Id<"teams">,
+        weekNo: Number.isFinite(weekParam) && weekParam > 0 ? weekParam : undefined,
+      }),
+    ),
+    readOrNull(() =>
+      fetchAuthQuery(api.weeks.currentWeekNo, { leagueId: leagueId as Id<"leagues"> }),
+    ),
+  ]);
   if (!data || data.leagueId !== leagueId) notFound();
 
-  const session = await getSession();
-  const canEdit = !!session && data.team.ownerUserId === session.user.id;
+  const viewer = await getViewer();
+  const canEdit = viewer !== null && data.team.ownerUserId === viewer.userId;
   const base = `/leagues/${leagueId}/teams/${teamId}`;
+  // The picker never offers a week the league has not reached yet.
+  const weekOptions = data.availableWeeks.filter(
+    (week) => currentWeekNo === null || week <= currentWeekNo,
+  );
 
   return (
     <div className="space-y-6">
@@ -83,10 +97,10 @@ export default async function FilmRoomPage({
 
       <ConfigNav leagueId={leagueId} teamId={teamId} />
 
-      {data.availableWeeks.length > 1 ? (
+      {weekOptions.length > 1 ? (
         <div className="flex flex-wrap items-center gap-1">
           <span className="eyebrow mr-2">Week</span>
-          {data.availableWeeks.map((week) => (
+          {weekOptions.map((week) => (
             <Link
               key={week}
               href={`${base}/film-room?week=${week}`}

@@ -17,14 +17,27 @@ import {
   TR,
   Table,
 } from "@/components/ui";
-import { getConfigForTeam } from "@/lib/services/config";
+import { readOrNull } from "@/components/league/convex-errors";
+import { api } from "@/convex/_generated/api";
+import type { Id } from "@/convex/_generated/dataModel";
+import { fetchAuthQuery } from "@/lib/convex/server";
 import { formatET } from "@/lib/time";
+
+/** Version history for one team's config. Public within the league (PRD 5.5). */
+async function loadVersions(leagueId: string, teamId: string) {
+  return readOrNull(() =>
+    fetchAuthQuery(api.configs.versions, {
+      leagueId: leagueId as Id<"leagues">,
+      teamId: teamId as Id<"teams">,
+    }),
+  );
+}
 
 export async function generateMetadata({
   params,
 }: PageProps<"/leagues/[leagueId]/teams/[teamId]/config/versions">): Promise<Metadata> {
-  const { teamId } = await params;
-  const view = await getConfigForTeam(teamId).catch(() => null);
+  const { leagueId, teamId } = await params;
+  const view = await loadVersions(leagueId, teamId);
   return { title: view ? `${view.team.name} · Config history` : "Config history" };
 }
 
@@ -34,8 +47,8 @@ export default async function VersionsPage({
 }: PageProps<"/leagues/[leagueId]/teams/[teamId]/config/versions">) {
   const { leagueId, teamId } = await params;
 
-  const view = await getConfigForTeam(teamId).catch(() => null);
-  if (!view || view.team.leagueId !== leagueId) notFound();
+  const view = await loadVersions(leagueId, teamId);
+  if (!view) notFound();
 
   const base = `/leagues/${leagueId}/teams/${teamId}/config/versions`;
   const changedThisWeek = view.versions.filter((v) => v.changedThisWeek).length;
@@ -73,7 +86,7 @@ export default async function VersionsPage({
             action={
               view.versions.length > 1 ? (
                 <Link
-                  href={`${base}/compare?a=${view.versions.at(-1)!.id}&b=${view.versions[0].id}`}
+                  href={`${base}/compare?a=${view.versions.at(-1)!._id}&b=${view.versions[0]._id}`}
                   className="text-xs text-accent-strong underline underline-offset-2"
                 >
                   Compare first ↔ latest
@@ -96,7 +109,7 @@ export default async function VersionsPage({
             </THead>
             <TBody>
               {view.versions.map((version) => (
-                <TR key={version.id}>
+                <TR key={version._id}>
                   <TD numeric className="font-mono text-xs">
                     {version.versionNo}
                   </TD>
@@ -112,7 +125,7 @@ export default async function VersionsPage({
                     )}
                   </TD>
                   <TD className="whitespace-nowrap font-mono text-xs text-ink-muted">
-                    {formatET(version.createdAt, "MMM d, HH:mm")} ET
+                    {formatET(version.createdAt ?? version._creationTime, "MMM d, HH:mm")} ET
                     {version.changedThisWeek ? (
                       <span className="ml-2 text-accent-strong">new</span>
                     ) : null}
@@ -127,7 +140,7 @@ export default async function VersionsPage({
                   </TD>
                   <TD>
                     <Link
-                      href={`${base}/${version.id}`}
+                      href={`${base}/${version._id}`}
                       className="text-xs text-accent-strong underline underline-offset-2"
                     >
                       Diff

@@ -6,7 +6,8 @@ import { useEffect, useState } from "react";
  * Live countdown to the end of a trade's review period. Rendered client-side so
  * the server can stay cacheable and the number stays honest.
  */
-export function ReviewCountdown({ endsAt }: { endsAt: string }) {
+/** `endsAt` is epoch ms, the way every Convex read reports a time. */
+export function ReviewCountdown({ endsAt }: { endsAt: number }) {
   const [remaining, setRemaining] = useState(() => msUntil(endsAt));
 
   useEffect(() => {
@@ -28,8 +29,8 @@ export function ReviewCountdown({ endsAt }: { endsAt: string }) {
   );
 }
 
-function msUntil(iso: string): number {
-  return new Date(iso).getTime() - Date.now();
+function msUntil(endsAt: number): number {
+  return endsAt - Date.now();
 }
 
 function formatRemaining(ms: number): string {

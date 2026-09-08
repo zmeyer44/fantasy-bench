@@ -4,25 +4,30 @@ import { notFound } from "next/navigation";
 
 import { ForkSkillButton } from "@/components/config/fork-button";
 import { Markdown } from "@/components/config/markdown";
+import { readOrNull } from "@/components/league/convex-errors";
 import { Badge, Button, Card, CardBody, CardHeader, PageHeader } from "@/components/ui";
-import { getSession } from "@/lib/auth/session";
-import { getSkill } from "@/lib/services/skills";
+import { api } from "@/convex/_generated/api";
+import { fetchAuthQuery } from "@/lib/convex/server";
+import { getViewer } from "@/lib/convex/viewer";
 import { formatET } from "@/lib/time";
+
+/** `skills.get` throws FORBIDDEN on someone else's private skill — that is a 404 here. */
+async function loadSkill(slug: string) {
+  return readOrNull(() => fetchAuthQuery(api.skills.get, { slug }));
+}
 
 export async function generateMetadata({ params }: PageProps<"/skills/[slug]">): Promise<Metadata> {
   const { slug } = await params;
-  const skill = await getSkill(slug);
+  const skill = await loadSkill(slug);
   return { title: skill?.name ?? "Skill" };
 }
 
 export default async function SkillPage({ params }: PageProps<"/skills/[slug]">) {
   const { slug } = await params;
-  const skill = await getSkill(slug);
+  const [skill, viewer] = await Promise.all([loadSkill(slug), getViewer()]);
   if (!skill) notFound();
 
-  const session = await getSession();
-  const isAuthor = !!session && skill.authorUserId === session.user.id;
-  if (skill.visibility === "private" && !isAuthor) notFound();
+  const isAuthor = Boolean(viewer) && skill.authorUserId === viewer!.userId;
 
   return (
     <div className="mx-auto max-w-3xl space-y-8">
@@ -36,7 +41,7 @@ export default async function SkillPage({ params }: PageProps<"/skills/[slug]">)
         description={skill.description || undefined}
         actions={
           <div className="flex items-center gap-2">
-            <ForkSkillButton slug={skill.slug} signedIn={!!session} />
+            <ForkSkillButton slug={skill.slug} signedIn={Boolean(viewer)} />
             {isAuthor ? (
               <Link href={`/skills/${skill.slug}/edit`}>
                 <Button size="sm">Edit</Button>
@@ -95,7 +100,7 @@ export default async function SkillPage({ params }: PageProps<"/skills/[slug]">)
           <CardBody className="flex flex-wrap gap-2">
             {skill.forks.map((fork) => (
               <Link
-                key={fork.id}
+                key={fork._id}
                 href={`/skills/${fork.slug}`}
                 className="rounded border border-line px-2 py-1 text-xs text-ink hover:bg-surface-muted"
               >

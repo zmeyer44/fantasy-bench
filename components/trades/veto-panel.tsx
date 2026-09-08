@@ -1,65 +1,54 @@
 "use client";
 
-import { useMutation, useQuery } from "@tanstack/react-query";
-import { useRouter } from "next/navigation";
+import { useMutation } from "@tanstack/react-query";
 import { useState } from "react";
 
 import { Button } from "@/components/ui";
+import type { VetoTally } from "@/convex/trades";
 import { useTRPC } from "@/lib/trpc/client";
-
-export type InitialTally = {
-  vetoes: number;
-  approvals: number;
-  ownerCount: number;
-  threshold: number;
-  blocked: boolean;
-};
 
 /**
  * Owner veto panel for a flagged trade under review.
  *
- * Counts refetch after each vote so several owners voting at once converge; the
- * button state updates optimistically so the click feels immediate.
+ * The tally and the viewer's own vote come from the live `trades.get`
+ * subscription above, so several owners voting at once converge without a
+ * refetch here; the click is still optimistic so it feels immediate.
+ *
+ * The vote itself is still the tRPC mutation — Phase 3 swaps it for
+ * `trades.castVeto` on Convex.
  */
 export function VetoPanel({
   leagueId,
   tradeId,
-  initialTally,
+  tally,
   myVote,
   canVote,
 }: {
   leagueId: string;
   tradeId: string;
-  initialTally: InitialTally;
+  tally: VetoTally;
   myVote: "veto" | "approve" | null;
   canVote: boolean;
 }) {
   const trpc = useTRPC();
-  const router = useRouter();
-  const [vote, setVote] = useState<"veto" | "approve" | null>(myVote);
+  const [optimistic, setOptimistic] = useState<"veto" | "approve" | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  // Live counts: the server render seeds the panel, this keeps it current while
-  // several owners are voting at once.
-  const tradeQuery = useQuery(trpc.trades.get.queryOptions({ leagueId, tradeId }));
-  const tally = tradeQuery.data?.tally ?? initialTally;
+  // The server's answer wins as soon as the subscription reports it.
+  const vote = optimistic ?? myVote;
 
   const castVeto = useMutation(
     trpc.trades.castVeto.mutationOptions({
       onError: (mutationError) => {
-        setVote(myVote);
+        setOptimistic(null);
         setError(mutationError.message);
       },
-      onSuccess: () => {
-        setError(null);
-        void tradeQuery.refetch();
-        router.refresh();
-      },
+      onSuccess: () => setError(null),
     }),
   );
 
   const submit = (next: "veto" | "approve") => {
-    setVote(next);
+    setOptimistic(next);
     setError(null);
     castVeto.mutate({ leagueId, tradeId, vote: next });
   };

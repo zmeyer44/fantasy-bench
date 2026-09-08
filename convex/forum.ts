@@ -6,26 +6,46 @@
  * `hidden` and never deletes, so hidden rows stay in the trace and stay visible
  * to the commissioner.
  *
- * Phase 3 adds `forum.createPost`, `forum.createComment`, `forum.vote` and
- * `forum.hide` to this file. They must maintain the denormalized counters the
- * reads below depend on: `forum_posts.score`, `forum_posts.commentCount`,
- * `forum_comments.score` and `teams.karma`.
+ * The write half (`createPost`, `createComment`, `vote`, `voteAsTeam`, `hide`)
+ * is at the bottom of the file. It maintains every denormalized counter the
+ * reads above depend on: `forum_posts.score`, `forum_posts.commentCount`,
+ * `forum_comments.score` and `teams.karma` — votes move them by a delta, never
+ * by recounting.
  */
 import { paginationOptsValidator, type PaginationResult } from "convex/server";
 import { v } from "convex/values";
 
 import type { Doc, Id } from "./_generated/dataModel";
-import { internalQuery, query, type QueryCtx } from "./_generated/server";
-import { requireLeagueRead, type LeagueAccess } from "./lib/auth";
-import { appError } from "./lib/errors";
 import {
+  internalMutation,
+  internalQuery,
+  mutation,
+  query,
+  type MutationCtx,
+  type QueryCtx,
+} from "./_generated/server";
+import {
+  requireCommissioner,
+  requireLeagueRead,
+  requireMember,
+  type LeagueAccess,
+} from "./lib/auth";
+import { appError } from "./lib/errors";
+import { buildContentFlags } from "./lib/moderation_pure";
+import {
+  actionErrors,
+  agentCtxValidator,
   compareHot,
   compareTop,
   hotScore,
+  rateLimitExceeded,
+  startOfEasternDay,
   toAgentFlags,
+  type ActionResult,
   type EpochDates,
 } from "./lib/social_pure";
-import { forumFlair } from "./schema";
+import { commitAction, loadLeagueTeam, loadSocialRules } from "./messaging";
+import { forumFlair, voteTargetType } from "./schema";
 
 import type {
   Flair,
@@ -72,6 +92,8 @@ const MAX_COMMENTS = 500;
 const DEFAULT_PAGE = 25;
 /** Cap on `digest`'s post count. */
 const MAX_DIGEST = 50;
+/** Rows read when counting a team's posts/comments for the per-day caps. */
+const RATE_LIMIT_SCAN = 100;
 
 // ---------------------------------------------------------------------------
 // Shared helpers
@@ -468,19 +490,449 @@ function compareNew(a: { createdAt: number }, b: { createdAt: number }): number 
 export const countRecentByTeam = internalQuery({
   args: { teamId: v.id("teams"), since: v.number() },
   returns: v.object({ posts: v.number(), comments: v.number() }),
-  handler: async (ctx, args): Promise<{ posts: number; comments: number }> => {
-    const posts = await ctx.db
-      .query("forum_posts")
-      .withIndex("by_teamId_createdAt", (q) =>
-        q.eq("teamId", args.teamId).gte("createdAt", args.since),
+  handler: async (ctx, args): Promise<{ posts: number; comments: number }> =>
+    countRecentForTeam(ctx, args.teamId, args.since),
+});
+
+// ---------------------------------------------------------------------------
+// Write path (Phase 3)
+// ---------------------------------------------------------------------------
+
+export const MAX_POST_TITLE = 200;
+export const MAX_POST_BODY = 8000;
+export const MAX_COMMENT_BODY = 4000;
+
+/**
+ * Rows a team authored since `since` — the input to the `forumPostsPerDay` /
+ * `forumCommentsPerDay` caps. `since` is midnight Eastern (`startOfEasternDay`).
+ *
+ * Indexes: `forum_posts.by_teamId_createdAt` / `forum_comments.by_teamId_createdAt`
+ * ranged `createdAt >= since`, `take(100)` each — a per-day cap is single digits.
+ */
+async function countRecentForTeam(
+  ctx: QueryCtx,
+  teamId: Id<"teams">,
+  since: number,
+): Promise<{ posts: number; comments: number }> {
+  const posts = await ctx.db
+    .query("forum_posts")
+    .withIndex("by_teamId_createdAt", (q) =>
+      q.eq("teamId", teamId).gte("createdAt", since),
+    )
+    .take(RATE_LIMIT_SCAN);
+  const comments = await ctx.db
+    .query("forum_comments")
+    .withIndex("by_teamId_createdAt", (q) =>
+      q.eq("teamId", teamId).gte("createdAt", since),
+    )
+    .take(RATE_LIMIT_SCAN);
+  return { posts: posts.length, comments: comments.length };
+}
+
+/**
+ * Post to the Commons (the runtime's `post_to_forum` tool, and the Commissioner
+ * Agent's announcements).
+ *
+ * `teamId: null` is a platform-authored post — it carries no rate limit and no
+ * karma. Agent posts are capped per ET day by `league_rules.forumPostsPerDay`.
+ * Posts are immutable: moderation sets `hidden`, nothing is ever edited.
+ * Idempotent on `(agentCtx.runId, agentCtx.toolCallId)` when an `agentCtx` is
+ * supplied.
+ */
+export const createPost = internalMutation({
+  args: {
+    leagueId: v.id("leagues"),
+    teamId: v.union(v.null(), v.id("teams")),
+    title: v.string(),
+    body: v.string(),
+    flair: forumFlair,
+    agentCtx: v.union(v.null(), agentCtxValidator),
+  },
+  returns: v.union(
+    v.object({ ok: v.literal(true), postId: v.id("forum_posts") }),
+    actionErrors,
+  ),
+  handler: async (ctx, args) => {
+    const perform = async (): Promise<ActionResult<{ postId: Id<"forum_posts"> }>> => {
+      const title = (args.title ?? "").trim();
+      const body = (args.body ?? "").trim();
+      if (title.length === 0) return { ok: false, errors: ["A post needs a title"] };
+      if (title.length > MAX_POST_TITLE) {
+        return { ok: false, errors: [`Title exceeds ${MAX_POST_TITLE} characters`] };
+      }
+      if (body.length > MAX_POST_BODY) {
+        return { ok: false, errors: [`Body exceeds ${MAX_POST_BODY} characters`] };
+      }
+
+      const now = Date.now();
+      if (args.teamId) {
+        const team = await loadLeagueTeam(ctx, args.leagueId, args.teamId);
+        if (!team) return { ok: false, errors: ["Team is not in this league"] };
+
+        const rules = await loadSocialRules(ctx, args.leagueId);
+        const today = await countRecentForTeam(ctx, args.teamId, startOfEasternDay(now));
+        if (rateLimitExceeded(today.posts, rules.forumPostsPerDay)) {
+          return {
+            ok: false,
+            errors: [`Post limit reached for today (${rules.forumPostsPerDay})`],
+          };
+        }
+      }
+
+      const postId = await ctx.db.insert("forum_posts", {
+        leagueId: args.leagueId,
+        ...(args.teamId ? { teamId: args.teamId } : {}),
+        ...(args.agentCtx
+          ? { runId: args.agentCtx.runId, stepIndex: args.agentCtx.stepIndex }
+          : {}),
+        title,
+        body,
+        flair: args.flair,
+        score: 0,
+        commentCount: 0,
+        hidden: false,
+        flags: buildContentFlags(`${title}\n\n${body}`),
+        createdAt: now,
+      });
+      return { ok: true, postId };
+    };
+
+    if (!args.agentCtx) return perform();
+    return commitAction<{ postId: Id<"forum_posts"> }>(
+      ctx,
+      {
+        agentCtx: args.agentCtx,
+        leagueId: args.leagueId,
+        ...(args.teamId ? { teamId: args.teamId } : {}),
+        actionType: "post_to_forum",
+        payload: { title: args.title, body: args.body, flair: args.flair },
+      },
+      perform,
+    );
+  },
+});
+
+/**
+ * Comment on a post (the runtime's `comment_on_forum` tool).
+ *
+ * Maintains `forum_posts.commentCount`, which the board reads instead of
+ * counting rows. Capped per ET day by `league_rules.forumCommentsPerDay`.
+ */
+export const createComment = internalMutation({
+  args: {
+    leagueId: v.id("leagues"),
+    postId: v.id("forum_posts"),
+    parentCommentId: v.optional(v.id("forum_comments")),
+    teamId: v.union(v.null(), v.id("teams")),
+    body: v.string(),
+    agentCtx: v.union(v.null(), agentCtxValidator),
+  },
+  returns: v.union(
+    v.object({ ok: v.literal(true), commentId: v.id("forum_comments") }),
+    actionErrors,
+  ),
+  handler: async (ctx, args) => {
+    const perform = async (): Promise<ActionResult<{ commentId: Id<"forum_comments"> }>> => {
+      const body = (args.body ?? "").trim();
+      if (body.length === 0) return { ok: false, errors: ["A comment needs a body"] };
+      if (body.length > MAX_COMMENT_BODY) {
+        return { ok: false, errors: [`Comment exceeds ${MAX_COMMENT_BODY} characters`] };
+      }
+
+      const post = await ctx.db.get("forum_posts", args.postId);
+      if (!post || post.leagueId !== args.leagueId) {
+        return { ok: false, errors: ["Post not found in this league"] };
+      }
+
+      if (args.parentCommentId) {
+        const parent = await ctx.db.get("forum_comments", args.parentCommentId);
+        if (!parent || parent.postId !== args.postId) {
+          return { ok: false, errors: ["Parent comment is not on this post"] };
+        }
+      }
+
+      const now = Date.now();
+      if (args.teamId) {
+        const team = await loadLeagueTeam(ctx, args.leagueId, args.teamId);
+        if (!team) return { ok: false, errors: ["Team is not in this league"] };
+
+        const rules = await loadSocialRules(ctx, args.leagueId);
+        const today = await countRecentForTeam(ctx, args.teamId, startOfEasternDay(now));
+        if (rateLimitExceeded(today.comments, rules.forumCommentsPerDay)) {
+          return {
+            ok: false,
+            errors: [`Comment limit reached for today (${rules.forumCommentsPerDay})`],
+          };
+        }
+      }
+
+      const commentId = await ctx.db.insert("forum_comments", {
+        postId: args.postId,
+        leagueId: args.leagueId,
+        ...(args.parentCommentId ? { parentId: args.parentCommentId } : {}),
+        ...(args.teamId ? { teamId: args.teamId } : {}),
+        ...(args.agentCtx
+          ? { runId: args.agentCtx.runId, stepIndex: args.agentCtx.stepIndex }
+          : {}),
+        body,
+        score: 0,
+        hidden: false,
+        flags: buildContentFlags(body),
+        createdAt: now,
+      });
+      await ctx.db.patch("forum_posts", args.postId, {
+        commentCount: post.commentCount + 1,
+      });
+      return { ok: true, commentId };
+    };
+
+    if (!args.agentCtx) return perform();
+    return commitAction<{ commentId: Id<"forum_comments"> }>(
+      ctx,
+      {
+        agentCtx: args.agentCtx,
+        leagueId: args.leagueId,
+        ...(args.teamId ? { teamId: args.teamId } : {}),
+        actionType: "comment_on_forum",
+        payload: {
+          postId: args.postId,
+          parentCommentId: args.parentCommentId,
+          body: args.body,
+        },
+      },
+      perform,
+    );
+  },
+});
+
+// ---------------------------------------------------------------------------
+// Voting
+// ---------------------------------------------------------------------------
+
+type VoteTarget = {
+  /** The row being voted on. */
+  kind: "post" | "comment";
+  id: Id<"forum_posts"> | Id<"forum_comments">;
+  score: number;
+  /** Author team, or null for platform-authored content (no karma owner). */
+  authorTeamId: Id<"teams"> | null;
+};
+
+/** Resolve a vote target and check it belongs to this league. */
+async function loadVoteTarget(
+  ctx: QueryCtx,
+  leagueId: Id<"leagues">,
+  targetType: "post" | "comment",
+  targetId: string,
+): Promise<VoteTarget | null> {
+  if (targetType === "post") {
+    const id = ctx.db.normalizeId("forum_posts", targetId);
+    if (!id) return null;
+    const post = await ctx.db.get("forum_posts", id);
+    if (!post || post.leagueId !== leagueId) return null;
+    return { kind: "post", id, score: post.score, authorTeamId: post.teamId ?? null };
+  }
+  const id = ctx.db.normalizeId("forum_comments", targetId);
+  if (!id) return null;
+  const comment = await ctx.db.get("forum_comments", id);
+  if (!comment) return null;
+  const post = await ctx.db.get("forum_posts", comment.postId);
+  if (!post || post.leagueId !== leagueId) return null;
+  return { kind: "comment", id, score: comment.score, authorTeamId: comment.teamId ?? null };
+}
+
+/**
+ * Apply one vote's change to the target's score and the author team's karma.
+ *
+ * The score moves by the **delta** (`next - previous`), never by recounting the
+ * vote rows: the counters are what `list`/`karma` read, and a per-vote delta is
+ * one write instead of a scan. `teams.karma` moves by the same delta.
+ */
+async function applyVoteDelta(
+  ctx: MutationCtx,
+  target: VoteTarget,
+  delta: number,
+): Promise<number> {
+  const score = target.score + delta;
+  if (target.kind === "post") {
+    await ctx.db.patch("forum_posts", target.id as Id<"forum_posts">, { score });
+  } else {
+    await ctx.db.patch("forum_comments", target.id as Id<"forum_comments">, { score });
+  }
+  if (delta !== 0 && target.authorTeamId) {
+    const team = await ctx.db.get("teams", target.authorTeamId);
+    if (team) await ctx.db.patch("teams", team._id, { karma: team.karma + delta });
+  }
+  return score;
+}
+
+function directionOf(row: Doc<"forum_votes"> | null): 1 | -1 | 0 {
+  if (!row) return 0;
+  return row.direction === 1 ? 1 : -1;
+}
+
+/**
+ * Up/down vote a post or comment as a human (`forum.vote`).
+ *
+ * `leagueMemberProcedure`, as the tRPC mutation was; `direction: 0` clears the
+ * viewer's vote. Returns `{ score, myVote }` so the client can render an
+ * optimistic update and reconcile with one value.
+ */
+export const vote = mutation({
+  args: {
+    leagueId: v.id("leagues"),
+    targetType: voteTargetType,
+    targetId: v.string(),
+    direction: v.union(v.literal(1), v.literal(-1), v.literal(0)),
+  },
+  returns: v.object({
+    score: v.number(),
+    myVote: v.union(v.literal(1), v.literal(-1), v.literal(0)),
+  }),
+  handler: async (ctx, args) => {
+    const access = await requireMember(ctx, args.leagueId);
+    const target = await loadVoteTarget(ctx, args.leagueId, args.targetType, args.targetId);
+    if (!target) throw appError("NOT_FOUND", "Vote target not found in this league");
+
+    const existing = await ctx.db
+      .query("forum_votes")
+      .withIndex("by_targetType_targetId_voterUserId", (q) =>
+        q
+          .eq("targetType", args.targetType)
+          .eq("targetId", args.targetId)
+          .eq("voterUserId", access.viewer.userId),
       )
-      .take(100);
-    const comments = await ctx.db
-      .query("forum_comments")
-      .withIndex("by_teamId_createdAt", (q) =>
-        q.eq("teamId", args.teamId).gte("createdAt", args.since),
-      )
-      .take(100);
-    return { posts: posts.length, comments: comments.length };
+      .unique();
+
+    const previous = directionOf(existing);
+    if (args.direction === 0) {
+      if (existing) await ctx.db.delete("forum_votes", existing._id);
+    } else if (existing) {
+      await ctx.db.patch("forum_votes", existing._id, { direction: args.direction });
+    } else {
+      await ctx.db.insert("forum_votes", {
+        leagueId: args.leagueId,
+        targetType: args.targetType,
+        targetId: args.targetId,
+        voterUserId: access.viewer.userId,
+        direction: args.direction,
+      });
+    }
+
+    const score = await applyVoteDelta(ctx, target, args.direction - previous);
+    return { score, myVote: args.direction };
+  },
+});
+
+/**
+ * The agent-side vote (the runtime's `vote_on_forum` tool): same arithmetic,
+ * keyed on the voting **team** instead of a user, and idempotent on
+ * `(agentCtx.runId, agentCtx.toolCallId)`.
+ */
+export const voteAsTeam = internalMutation({
+  args: {
+    leagueId: v.id("leagues"),
+    voterTeamId: v.id("teams"),
+    targetType: voteTargetType,
+    targetId: v.string(),
+    direction: v.union(v.literal(1), v.literal(-1), v.literal(0)),
+    agentCtx: agentCtxValidator,
+  },
+  returns: v.union(
+    v.object({ ok: v.literal(true), score: v.number() }),
+    actionErrors,
+  ),
+  handler: async (ctx, args) => {
+    return commitAction<{ score: number }>(
+      ctx,
+      {
+        agentCtx: args.agentCtx,
+        leagueId: args.leagueId,
+        teamId: args.voterTeamId,
+        actionType: "vote_on_forum",
+        payload: {
+          targetType: args.targetType,
+          targetId: args.targetId,
+          direction: args.direction,
+        },
+      },
+      async () => {
+        const team = await loadLeagueTeam(ctx, args.leagueId, args.voterTeamId);
+        if (!team) return { ok: false, errors: ["Team is not in this league"] };
+
+        const target = await loadVoteTarget(
+          ctx,
+          args.leagueId,
+          args.targetType,
+          args.targetId,
+        );
+        if (!target) return { ok: false, errors: ["Vote target not found in this league"] };
+
+        const existing = await ctx.db
+          .query("forum_votes")
+          .withIndex("by_targetType_targetId_voterTeamId", (q) =>
+            q
+              .eq("targetType", args.targetType)
+              .eq("targetId", args.targetId)
+              .eq("voterTeamId", args.voterTeamId),
+          )
+          .unique();
+
+        const previous = directionOf(existing);
+        if (args.direction === 0) {
+          if (existing) await ctx.db.delete("forum_votes", existing._id);
+        } else if (existing) {
+          await ctx.db.patch("forum_votes", existing._id, { direction: args.direction });
+        } else {
+          await ctx.db.insert("forum_votes", {
+            leagueId: args.leagueId,
+            targetType: args.targetType,
+            targetId: args.targetId,
+            voterTeamId: args.voterTeamId,
+            direction: args.direction,
+          });
+        }
+
+        const score = await applyVoteDelta(ctx, target, args.direction - previous);
+        return { ok: true, score };
+      },
+    );
+  },
+});
+
+/**
+ * Commissioner moderation (`forum.hide`). Hidden content stays in the trace and
+ * stays visible to the commissioner — moderation never deletes.
+ */
+export const hide = mutation({
+  args: {
+    leagueId: v.id("leagues"),
+    targetType: voteTargetType,
+    targetId: v.string(),
+    hidden: v.boolean(),
+  },
+  returns: v.object({ ok: v.literal(true), hidden: v.boolean() }),
+  handler: async (ctx, args) => {
+    await requireCommissioner(ctx, args.leagueId);
+
+    if (args.targetType === "post") {
+      const id = ctx.db.normalizeId("forum_posts", args.targetId);
+      const post = id ? await ctx.db.get("forum_posts", id) : null;
+      if (!post || post.leagueId !== args.leagueId) {
+        throw appError("NOT_FOUND", "Post not found in this league");
+      }
+      await ctx.db.patch("forum_posts", post._id, { hidden: args.hidden });
+      return { ok: true as const, hidden: args.hidden };
+    }
+
+    const id = ctx.db.normalizeId("forum_comments", args.targetId);
+    const comment = id ? await ctx.db.get("forum_comments", id) : null;
+    if (!comment) throw appError("NOT_FOUND", "Comment not found");
+    const post = await ctx.db.get("forum_posts", comment.postId);
+    if (!post || post.leagueId !== args.leagueId) {
+      throw appError("NOT_FOUND", "Comment is not in this league");
+    }
+    await ctx.db.patch("forum_comments", comment._id, { hidden: args.hidden });
+    return { ok: true as const, hidden: args.hidden };
   },
 });

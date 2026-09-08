@@ -5,22 +5,43 @@ import { notFound } from "next/navigation";
 import { ConfigNav } from "@/components/config/config-nav";
 import { DiffView } from "@/components/config/diff-view";
 import { Markdown } from "@/components/config/markdown";
+import { readOrNull } from "@/components/league/convex-errors";
 import { Badge, Card, CardBody, CardHeader, PageHeader } from "@/components/ui";
-import {
-  diffVersionRows,
-  getPreviousVersion,
-  getVersion,
-  getVersionContext,
-} from "@/lib/services/config";
+import { api } from "@/convex/_generated/api";
+import type { Id } from "@/convex/_generated/dataModel";
+import { fetchAuthQuery } from "@/lib/convex/server";
 import { findModel } from "@/lib/models";
 import { formatET } from "@/lib/time";
+
+/** The version plus the one before it; `configs.get` supplies the team header. */
+async function load(leagueId: string, teamId: string, versionId: string) {
+  const [pair, config] = await Promise.all([
+    readOrNull(() =>
+      fetchAuthQuery(api.configs.version, {
+        leagueId: leagueId as Id<"leagues">,
+        versionId: versionId as Id<"config_versions">,
+      }),
+    ),
+    readOrNull(() =>
+      fetchAuthQuery(api.configs.get, {
+        leagueId: leagueId as Id<"leagues">,
+        teamId: teamId as Id<"teams">,
+      }),
+    ),
+  ]);
+  // The version must belong to this team's config, not just to the league.
+  if (!pair || !config || pair.version.teamId !== config.team._id) return null;
+  return { ...pair, config };
+}
 
 export async function generateMetadata({
   params,
 }: PageProps<"/leagues/[leagueId]/teams/[teamId]/config/versions/[versionId]">): Promise<Metadata> {
-  const { versionId } = await params;
-  const ctx = await getVersionContext(versionId);
-  return { title: ctx ? `${ctx.team.name} · v${ctx.version.versionNo}` : "Config version" };
+  const { leagueId, teamId, versionId } = await params;
+  const loaded = await load(leagueId, teamId, versionId);
+  return {
+    title: loaded ? `${loaded.config.team.name} · v${loaded.version.versionNo}` : "Config version",
+  };
 }
 
 /** One version, diffed against the version immediately before it. */
@@ -29,26 +50,27 @@ export default async function VersionDiffPage({
 }: PageProps<"/leagues/[leagueId]/teams/[teamId]/config/versions/[versionId]">) {
   const { leagueId, teamId, versionId } = await params;
 
-  const ctx = await getVersionContext(versionId);
-  if (!ctx || ctx.team.id !== teamId || ctx.team.leagueId !== leagueId) notFound();
+  const loaded = await load(leagueId, teamId, versionId);
+  if (!loaded) notFound();
 
-  const [previous, hydrated] = await Promise.all([
-    getPreviousVersion(ctx.version),
-    getVersion(versionId),
-  ]);
-  if (!hydrated) notFound();
+  const { version: current, previous, config: view } = loaded;
+  const diff = previous
+    ? await fetchAuthQuery(api.configs.diff, {
+        leagueId: leagueId as Id<"leagues">,
+        a: previous._id,
+        b: current._id,
+      })
+    : null;
 
-  const current = ctx.version;
   const model = findModel(current.modelId);
   const base = `/leagues/${leagueId}/teams/${teamId}/config/versions`;
-  const diff = previous ? diffVersionRows(previous, hydrated) : null;
 
   return (
     <div className="space-y-6">
       <PageHeader
         eyebrow={
           <Link href={base} className="hover:text-ink">
-            {ctx.team.name} · history
+            {view.team.name} · history
           </Link>
         }
         title={`Version ${current.versionNo}`}
@@ -59,9 +81,9 @@ export default async function VersionDiffPage({
         }
         actions={
           <div className="flex items-center gap-2">
-            {ctx.config.currentVersionId === current.id ? (
+            {view.config?.currentVersionId === current._id ? (
               <Badge tone="accent">applied</Badge>
-            ) : ctx.config.pendingVersionId === current.id ? (
+            ) : view.config?.pendingVersionId === current._id ? (
               <Badge tone="warning">queued</Badge>
             ) : null}
             <Badge tone="outline">{model?.displayName ?? current.modelId}</Badge>
@@ -73,12 +95,17 @@ export default async function VersionDiffPage({
 
       <Card>
         <CardBody className="grid gap-3 text-sm sm:grid-cols-4">
-          <Stat label="Saved" value={`${formatET(current.createdAt, "MMM d, HH:mm")} ET`} />
+          <Stat
+            label="Saved"
+            value={`${formatET(current.createdAt ?? current._creationTime, "MMM d, HH:mm")} ET`}
+          />
           <Stat
             label="Applied"
-            value={current.appliedAt ? `${formatET(current.appliedAt, "MMM d, HH:mm")} ET` : "never"}
+            value={
+              current.appliedAt ? `${formatET(current.appliedAt, "MMM d, HH:mm")} ET` : "never"
+            }
           />
-          <Stat label="Skills" value={String(hydrated.skills.length)} />
+          <Stat label="Skills" value={String(current.skills.length)} />
           <Stat label="Summary" value={current.changeSummary ?? "—"} />
         </CardBody>
       </Card>
@@ -89,7 +116,7 @@ export default async function VersionDiffPage({
         <Card>
           <CardHeader title="Context" description="The initial configuration." />
           <CardBody>
-            <Markdown>{hydrated.contextMd}</Markdown>
+            <Markdown>{current.contextMd}</Markdown>
           </CardBody>
         </Card>
       )}
@@ -97,13 +124,13 @@ export default async function VersionDiffPage({
       {previous ? (
         <div className="flex justify-between text-xs">
           <Link
-            href={`${base}/${previous.id}`}
+            href={`${base}/${previous._id}`}
             className="text-accent-strong underline underline-offset-2"
           >
             ← Version {previous.versionNo}
           </Link>
           <Link
-            href={`${base}/compare?a=${previous.id}&b=${current.id}`}
+            href={`${base}/compare?a=${previous._id}&b=${current._id}`}
             className="text-accent-strong underline underline-offset-2"
           >
             Open in the comparison view →

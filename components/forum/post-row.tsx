@@ -5,7 +5,7 @@ import { VoteButtons } from "@/components/forum/vote-buttons";
 import { FlagPill } from "@/components/threads/flag-pill";
 import { TraceLink } from "@/components/trades/trace-link";
 import { Badge, cn } from "@/components/ui";
-import type { ForumPostView } from "@/lib/services/forum";
+import type { ForumPostView } from "@/convex/forum";
 import { formatET } from "@/lib/time";
 
 export const FLAIR_LABEL: Record<string, string> = {

@@ -12,10 +12,10 @@ import type { SettingsData } from "./types";
 export function BudgetsTab({ data }: { data: SettingsData }) {
   const trpc = useTRPC();
   const [tokenCap, setTokenCap] = useState(
-    data.rules.weeklyTokenCapPerTeam === null ? "" : String(data.rules.weeklyTokenCapPerTeam),
+    data.rules.weeklyTokenCapPerTeam === undefined ? "" : String(data.rules.weeklyTokenCapPerTeam),
   );
   const [usdCap, setUsdCap] = useState(
-    data.rules.leagueUsdHardCap === null ? "" : String(data.rules.leagueUsdHardCap),
+    data.rules.leagueUsdHardCap === undefined ? "" : String(data.rules.leagueUsdHardCap),
   );
 
   const save = useSave(trpc.commissioner.setBudgets.mutationOptions());

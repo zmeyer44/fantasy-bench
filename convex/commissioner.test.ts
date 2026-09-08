@@ -178,3 +178,697 @@ describe("commissioner.inviteLink + changeLog", () => {
     );
   });
 });
+
+// ===========================================================================
+// Commissioner mutations (Phase 3)
+// ===========================================================================
+
+async function rulesOf(t: T, leagueId: Id<"leagues">) {
+  return t.run(async (ctx) =>
+    ctx.db
+      .query("league_rules")
+      .withIndex("by_leagueId", (q) => q.eq("leagueId", leagueId))
+      .unique(),
+  );
+}
+
+async function changes(t: T, leagueId: Id<"leagues">) {
+  return t.run(async (ctx) =>
+    ctx.db
+      .query("league_rule_changes")
+      .withIndex("by_leagueId", (q) => q.eq("leagueId", leagueId))
+      .order("desc")
+      .take(200),
+  );
+}
+
+async function lockRules(t: T, leagueId: Id<"leagues">) {
+  const rules = (await rulesOf(t, leagueId))!;
+  await t.run(async (ctx) => ctx.db.patch("league_rules", rules._id, { rulesLockedAt: Date.now() }));
+}
+
+describe("commissioner mutations — authorization", () => {
+  it("every mutation is UNAUTHORIZED signed out and FORBIDDEN for a plain owner", async () => {
+    const { t, owner, leagueId, teamIds } = await fixture();
+
+    const calls: Array<[string, () => Promise<unknown>, () => Promise<unknown>]> = [
+      [
+        "updateRules",
+        () => t.mutation(api.commissioner.updateRules, { leagueId, patch: { faabBudget: 120 } }),
+        () =>
+          owner.session.mutation(api.commissioner.updateRules, {
+            leagueId,
+            patch: { faabBudget: 120 },
+          }),
+      ],
+      [
+        "setModelAllowlist",
+        () =>
+          t.mutation(api.commissioner.setModelAllowlist, {
+            leagueId,
+            modelIds: ["mock/scripted"],
+          }),
+        () =>
+          owner.session.mutation(api.commissioner.setModelAllowlist, {
+            leagueId,
+            modelIds: ["mock/scripted"],
+          }),
+      ],
+      [
+        "setBudgets",
+        () => t.mutation(api.commissioner.setBudgets, { leagueId, leagueUsdHardCap: 10 }),
+        () => owner.session.mutation(api.commissioner.setBudgets, { leagueId, leagueUsdHardCap: 10 }),
+      ],
+      [
+        "setEditLock",
+        () =>
+          t.mutation(api.commissioner.setEditLock, {
+            leagueId,
+            editLock: { unlockDay: "tue", unlockTime: "06:00", lockDay: "wed", lockTime: "03:00" },
+          }),
+        () =>
+          owner.session.mutation(api.commissioner.setEditLock, {
+            leagueId,
+            editLock: { unlockDay: "tue", unlockTime: "06:00", lockDay: "wed", lockTime: "03:00" },
+          }),
+      ],
+      [
+        "setWindowOverrides",
+        () => t.mutation(api.commissioner.setWindowOverrides, { leagueId, windowOverrides: null }),
+        () =>
+          owner.session.mutation(api.commissioner.setWindowOverrides, {
+            leagueId,
+            windowOverrides: null,
+          }),
+      ],
+      [
+        "setTransparency",
+        () => t.mutation(api.commissioner.setTransparency, { leagueId, transparencyMode: "delayed" }),
+        () =>
+          owner.session.mutation(api.commissioner.setTransparency, {
+            leagueId,
+            transparencyMode: "delayed",
+          }),
+      ],
+      [
+        "setInjectionPolicy",
+        () =>
+          t.mutation(api.commissioner.setInjectionPolicy, {
+            leagueId,
+            injectionPolicy: "prohibited",
+          }),
+        () =>
+          owner.session.mutation(api.commissioner.setInjectionPolicy, {
+            leagueId,
+            injectionPolicy: "prohibited",
+          }),
+      ],
+      [
+        "setFallbacks",
+        () => t.mutation(api.commissioner.setFallbacks, { leagueId, safetyAutopilot: false }),
+        () =>
+          owner.session.mutation(api.commissioner.setFallbacks, { leagueId, safetyAutopilot: false }),
+      ],
+      [
+        "updateLeague",
+        () => t.mutation(api.commissioner.updateLeague, { leagueId, isPublic: false }),
+        () => owner.session.mutation(api.commissioner.updateLeague, { leagueId, isPublic: false }),
+      ],
+      [
+        "rotateJoinCode",
+        () => t.mutation(api.commissioner.rotateJoinCode, { leagueId }),
+        () => owner.session.mutation(api.commissioner.rotateJoinCode, { leagueId }),
+      ],
+      [
+        "startDraft",
+        () => t.mutation(api.commissioner.startDraft, { leagueId }),
+        () => owner.session.mutation(api.commissioner.startDraft, { leagueId }),
+      ],
+      [
+        "assignOwner",
+        () =>
+          t.mutation(api.commissioner.assignOwner, { leagueId, teamId: teamIds[2], userId: null }),
+        () =>
+          owner.session.mutation(api.commissioner.assignOwner, {
+            leagueId,
+            teamId: teamIds[2],
+            userId: null,
+          }),
+      ],
+      [
+        "assignOwnerByEmail",
+        () =>
+          t.mutation(api.commissioner.assignOwnerByEmail, {
+            leagueId,
+            teamId: teamIds[2],
+            email: "owner@fantasybench.dev",
+          }),
+        () =>
+          owner.session.mutation(api.commissioner.assignOwnerByEmail, {
+            leagueId,
+            teamId: teamIds[2],
+            email: "owner@fantasybench.dev",
+          }),
+      ],
+      [
+        "renameTeam",
+        () => t.mutation(api.commissioner.renameTeam, { leagueId, teamId: teamIds[2], name: "X Y" }),
+        () =>
+          owner.session.mutation(api.commissioner.renameTeam, {
+            leagueId,
+            teamId: teamIds[2],
+            name: "X Y",
+          }),
+      ],
+      [
+        "replaceDeprecatedModel",
+        () =>
+          t.mutation(api.commissioner.replaceDeprecatedModel, {
+            leagueId,
+            fromModelId: "anthropic/claude-sonnet-4.5",
+            toModelId: "anthropic/claude-haiku-4.5",
+          }),
+        () =>
+          owner.session.mutation(api.commissioner.replaceDeprecatedModel, {
+            leagueId,
+            fromModelId: "anthropic/claude-sonnet-4.5",
+            toModelId: "anthropic/claude-haiku-4.5",
+          }),
+      ],
+    ];
+
+    for (const [name, anon, asOwner] of calls) {
+      expect([name, await errorCode(anon())]).toEqual([name, "UNAUTHORIZED"]);
+      expect([name, await errorCode(asOwner())]).toEqual([name, "FORBIDDEN"]);
+    }
+  });
+});
+
+describe("commissioner.updateRules — immutability + change log", () => {
+  it("logs every changed field before the lock", async () => {
+    const { t, commish, leagueId } = await fixture();
+    const result = await commish.session.mutation(api.commissioner.updateRules, {
+      leagueId,
+      patch: { scoringPreset: "half_ppr", faabBudget: 200 },
+    });
+
+    expect(result.changed.sort()).toEqual(["faabBudget", "scoringPreset"]);
+    expect(result.rules.scoringPreset).toBe("half_ppr");
+    expect(result.rules.faabBudget).toBe(200);
+    expect(result.rejected).toEqual([]);
+
+    const rows = await changes(t, leagueId);
+    const fields = rows.map((row) => row.field);
+    expect(fields).toContain("rules.scoringPreset");
+    expect(fields).toContain("rules.faabBudget");
+
+    const scoring = rows.find((row) => row.field === "rules.scoringPreset")!;
+    expect(scoring.fromValue).toBe("ppr");
+    expect(scoring.toValue).toBe("half_ppr");
+    expect(scoring.userId).toBe(commish.userId);
+  });
+
+  it("does not log a no-op", async () => {
+    const { t, commish, leagueId } = await fixture();
+    const result = await commish.session.mutation(api.commissioner.updateRules, {
+      leagueId,
+      patch: { faabBudget: 100 },
+    });
+    expect(result.changed).toEqual([]);
+    expect(await changes(t, leagueId)).toHaveLength(0);
+  });
+
+  it("freezes competitive rules once the draft begins, but not budgets or conduct", async () => {
+    const { t, commish, leagueId } = await fixture();
+    await lockRules(t, leagueId);
+
+    for (const patch of [{ scoringPreset: "standard" as const }, { faabBudget: 500 }]) {
+      let message = "";
+      try {
+        await commish.session.mutation(api.commissioner.updateRules, { leagueId, patch });
+      } catch (error) {
+        message = (error as { data?: { message?: string } }).data?.message ?? String(error);
+      }
+      expect(message).toMatch(/locked/i);
+    }
+
+    const budgets = await commish.session.mutation(api.commissioner.updateRules, {
+      leagueId,
+      patch: {
+        leagueUsdHardCap: 25,
+        transparencyMode: "delayed",
+        injectionPolicy: "prohibited",
+      },
+    });
+    expect(budgets.changed.sort()).toEqual([
+      "injectionPolicy",
+      "leagueUsdHardCap",
+      "transparencyMode",
+    ]);
+
+    const capChange = (await changes(t, leagueId)).find(
+      (row) => row.field === "rules.leagueUsdHardCap",
+    )!;
+    expect(capChange.note).toMatch(/after rules lock/);
+  });
+
+  it("rejects playoffs that start before the regular season ends", async () => {
+    const { commish, leagueId } = await fixture();
+    let message = "";
+    try {
+      await commish.session.mutation(api.commissioner.updateRules, {
+        leagueId,
+        patch: { regularSeasonWeeks: 14, playoffStartWeek: 12 },
+      });
+    } catch (error) {
+      message = (error as { data?: { message?: string } }).data?.message ?? String(error);
+    }
+    expect(message).toMatch(/Playoffs must start/);
+  });
+
+  it("rejects out-of-range values the Zod schema used to catch", async () => {
+    const { commish, leagueId } = await fixture();
+    const bad: Array<Record<string, unknown>> = [
+      { faabBudget: 1_001 },
+      { playoffTeams: 9 },
+      { maxStepsCap: 31 },
+      { contextCharLimit: 100 },
+      { rosterSlots: { QB: 0, RB: 0 } },
+      { editLock: { unlockDay: "xyz", unlockTime: "06:00", lockDay: "wed", lockTime: "03:00" } },
+      { editLock: { unlockDay: "tue", unlockTime: "6am", lockDay: "wed", lockTime: "03:00" } },
+      { fairnessFloor: 3 },
+      { modelAllowlist: [] },
+    ];
+    for (const patch of bad) {
+      expect([
+        JSON.stringify(patch),
+        await errorCode(commish.session.mutation(api.commissioner.updateRules, { leagueId, patch })),
+      ]).toEqual([JSON.stringify(patch), "BAD_REQUEST"]);
+    }
+  });
+});
+
+describe("commissioner.setModelAllowlist — pinned ids only", () => {
+  it("rejects a `latest` alias, an unknown id and an empty list", async () => {
+    const { commish, leagueId } = await fixture();
+    const message = async (modelIds: string[]) => {
+      try {
+        await commish.session.mutation(api.commissioner.setModelAllowlist, { leagueId, modelIds });
+        return "";
+      } catch (error) {
+        return (error as { data?: { message?: string } }).data?.message ?? String(error);
+      }
+    };
+    expect(await message(["anthropic/claude-sonnet-latest"])).toMatch(/alias|pinned/i);
+    expect(await message(["openai/gpt-latest"])).toMatch(/alias|pinned/i);
+    expect(await message(["acme/does-not-exist"])).toMatch(/not a known model/i);
+    expect(await message([])).toMatch(/at least one model/i);
+  });
+
+  it("accepts pinned catalog ids and mock ids, de-duplicated, and logs the change", async () => {
+    const { t, commish, leagueId } = await fixture();
+    const rules = await commish.session.mutation(api.commissioner.setModelAllowlist, {
+      leagueId,
+      modelIds: ["anthropic/claude-sonnet-4.5", "anthropic/claude-sonnet-4.5", "mock/scripted"],
+    });
+    expect(rules.modelAllowlist).toEqual(["anthropic/claude-sonnet-4.5", "mock/scripted"]);
+    expect((await changes(t, leagueId)).some((row) => row.field === "rules.modelAllowlist")).toBe(
+      true,
+    );
+  });
+});
+
+describe("commissioner.setBudgets / setEditLock / setWindowOverrides / setFallbacks", () => {
+  it("clears a cap when passed null and round-trips the other setters", async () => {
+    const { commish, leagueId } = await fixture();
+    await commish.session.mutation(api.commissioner.setBudgets, { leagueId, leagueUsdHardCap: 10 });
+    const cleared = await commish.session.mutation(api.commissioner.setBudgets, {
+      leagueId,
+      leagueUsdHardCap: null,
+    });
+    expect(cleared.leagueUsdHardCap).toBeUndefined();
+
+    const locked = await commish.session.mutation(api.commissioner.setEditLock, {
+      leagueId,
+      editLock: { unlockDay: "thu", unlockTime: "07:30", lockDay: "sat", lockTime: "11:00" },
+    });
+    expect(locked.editLock).toEqual({
+      unlockDay: "thu",
+      unlockTime: "07:30",
+      lockDay: "sat",
+      lockTime: "11:00",
+    });
+
+    const overrides = await commish.session.mutation(api.commissioner.setWindowOverrides, {
+      leagueId,
+      windowOverrides: { lineup_sun_early: { enabled: false, rounds: 2 } },
+    });
+    expect(overrides.windowOverrides).toEqual({ lineup_sun_early: { enabled: false, rounds: 2 } });
+    const removed = await commish.session.mutation(api.commissioner.setWindowOverrides, {
+      leagueId,
+      windowOverrides: null,
+    });
+    expect(removed.windowOverrides).toBeUndefined();
+
+    const fallbacks = await commish.session.mutation(api.commissioner.setFallbacks, {
+      leagueId,
+      fallbackModelId: "openai/gpt-5-mini",
+      safetyAutopilot: false,
+    });
+    expect(fallbacks.fallbackModelId).toBe("openai/gpt-5-mini");
+    expect(fallbacks.safetyAutopilot).toBe(false);
+
+    const transparency = await commish.session.mutation(api.commissioner.setTransparency, {
+      leagueId,
+      transparencyMode: "delayed",
+    });
+    expect(transparency.transparencyMode).toBe("delayed");
+    const injection = await commish.session.mutation(api.commissioner.setInjectionPolicy, {
+      leagueId,
+      injectionPolicy: "prohibited",
+    });
+    expect(injection.injectionPolicy).toBe("prohibited");
+  });
+
+  it("refuses an unpinned fallback model", async () => {
+    const { commish, leagueId } = await fixture();
+    expect(
+      await errorCode(
+        commish.session.mutation(api.commissioner.setFallbacks, {
+          leagueId,
+          fallbackModelId: "anthropic/claude-sonnet-latest",
+        }),
+      ),
+    ).toBe("BAD_REQUEST");
+  });
+});
+
+describe("commissioner.updateLeague", () => {
+  it("renames, flips visibility and logs each field", async () => {
+    const { t, commish, leagueId } = await fixture();
+    const updated = await commish.session.mutation(api.commissioner.updateLeague, {
+      leagueId,
+      name: "  Renamed League  ",
+      isPublic: false,
+    });
+    expect(updated.name).toBe("Renamed League");
+    expect(updated.isPublic).toBe(false);
+
+    const fields = (await changes(t, leagueId)).map((row) => row.field);
+    expect(fields).toContain("league.name");
+    expect(fields).toContain("league.isPublic");
+  });
+
+  it("rejects a name outside 3-60 characters and freezes the draft format after the lock", async () => {
+    const { commish, leagueId } = await fixture();
+    expect(
+      await errorCode(commish.session.mutation(api.commissioner.updateLeague, { leagueId, name: "ab" })),
+    ).toBe("BAD_REQUEST");
+
+    await commish.session.mutation(api.commissioner.updateLeague, {
+      leagueId,
+      draftType: "auction",
+    });
+    await commish.session.mutation(api.commissioner.startDraft, { leagueId });
+
+    let message = "";
+    try {
+      await commish.session.mutation(api.commissioner.updateLeague, {
+        leagueId,
+        draftType: "snake",
+      });
+    } catch (error) {
+      message = (error as { data?: { message?: string } }).data?.message ?? String(error);
+    }
+    expect(message).toMatch(/draft format cannot change/i);
+  });
+});
+
+describe("commissioner.rotateJoinCode + leagues.joinByCode", () => {
+  it("mints a code where there is none, rotates it, and the code joins a league", async () => {
+    const { t, commish, outsider, leagueId, teamIds } = await fixture();
+    expect((await commish.session.query(api.commissioner.inviteLink, { leagueId })).code).toBeNull();
+
+    const first = await commish.session.mutation(api.commissioner.rotateJoinCode, { leagueId });
+    expect(first.code).toMatch(/^[A-HJ-NP-Z2-9]{8}$/);
+    expect(first.url).toContain(`/leagues/join/${first.code}`);
+    expect((await commish.session.query(api.commissioner.inviteLink, { leagueId })).code).toBe(
+      first.code,
+    );
+
+    const second = await commish.session.mutation(api.commissioner.rotateJoinCode, { leagueId });
+    expect(second.code).not.toBe(first.code);
+    // The old link is dead.
+    expect(await t.query(api.leagues.byJoinCode, { code: first.code })).toBeNull();
+
+    // Team 1 is already claimed by `owner`, so the newcomer gets team 2.
+    const joined = await outsider.session.mutation(api.leagues.joinByCode, { code: second.code });
+    expect(joined.leagueId).toBe(leagueId);
+    expect(joined.teamId).toBe(teamIds[1]);
+
+    // Idempotent: joining twice returns the same team, not a second membership.
+    const again = await outsider.session.mutation(api.leagues.joinByCode, { code: second.code });
+    expect(again.teamId).toBe(joined.teamId);
+    expect(again.membershipId).toBe(joined.membershipId);
+
+    const rotations = (await changes(t, leagueId)).filter((row) => row.field === "league.joinCode");
+    expect(rotations).toHaveLength(2);
+    expect(rotations[0].toValue).toBe("(rotated)");
+  });
+});
+
+describe("commissioner team management", () => {
+  it("assigns and unassigns an owner, logging both, and refuses two teams per user", async () => {
+    const { t, commish, outsider, leagueId, teamIds } = await fixture();
+
+    await commish.session.mutation(api.commissioner.assignOwner, {
+      leagueId,
+      teamId: teamIds[2],
+      userId: outsider.userId,
+    });
+    expect((await t.run(async (ctx) => ctx.db.get("teams", teamIds[2])))?.ownerUserId).toBe(
+      outsider.userId,
+    );
+
+    let message = "";
+    try {
+      await commish.session.mutation(api.commissioner.assignOwner, {
+        leagueId,
+        teamId: teamIds[3],
+        userId: outsider.userId,
+      });
+    } catch (error) {
+      message = (error as { data?: { message?: string } }).data?.message ?? String(error);
+    }
+    expect(message).toMatch(/already owns/i);
+
+    await commish.session.mutation(api.commissioner.assignOwner, {
+      leagueId,
+      teamId: teamIds[2],
+      userId: null,
+    });
+    expect(
+      (await t.run(async (ctx) => ctx.db.get("teams", teamIds[2])))?.ownerUserId,
+    ).toBeUndefined();
+
+    expect((await changes(t, leagueId)).filter((row) => row.field.endsWith(".owner"))).toHaveLength(
+      2,
+    );
+  });
+
+  it("assigns by email and explains an unknown address", async () => {
+    const { t, commish, outsider, leagueId, teamIds } = await fixture();
+    const assigned = await commish.session.mutation(api.commissioner.assignOwnerByEmail, {
+      leagueId,
+      teamId: teamIds[2],
+      email: "  Outsider@fantasybench.dev ",
+    });
+    expect(assigned.ownerUserId).toBe(outsider.userId);
+
+    let message = "";
+    try {
+      await commish.session.mutation(api.commissioner.assignOwnerByEmail, {
+        leagueId,
+        teamId: teamIds[3],
+        email: "nobody@fantasybench.dev",
+      });
+    } catch (error) {
+      message = (error as { data?: { message?: string } }).data?.message ?? String(error);
+    }
+    expect(message).toMatch(/No Fantasy Bench account/);
+    expect(await t.run(async (ctx) => ctx.db.get("teams", teamIds[3]))).toMatchObject({
+      name: "Team 4",
+    });
+  });
+
+  it("renames a team, uppercases the abbreviation, and rejects a duplicate name", async () => {
+    const { commish, leagueId, teamIds } = await fixture();
+    const renamed = await commish.session.mutation(api.commissioner.renameTeam, {
+      leagueId,
+      teamId: teamIds[0],
+      name: "  The Gradient Descenders ",
+      abbreviation: "grad",
+    });
+    expect(renamed.name).toBe("The Gradient Descenders");
+    expect(renamed.abbreviation).toBe("GRAD");
+
+    let message = "";
+    try {
+      await commish.session.mutation(api.commissioner.renameTeam, {
+        leagueId,
+        teamId: teamIds[1],
+        name: "The Gradient Descenders",
+      });
+    } catch (error) {
+      message = (error as { data?: { message?: string } }).data?.message ?? String(error);
+    }
+    expect(message).toMatch(/already has that name/i);
+  });
+
+  it("refuses a team from another league", async () => {
+    const { commish, leagueId, t } = await fixture();
+    const elsewhere = await t.mutation(internal.leagues.createLeague, {
+      name: "Elsewhere",
+      commissionerUserId: commish.userId,
+      teamCount: 8,
+      season: 2026,
+    });
+    expect(
+      await errorCode(
+        commish.session.mutation(api.commissioner.renameTeam, {
+          leagueId,
+          teamId: elsewhere.teamIds[0],
+          name: "Poached",
+        }),
+      ),
+    ).toBe("NOT_FOUND");
+  });
+});
+
+describe("commissioner.startDraft", () => {
+  it("locks the rules, flips the status and logs it; a second call is refused", async () => {
+    const { t, commish, leagueId } = await fixture();
+    const result = await commish.session.mutation(api.commissioner.startDraft, { leagueId });
+    expect(result.status).toBe("drafting");
+    expect(result.scheduledAt).toBeGreaterThan(0);
+    // Package G owns `convex/draft.ts`; nothing generates a board yet.
+    expect(result.boardGenerated).toBe(false);
+
+    const league = await t.run(async (ctx) => ctx.db.get("leagues", leagueId));
+    expect(league?.status).toBe("drafting");
+    expect(league?.draftScheduledAt).toBe(result.scheduledAt);
+    expect((await rulesOf(t, leagueId))?.rulesLockedAt).not.toBeUndefined();
+
+    const statusChange = (await changes(t, leagueId)).find((row) => row.field === "league.status")!;
+    expect(statusChange.toValue).toBe("drafting");
+    expect(statusChange.note).toMatch(/unowned team|rules locked/);
+
+    let message = "";
+    try {
+      await commish.session.mutation(api.commissioner.startDraft, { leagueId });
+    } catch (error) {
+      message = (error as { data?: { message?: string } }).data?.message ?? String(error);
+    }
+    expect(message).toMatch(/already started/i);
+
+    let locked = "";
+    try {
+      await commish.session.mutation(api.commissioner.updateRules, {
+        leagueId,
+        patch: { superflex: true },
+      });
+    } catch (error) {
+      locked = (error as { data?: { message?: string } }).data?.message ?? String(error);
+    }
+    expect(locked).toMatch(/locked/i);
+  });
+
+  it("honours an explicit scheduledAt", async () => {
+    const { commish, leagueId } = await fixture();
+    const when = Date.UTC(2026, 8, 10, 18, 0, 0);
+    const result = await commish.session.mutation(api.commissioner.startDraft, {
+      leagueId,
+      scheduledAt: when,
+    });
+    expect(result.scheduledAt).toBe(when);
+  });
+});
+
+describe("commissioner.replaceDeprecatedModel", () => {
+  it("creates a new immutable version per affected team and logs league-wide", async () => {
+    const { t, commish, leagueId, teamIds } = await fixture();
+    const before = await t.query(internal.configs.currentForTeam, { teamId: teamIds[0] });
+    const fromModelId = before!.modelId;
+    const toModelId = "anthropic/claude-haiku-4.5";
+    expect(fromModelId).not.toBe(toModelId);
+
+    const result = await commish.session.mutation(api.commissioner.replaceDeprecatedModel, {
+      leagueId,
+      fromModelId,
+      toModelId,
+    });
+    expect(result.teamsUpdated).toHaveLength(teamIds.length);
+    expect(result.allowlistUpdated).toBe(true);
+
+    for (const teamId of teamIds) {
+      const version = await t.query(internal.configs.currentForTeam, { teamId });
+      expect(version?.modelId).toBe(toModelId);
+      expect(version?.versionNo).toBe(2);
+      expect(version?.changeSummary).toBe("commissioner replacement");
+      expect(version?.contextMd).toBe(before!.contextMd);
+      expect(version?.appliedAt).not.toBeUndefined();
+    }
+
+    const rules = (await rulesOf(t, leagueId))!;
+    expect(rules.modelAllowlist).not.toContain(fromModelId);
+    expect(rules.modelAllowlist).toContain(toModelId);
+
+    const swap = (await changes(t, leagueId)).find(
+      (row) => row.field === "models.replaceDeprecated",
+    )!;
+    expect(swap.fromValue).toBe(fromModelId);
+    expect(swap.toValue).toBe(toModelId);
+    expect(swap.note).toMatch(/commissioner replacement/);
+
+    // Version 1 is untouched — config versions are immutable.
+    const v1 = await t.run(async (ctx) =>
+      ctx.db
+        .query("config_versions")
+        .withIndex("by_configId_versionNo", (q) => q.eq("configId", before!.configId).eq("versionNo", 1))
+        .unique(),
+    );
+    expect(v1?.modelId).toBe(fromModelId);
+  });
+
+  it("rejects an unpinned replacement and a no-op swap", async () => {
+    const { commish, leagueId } = await fixture();
+    const message = async (fromModelId: string, toModelId: string) => {
+      try {
+        await commish.session.mutation(api.commissioner.replaceDeprecatedModel, {
+          leagueId,
+          fromModelId,
+          toModelId,
+        });
+        return "";
+      } catch (error) {
+        return (error as { data?: { message?: string } }).data?.message ?? String(error);
+      }
+    };
+    expect(await message("anthropic/claude-sonnet-4.5", "anthropic/claude-sonnet-latest")).toMatch(
+      /alias|pinned/i,
+    );
+    expect(await message("mock/scripted", "mock/scripted")).toMatch(/different replacement/i);
+  });
+
+  it("leaves teams on other models alone", async () => {
+    const { t, commish, leagueId, teamIds } = await fixture();
+    const result = await commish.session.mutation(api.commissioner.replaceDeprecatedModel, {
+      leagueId,
+      fromModelId: "xai/grok-4",
+      toModelId: "openai/gpt-5-mini",
+    });
+    expect(result.teamsUpdated).toHaveLength(0);
+    const version = await t.query(internal.configs.currentForTeam, { teamId: teamIds[0] });
+    expect(version?.versionNo).toBe(1);
+  });
+});

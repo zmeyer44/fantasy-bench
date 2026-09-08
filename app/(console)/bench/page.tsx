@@ -1,5 +1,4 @@
 import type { Metadata } from "next";
-import { desc } from "drizzle-orm";
 
 import {
   Card,
@@ -11,8 +10,8 @@ import {
   TR,
   Table,
 } from "@/components/ui";
-import { db } from "@/lib/db";
-import { modelPrices } from "@/lib/db/schema";
+import { api } from "@/convex/_generated/api";
+import { fetchAuthQuery } from "@/lib/convex/server";
 
 export const metadata: Metadata = { title: "Bench" };
 
@@ -21,13 +20,9 @@ export const metadata: Metadata = { title: "Bench" };
  * to aggregate, this shows the model catalog the leaderboards will be cut by.
  */
 export default async function BenchPage() {
-  const prices = await db
-    .select()
-    .from(modelPrices)
-    .orderBy(desc(modelPrices.effectiveFrom));
-
-  const latest = new Map<string, (typeof prices)[number]>();
-  for (const row of prices) if (!latest.has(row.modelId)) latest.set(row.modelId, row);
+  // `ledger.modelPrices` already resolves the newest effective price per
+  // catalogued model, so the page renders the rows as they come back.
+  const prices = await fetchAuthQuery(api.ledger.modelPrices, {});
 
   return (
     <div className="space-y-8">
@@ -50,8 +45,8 @@ export default async function BenchPage() {
             </TR>
           </THead>
           <TBody>
-            {[...latest.values()].map((price) => (
-              <TR key={price.id}>
+            {prices.map((price) => (
+              <TR key={price.modelId}>
                 <TD className="font-mono text-xs">{price.modelId}</TD>
                 <TD className="text-ink-muted">{price.provider}</TD>
                 <TD numeric>{price.inputPerM.toFixed(2)}</TD>

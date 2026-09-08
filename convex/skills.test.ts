@@ -162,3 +162,168 @@ describe("skills.get", () => {
     await expect(t.query(api.skills.get, { slug: "secret-sauce" })).rejects.toThrow();
   });
 });
+
+// ===========================================================================
+// skills.create / update / fork (Phase 3)
+// ===========================================================================
+
+async function errorCode(promise: Promise<unknown>): Promise<string | null> {
+  try {
+    await promise;
+    return null;
+  } catch (error) {
+    const data = (error as { data?: { code?: string } }).data;
+    if (data?.code) return data.code;
+    const message = error instanceof Error ? error.message : String(error);
+    return /\b(UNAUTHORIZED|FORBIDDEN|NOT_FOUND|BAD_REQUEST)\b/.exec(message)?.[1] ?? message;
+  }
+}
+
+describe("skills.create", () => {
+  it("requires a session", async () => {
+    const { t } = await library();
+    expect(await errorCode(t.mutation(api.skills.create, { name: "Anon", bodyMd: "# a" }))).toBe(
+      "UNAUTHORIZED",
+    );
+  });
+
+  it("derives a slug from the name and suffixes on collision", async () => {
+    const { ada } = await library();
+    const a = await ada.session.mutation(api.skills.create, {
+      name: "  Streaming DEF!! ",
+      bodyMd: "# a",
+    });
+    const b = await ada.session.mutation(api.skills.create, { name: "Streaming DEF", bodyMd: "# b" });
+    const c = await ada.session.mutation(api.skills.create, { name: "streaming def", bodyMd: "# c" });
+
+    expect(a.slug).toBe("streaming-def");
+    expect(b.slug).toBe("streaming-def-2");
+    expect(c.slug).toBe("streaming-def-3");
+    expect(new Set([a.slug, b.slug, c.slug]).size).toBe(3);
+    expect(a.name).toBe("Streaming DEF!!");
+    expect(a.usageCount).toBe(0);
+    expect(a.visibility).toBe("public");
+    expect(a.authorUserId).toBe(ada.userId);
+  });
+
+  it("rejects an over-long body, an empty body and a short name", async () => {
+    const { ada } = await library();
+    expect(
+      await errorCode(
+        ada.session.mutation(api.skills.create, {
+          name: "Too long",
+          bodyMd: "x".repeat(20_001),
+        }),
+      ),
+    ).toBe("BAD_REQUEST");
+    expect(
+      await errorCode(ada.session.mutation(api.skills.create, { name: "Fine name", bodyMd: "   " })),
+    ).toBe("BAD_REQUEST");
+    expect(
+      await errorCode(ada.session.mutation(api.skills.create, { name: "ab", bodyMd: "# ok" })),
+    ).toBe("BAD_REQUEST");
+    expect(
+      await errorCode(
+        ada.session.mutation(api.skills.create, { name: "n".repeat(81), bodyMd: "# ok" }),
+      ),
+    ).toBe("BAD_REQUEST");
+  });
+
+  it("trims a long description to the 280-character cap", async () => {
+    const { ada } = await library();
+    const created = await ada.session.mutation(api.skills.create, {
+      name: "Described",
+      description: `  ${"d".repeat(400)}  `,
+      bodyMd: "# d",
+    });
+    expect(created.description).toHaveLength(280);
+  });
+});
+
+describe("skills.update", () => {
+  it("is author-only, bumps updatedAt and never moves the slug", async () => {
+    const { t, ada, bob, vbd } = await library();
+    const before = await t.run(async (ctx) => ctx.db.get("skills", vbd));
+
+    expect(await errorCode(t.mutation(api.skills.update, { skillId: vbd, bodyMd: "# hijack" }))).toBe(
+      "UNAUTHORIZED",
+    );
+    expect(
+      await errorCode(bob.session.mutation(api.skills.update, { skillId: vbd, bodyMd: "# hijack" })),
+    ).toBe("FORBIDDEN");
+
+    const updated = await ada.session.mutation(api.skills.update, {
+      skillId: vbd,
+      name: "Value-based drafting v2",
+      bodyMd: "# v2",
+      visibility: "private",
+    });
+    expect(updated.bodyMd).toBe("# v2");
+    expect(updated.name).toBe("Value-based drafting v2");
+    expect(updated.visibility).toBe("private");
+    expect(updated.slug).toBe(before!.slug);
+    expect(updated.updatedAt).toBeGreaterThanOrEqual(before!.updatedAt);
+    // Edits are retroactive: usage is untouched by a body edit.
+    expect(updated.usageCount).toBe(before!.usageCount);
+  });
+
+  it("rejects an over-long body on update and NOT_FOUND for a deleted skill", async () => {
+    const { t, ada, vbd } = await library();
+    expect(
+      await errorCode(
+        ada.session.mutation(api.skills.update, { skillId: vbd, bodyMd: "x".repeat(20_001) }),
+      ),
+    ).toBe("BAD_REQUEST");
+
+    const ghost = await t.run(async (ctx) => {
+      const id = await ctx.db.insert("skills", {
+        name: "Gone",
+        slug: "gone",
+        bodyMd: "# gone",
+        visibility: "public",
+        usageCount: 0,
+        updatedAt: Date.now(),
+      });
+      await ctx.db.delete("skills", id);
+      return id;
+    });
+    expect(await errorCode(ada.session.mutation(api.skills.update, { skillId: ghost }))).toBe(
+      "NOT_FOUND",
+    );
+  });
+});
+
+describe("skills.fork", () => {
+  it("copies the body under a new slug owned by the forker", async () => {
+    const { t, bob, vbd } = await library();
+    const source = await t.run(async (ctx) => ctx.db.get("skills", vbd));
+
+    const fork = await bob.session.mutation(api.skills.fork, { slug: "value-based-drafting" });
+    expect(fork._id).not.toBe(vbd);
+    expect(fork.authorUserId).toBe(bob.userId);
+    expect(fork.bodyMd).toBe(source!.bodyMd);
+    expect(fork.description).toBe(source!.description);
+    expect(fork.forkedFromSkillId).toBe(vbd);
+    expect(fork.visibility).toBe("public");
+    expect(fork.slug).toBe("value-based-drafting-fork");
+    // A fork starts unused even when its parent is widely attached.
+    expect(fork.usageCount).toBe(0);
+
+    const detail = await t.query(api.skills.get, { slug: "value-based-drafting" });
+    expect(detail?.forks.map((f) => f._id)).toContain(fork._id);
+
+    // Forking twice suffixes rather than failing.
+    const second = await bob.session.mutation(api.skills.fork, { slug: "value-based-drafting" });
+    expect(second.slug).toBe("value-based-drafting-fork-2");
+  });
+
+  it("requires a session and NOT_FOUND for an unknown slug", async () => {
+    const { t, bob } = await library();
+    expect(await errorCode(t.mutation(api.skills.fork, { slug: "value-based-drafting" }))).toBe(
+      "UNAUTHORIZED",
+    );
+    expect(await errorCode(bob.session.mutation(api.skills.fork, { slug: "nope" }))).toBe(
+      "NOT_FOUND",
+    );
+  });
+});

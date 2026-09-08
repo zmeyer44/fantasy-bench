@@ -1,22 +1,12 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { notFound } from "next/navigation";
 
 import { SettingsConsole } from "@/components/settings/settings-console";
-import type { SettingsData } from "@/components/settings/types";
 import { Button, Card, CardBody, EmptyState, PageHeader } from "@/components/ui";
-import { getSession } from "@/lib/auth/session";
-import { db } from "@/lib/db";
-import { agentConfigs, configVersions, teams, user } from "@/lib/db/schema";
-import { MODEL_CATALOG } from "@/lib/models";
-import { getLeagueById, getMembership } from "@/lib/services/league/queries";
-import {
-  getRules,
-  inviteLink,
-  listRuleChanges,
-  modelsInUse,
-} from "@/lib/services/league/rules";
-import { asc, eq } from "drizzle-orm";
+import { api } from "@/convex/_generated/api";
+import type { Id } from "@/convex/_generated/dataModel";
+import { preloadAuthQuery } from "@/lib/convex/server";
+import { getViewer, viewerMembership } from "@/lib/convex/viewer";
 
 export const metadata: Metadata = { title: "Settings" };
 
@@ -24,50 +14,19 @@ export default async function SettingsPage({
   params,
 }: PageProps<"/leagues/[leagueId]/settings">) {
   const { leagueId } = await params;
-  const league = await getLeagueById(leagueId);
-  if (!league) notFound();
 
-  const session = await getSession();
-  const membership = session ? await getMembership(leagueId, session.user.id) : undefined;
-
+  // `commissioner.settings` throws FORBIDDEN for anyone else; the membership
+  // check keeps that from becoming an error page instead of the 403 view.
+  const viewer = await getViewer();
+  const membership = viewerMembership(viewer, leagueId);
   if (membership?.role !== "commissioner") {
-    return <Forbidden leagueId={leagueId} signedIn={Boolean(session)} />;
+    return <Forbidden leagueId={leagueId} signedIn={Boolean(viewer)} />;
   }
 
-  const [rules, invite, changes, inUse, teamRows] = await Promise.all([
-    getRules(leagueId),
-    inviteLink(leagueId),
-    listRuleChanges(leagueId, 200),
-    modelsInUse(leagueId),
-    db
-      .select({
-        id: teams.id,
-        name: teams.name,
-        abbreviation: teams.abbreviation,
-        ownerUserId: teams.ownerUserId,
-        ownerName: user.name,
-        ownerEmail: user.email,
-        modelId: configVersions.modelId,
-        configVersionNo: configVersions.versionNo,
-      })
-      .from(teams)
-      .leftJoin(user, eq(user.id, teams.ownerUserId))
-      .leftJoin(agentConfigs, eq(agentConfigs.teamId, teams.id))
-      .leftJoin(configVersions, eq(configVersions.id, agentConfigs.currentVersionId))
-      .where(eq(teams.leagueId, leagueId))
-      .orderBy(asc(teams.waiverPriority)),
+  const [preloadedSettings, preloadedTeams] = await Promise.all([
+    preloadAuthQuery(api.commissioner.settings, { leagueId: leagueId as Id<"leagues"> }),
+    preloadAuthQuery(api.views.teams, { leagueId: leagueId as Id<"leagues"> }),
   ]);
-
-  const data: SettingsData = {
-    league,
-    rules,
-    invite,
-    teams: teamRows,
-    changes,
-    modelsInUse: inUse,
-    catalog: MODEL_CATALOG,
-    locked: rules.rulesLockedAt !== null || league.status !== "setup",
-  };
 
   return (
     <div className="space-y-5">
@@ -76,7 +35,10 @@ export default async function SettingsPage({
         title="League settings"
         description="Rules are public and immutable once the draft begins, except budgets, conduct settings, the model allowlist and the schedule. Every change is logged."
       />
-      <SettingsConsole data={data} />
+      <SettingsConsole
+        preloadedSettings={preloadedSettings}
+        preloadedTeams={preloadedTeams}
+      />
     </div>
   );
 }

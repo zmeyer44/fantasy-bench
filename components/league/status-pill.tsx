@@ -1,5 +1,8 @@
 import { Badge, type BadgeTone } from "@/components/ui";
-import type { LeagueStatus } from "@/lib/db/types";
+import type { api } from "@/convex/_generated/api";
+import type { FunctionReturnType } from "convex/server";
+
+type LeagueStatus = FunctionReturnType<typeof api.views.home>["league"]["status"];
 
 const TONES: Record<LeagueStatus, BadgeTone> = {
   setup: "outline",

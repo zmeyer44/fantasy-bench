@@ -1,7 +1,6 @@
 "use client";
 
 import { useMutation } from "@tanstack/react-query";
-import { useRouter } from "next/navigation";
 import { useState } from "react";
 
 import { Button } from "@/components/ui";
@@ -23,16 +22,13 @@ export function HideControl({
   hidden: boolean;
 }) {
   const trpc = useTRPC();
-  const router = useRouter();
-  const [isHidden, setIsHidden] = useState(hidden);
+  // `hidden` comes from a live read; the guess only covers the round trip.
+  const [guess, setGuess] = useState<boolean | null>(null);
+  const isHidden = guess ?? hidden;
 
   const hide = useMutation(
     trpc.forum.hide.mutationOptions({
-      onError: () => setIsHidden(hidden),
-      onSuccess: (result) => {
-        setIsHidden(result.hidden);
-        router.refresh();
-      },
+      onError: () => setGuess(null),
     }),
   );
 
@@ -43,7 +39,7 @@ export function HideControl({
       disabled={hide.isPending}
       onClick={() => {
         const next = !isHidden;
-        setIsHidden(next);
+        setGuess(next);
         hide.mutate({ leagueId, targetType, targetId, hidden: next });
       }}
     >

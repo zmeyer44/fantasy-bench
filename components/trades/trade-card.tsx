@@ -4,7 +4,7 @@ import { FairnessBadge, FlaggedPill, StatusBadge } from "@/components/trades/fai
 import { StatusTimeline } from "@/components/trades/status-timeline";
 import { TraceLink } from "@/components/trades/trace-link";
 import { Badge } from "@/components/ui";
-import type { TradeSummary } from "@/lib/services/trades";
+import type { TradeSummary } from "@/convex/trades";
 import { formatET } from "@/lib/time";
 
 /**

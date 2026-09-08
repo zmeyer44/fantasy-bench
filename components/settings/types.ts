@@ -1,7 +1,17 @@
-import type { ModelCatalogEntry } from "@/lib/models";
-import type { League, LeagueRules } from "@/lib/db/types";
-import type { LeagueRuleChange } from "@/lib/services/league/rules";
+import type { FunctionReturnType } from "convex/server";
 
+import type { api } from "@/convex/_generated/api";
+
+/** Exactly what `commissioner.settings` returns (league, rules, invite, log, models). */
+export type CommissionerSettings = FunctionReturnType<typeof api.commissioner.settings>;
+
+/**
+ * One row of the Teams tab.
+ *
+ * `commissioner.settings` does not carry the roster of teams, so this comes
+ * from `views.teams` (id, name, abbreviation, owner, current model + version).
+ * That view has no owner email — the row falls back to the owner's name.
+ */
 export type SettingsTeam = {
   id: string;
   name: string;
@@ -13,15 +23,13 @@ export type SettingsTeam = {
   configVersionNo: number | null;
 };
 
-export type SettingsData = {
-  league: League;
-  rules: LeagueRules;
-  invite: { code: string; url: string };
+/**
+ * The console's props. Dates are epoch ms (Convex), and `league.id` is the
+ * Convex `_id` restated under the name every mutation argument uses.
+ */
+export type SettingsData = Omit<CommissionerSettings, "league"> & {
+  league: CommissionerSettings["league"] & { id: string };
   teams: SettingsTeam[];
-  changes: Array<LeagueRuleChange & { userName: string | null }>;
-  modelsInUse: Array<{ modelId: string; teamCount: number }>;
-  catalog: readonly ModelCatalogEntry[];
-  locked: boolean;
 };
 
 /**

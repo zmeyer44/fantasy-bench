@@ -3,19 +3,21 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import { SkillForm } from "@/components/config/skill-form";
+import { readOrNull } from "@/components/league/convex-errors";
 import { PageHeader } from "@/components/ui";
-import { requireUser } from "@/lib/auth";
-import { getSkill } from "@/lib/services/skills";
+import { api } from "@/convex/_generated/api";
+import { fetchAuthQuery } from "@/lib/convex/server";
+import { requireViewer } from "@/lib/convex/require-viewer";
 
 export const metadata: Metadata = { title: "Edit skill" };
 
 export default async function EditSkillPage({ params }: PageProps<"/skills/[slug]/edit">) {
   const { slug } = await params;
-  const user = await requireUser(`/skills/${slug}/edit`);
+  const viewer = await requireViewer(`/skills/${slug}/edit`);
 
-  const skill = await getSkill(slug);
+  const skill = await readOrNull(() => fetchAuthQuery(api.skills.get, { slug }));
   if (!skill) notFound();
-  if (skill.authorUserId !== user.id) notFound();
+  if (skill.authorUserId !== viewer.userId) notFound();
 
   return (
     <div className="mx-auto max-w-3xl space-y-8">
@@ -30,11 +32,11 @@ export default async function EditSkillPage({ params }: PageProps<"/skills/[slug
       />
       <SkillForm
         mode="edit"
-        skillId={skill.id}
+        skillId={skill._id}
         usageCount={skill.usageCount}
         initial={{
           name: skill.name,
-          description: skill.description,
+          description: skill.description ?? "",
           bodyMd: skill.bodyMd,
           visibility: skill.visibility,
         }}

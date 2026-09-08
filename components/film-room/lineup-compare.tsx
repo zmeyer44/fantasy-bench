@@ -1,5 +1,11 @@
 import { cn } from "@/components/ui";
-import type { FilmRoomEfficiency } from "@/lib/services/cost/film-room";
+import type { api } from "@/convex/_generated/api";
+import type { FunctionReturnType } from "convex/server";
+
+/** The lineup-efficiency block of `metrics.filmRoom`. */
+export type FilmRoomEfficiency = NonNullable<
+  FunctionReturnType<typeof api.metrics.filmRoom>["efficiency"]
+>;
 
 type Row = FilmRoomEfficiency["actualSlots"][number];
 

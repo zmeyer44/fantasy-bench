@@ -4,22 +4,32 @@ import { notFound } from "next/navigation";
 
 import { ConfigEditor } from "@/components/config/config-editor";
 import { ConfigNav } from "@/components/config/config-nav";
+import { readOrNull } from "@/components/league/convex-errors";
 import { Badge, Card, CardBody, PageHeader } from "@/components/ui";
-import { getSession } from "@/lib/auth/session";
+import { api } from "@/convex/_generated/api";
+import type { Id } from "@/convex/_generated/dataModel";
+import { DEFAULT_AGENT_CONTEXT, DEFAULT_HARNESS } from "@/convex/lib/defaults";
+import { fetchAuthQuery } from "@/lib/convex/server";
 import { DEFAULT_MODEL_ID } from "@/lib/models";
-import {
-  DEFAULT_HARNESS_SETTINGS,
-  getConfigForTeam,
-  getEditLockStatus,
-} from "@/lib/services/config";
-import { DEFAULT_AGENT_CONTEXT } from "@/lib/services/league";
-import { formatET } from "@/lib/time";
+
+/**
+ * `configs.get` carries the team, the league rules, the current and pending
+ * versions, the edit-lock status and the viewer's write right in one read.
+ */
+async function loadConfig(leagueId: string, teamId: string) {
+  return readOrNull(() =>
+    fetchAuthQuery(api.configs.get, {
+      leagueId: leagueId as Id<"leagues">,
+      teamId: teamId as Id<"teams">,
+    }),
+  );
+}
 
 export async function generateMetadata({
   params,
 }: PageProps<"/leagues/[leagueId]/teams/[teamId]/config">): Promise<Metadata> {
-  const { teamId } = await params;
-  const view = await getConfigForTeam(teamId).catch(() => null);
+  const { leagueId, teamId } = await params;
+  const view = await loadConfig(leagueId, teamId);
   return { title: view ? `${view.team.name} · Config` : "Config" };
 }
 
@@ -32,16 +42,8 @@ export default async function ConfigPage({
 }: PageProps<"/leagues/[leagueId]/teams/[teamId]/config">) {
   const { leagueId, teamId } = await params;
 
-  const view = await getConfigForTeam(teamId).catch(() => null);
-  if (!view || view.team.leagueId !== leagueId) notFound();
-
-  const session = await getSession();
-  const userId = session?.user.id ?? null;
-  const isCommissioner = view.league.commissionerUserId === userId;
-  const canEdit = !!userId && (view.team.ownerUserId === userId || isCommissioner);
-
-  const lock = await getEditLockStatus(leagueId);
-  const nextChangeLabel = `${formatET(lock.nextChange, "EEE h:mm a")} ET`;
+  const view = await loadConfig(leagueId, teamId);
+  if (!view) notFound();
 
   const source = view.pending ?? view.current;
   const nextVersionNo = (view.versions[0]?.versionNo ?? 0) + 1;
@@ -83,27 +85,27 @@ export default async function ConfigPage({
         leagueId={leagueId}
         teamId={teamId}
         teamName={view.team.name}
-        canEdit={canEdit}
+        canEdit={view.canEdit}
         rules={{
           contextCharLimit: view.rules?.contextCharLimit ?? 8_000,
           modelAllowlist: view.rules?.modelAllowlist ?? [],
           maxStepsCap: view.rules?.maxStepsCap ?? 30,
           weeklyTokenCapPerTeam: view.rules?.weeklyTokenCapPerTeam ?? null,
         }}
-        lock={{ open: lock.open, nextChangeLabel }}
+        initialLock={{ open: view.lock.open, nextChange: view.lock.nextChange }}
         nextVersionNo={nextVersionNo}
         initial={{
           contextMd: source?.contextMd ?? DEFAULT_AGENT_CONTEXT,
           modelId: source?.modelId ?? view.rules?.modelAllowlist?.[0] ?? DEFAULT_MODEL_ID,
-          harness: source?.harness ?? DEFAULT_HARNESS_SETTINGS,
+          harness: source?.harness ?? DEFAULT_HARNESS,
           skills: (source?.skills ?? []).map((s) => ({
-            id: s.id,
+            id: s._id,
             name: s.name,
             slug: s.slug,
-            description: s.description,
+            description: s.description ?? "",
             bodyMd: s.bodyMd,
           })),
-          noteToAgent: view.config.noteToAgent ?? "",
+          noteToAgent: view.config?.noteToAgent ?? "",
           currentVersionNo: view.current?.versionNo ?? null,
           pendingVersionNo: view.pending?.versionNo ?? null,
         }}

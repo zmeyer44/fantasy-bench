@@ -1,10 +1,13 @@
 import Link from "next/link";
 
 import { Badge, Card, CardBody, CardFooter, CardHeader, EmptyState } from "@/components/ui";
-import type { DraftBoard as DraftBoardData } from "@/lib/services/views";
+import type { api } from "@/convex/_generated/api";
+import type { FunctionReturnType } from "convex/server";
 import { formatET } from "@/lib/time";
 
-/** Order grid (rounds × teams) + the pick list with rationales. Pure server render. */
+export type DraftBoardData = FunctionReturnType<typeof api.draft.board>;
+
+/** Order grid (rounds × teams) + the pick list with rationales. Presentational. */
 export function DraftBoardView({
   leagueId,
   board,

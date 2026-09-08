@@ -3,8 +3,9 @@ import type { ReactNode } from "react";
 import { cn } from "@/components/ui";
 
 /**
- * A native `<details>` disclosure. No client JS: the trace viewer renders 30
- * steps and every one of them has several of these.
+ * A native `<details>` disclosure. Still no runtime of its own — the optional
+ * `onOpenChange` exists so the trace viewer can load an overflowed tool result
+ * the first time its disclosure is opened.
  */
 export function Collapsible({
   summary,
@@ -13,6 +14,7 @@ export function Collapsible({
   defaultOpen = false,
   tone = "default",
   className,
+  onOpenChange,
 }: {
   summary: ReactNode;
   meta?: ReactNode;
@@ -20,10 +22,16 @@ export function Collapsible({
   defaultOpen?: boolean;
   tone?: "default" | "error";
   className?: string;
+  onOpenChange?: (open: boolean) => void;
 }) {
   return (
     <details
       open={defaultOpen}
+      onToggle={
+        onOpenChange
+          ? (event) => onOpenChange((event.currentTarget as HTMLDetailsElement).open)
+          : undefined
+      }
       className={cn(
         "group rounded-md border",
         tone === "error" ? "border-danger/40" : "border-line",

@@ -1,20 +1,26 @@
 import { notFound } from "next/navigation";
 
+import { readOrNull } from "@/components/league/convex-errors";
 import { LeagueSubnav } from "@/components/league-subnav";
 import { Badge } from "@/components/ui";
-import { getSession } from "@/lib/auth/session";
-import { getLeagueById } from "@/lib/services/league";
-import { getMembership } from "@/lib/services/league/queries";
+import { api } from "@/convex/_generated/api";
+import type { Id } from "@/convex/_generated/dataModel";
+import { fetchAuthQuery } from "@/lib/convex/server";
+import { getViewer, viewerMembership } from "@/lib/convex/viewer";
 
 export default async function LeagueLayout({ children, params }: LayoutProps<"/leagues/[leagueId]">) {
   const { leagueId } = await params;
-  const league = await getLeagueById(leagueId);
-  if (!league) notFound();
 
-  // Private leagues are members-only; public leagues render for spectators.
-  const session = await getSession();
-  const membership = session ? await getMembership(leagueId, session.user.id) : undefined;
-  if (!league.isPublic && !membership) notFound();
+  // `leagues.get` runs `requireLeagueRead`: members always, spectators only on
+  // public leagues. A missing or private league is a 404, as it was before.
+  const view = await readOrNull(() =>
+    fetchAuthQuery(api.leagues.get, { leagueId: leagueId as Id<"leagues"> }),
+  );
+  if (!view) notFound();
+
+  const viewer = await getViewer();
+  const membership = viewerMembership(viewer, leagueId);
+  const league = view.league;
 
   return (
     <div className="mx-auto max-w-7xl px-4 py-8">

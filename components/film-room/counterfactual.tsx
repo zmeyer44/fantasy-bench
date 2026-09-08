@@ -1,5 +1,6 @@
 import { Badge, Card, CardBody, CardFooter, CardHeader } from "@/components/ui";
-import type { FilmRoomEfficiency } from "@/lib/services/cost/film-room";
+
+import type { FilmRoomEfficiency } from "./lineup-compare";
 
 /**
  * The v1 counterfactual: the best lineup by Sunday-morning projection, scored

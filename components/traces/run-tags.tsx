@@ -1,8 +1,12 @@
 import Link from "next/link";
 
 import { Badge, type BadgeTone } from "@/components/ui";
-import type { RunStatus } from "@/lib/db/types";
-import type { TraceListItem } from "@/lib/services/views";
+import type { api } from "@/convex/_generated/api";
+import type { FunctionReturnType } from "convex/server";
+
+/** One row of `runs.list` / `views.team.recentRuns` — the trace list item. */
+export type RunListItem = FunctionReturnType<typeof api.runs.list>["page"][number];
+export type RunStatus = RunListItem["status"];
 
 const STATUS_TONES: Record<RunStatus, BadgeTone> = {
   pending: "outline",
@@ -25,7 +29,7 @@ export function RunTags({
   leagueId,
   showTeam = true,
 }: {
-  run: TraceListItem;
+  run: RunListItem;
   leagueId: string;
   showTeam?: boolean;
 }) {

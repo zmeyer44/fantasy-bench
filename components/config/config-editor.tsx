@@ -1,8 +1,8 @@
 "use client";
 
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useMutation } from "@tanstack/react-query";
+import { useQuery } from "convex/react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 
 import {
@@ -18,9 +18,12 @@ import {
   Textarea,
   cn,
 } from "@/components/ui";
-import type { HarnessSettings } from "@/lib/services/config";
+import { api } from "@/convex/_generated/api";
+import type { Id } from "@/convex/_generated/dataModel";
+import type { HarnessSettings } from "@/convex/lib/config_pure";
 import { formatUsd } from "@/components/cost/format";
 import { MODEL_CATALOG, findModel } from "@/lib/models";
+import { formatET } from "@/lib/time";
 import { useTRPC } from "@/lib/trpc/client";
 
 import { Markdown } from "./markdown";
@@ -39,11 +42,8 @@ export type ConfigEditorProps = {
     maxStepsCap: number;
     weeklyTokenCapPerTeam: number | null;
   };
-  lock: {
-    open: boolean;
-    /** Preformatted in Eastern by the server, e.g. "Wed 3:00 AM ET". */
-    nextChangeLabel: string;
-  };
+  /** First paint from `configs.get`; the editor then subscribes to `configs.lockStatus`. */
+  initialLock: { open: boolean; nextChange: number };
   initial: {
     contextMd: string;
     modelId: string;
@@ -59,9 +59,16 @@ export type ConfigEditorProps = {
 const DEBOUNCE_MS = 500;
 
 export function ConfigEditor(props: ConfigEditorProps) {
-  const { rules, lock, initial, canEdit } = props;
-  const router = useRouter();
+  const { rules, initial, canEdit } = props;
   const trpc = useTRPC();
+
+  // Live edit lock: when the window opens or closes the banner and the save
+  // button change wording without a reload.
+  const lockStatus = useQuery(api.configs.lockStatus, {
+    leagueId: props.leagueId as Id<"leagues">,
+  });
+  const lock = lockStatus ?? props.initialLock;
+  const nextChangeLabel = `${formatET(lock.nextChange, "EEE h:mm a")} ET`;
 
   const [contextMd, setContextMd] = useState(initial.contextMd);
   const [note, setNote] = useState(initial.noteToAgent);
@@ -104,14 +111,24 @@ export function ConfigEditor(props: ConfigEditorProps) {
     return () => clearTimeout(timer);
   }, [contextMd, skillIds, modelId]);
 
-  const estimate = useQuery(
-    trpc.config.estimate.queryOptions({
-      leagueId: props.leagueId,
-      contextMd: estimateInput.contextMd,
-      skillIds: estimateInput.skillIds,
-      modelId: estimateInput.modelId,
-    }),
-  );
+  // Nothing to price while the context is empty and no skill is attached — the
+  // subscription is skipped rather than asking for an estimate of nothing.
+  const estimateArgs =
+    estimateInput.contextMd.trim().length === 0 && estimateInput.skillIds.length === 0
+      ? ("skip" as const)
+      : {
+          leagueId: props.leagueId as Id<"leagues">,
+          contextMd: estimateInput.contextMd,
+          skillIds: estimateInput.skillIds as Id<"skills">[],
+          modelId: estimateInput.modelId,
+        };
+  const estimate = useQuery(api.configs.estimate, estimateArgs);
+  // True while the debounce timer still holds an older input than the editor's.
+  const estimateStale =
+    estimate === undefined ||
+    estimateInput.contextMd !== contextMd ||
+    estimateInput.modelId !== modelId ||
+    estimateInput.skillIds.join() !== skillIds.join();
 
   const charCount = contextMd.length;
   const overLimit = charCount > rules.contextCharLimit;
@@ -135,7 +152,6 @@ export function ConfigEditor(props: ConfigEditorProps) {
             : `Version ${result.version.versionNo} queued — it applies at the next unlock.`,
           tone: "success",
         });
-        router.refresh();
       },
       onError: (err) => {
         setError(err.message);
@@ -166,7 +182,7 @@ export function ConfigEditor(props: ConfigEditorProps) {
     <div className="space-y-6">
       <LockBanner
         open={lock.open}
-        nextChangeLabel={lock.nextChangeLabel}
+        nextChangeLabel={nextChangeLabel}
         nextVersionNo={props.nextVersionNo}
         pendingVersionNo={initial.pendingVersionNo}
         canEdit={canEdit}
@@ -472,30 +488,24 @@ export function ConfigEditor(props: ConfigEditorProps) {
               <div className="flex items-baseline justify-between">
                 <span className="eyebrow">Prompt tokens</span>
                 <span
-                  className={cn(
-                    "font-mono text-lg tabular-nums",
-                    estimate.isFetching && "opacity-50",
-                  )}
+                  className={cn("font-mono text-lg tabular-nums", estimateStale && "opacity-50")}
                 >
-                  {estimate.data ? estimate.data.tokens.toLocaleString() : "—"}
+                  {estimate ? estimate.tokens.toLocaleString() : "—"}
                 </span>
               </div>
               <div className="flex items-baseline justify-between">
                 <span className="eyebrow">Est. cost / run</span>
                 <span
-                  className={cn(
-                    "font-mono text-lg tabular-nums",
-                    estimate.isFetching && "opacity-50",
-                  )}
+                  className={cn("font-mono text-lg tabular-nums", estimateStale && "opacity-50")}
                 >
-                  {estimate.data ? formatUsd(estimate.data.estimatedCostPerRunUsd) : "—"}
+                  {estimate ? formatUsd(estimate.estimatedCostPerRunUsd) : "—"}
                 </span>
               </div>
-              {estimate.data ? (
+              {estimate ? (
                 <dl className="space-y-1 border-t border-line pt-3">
-                  <SpecRow label="Base prompt" value={estimate.data.breakdown.baseTokens.toLocaleString()} />
-                  <SpecRow label="Your context" value={estimate.data.breakdown.contextTokens.toLocaleString()} />
-                  <SpecRow label="Skills" value={estimate.data.breakdown.skillTokens.toLocaleString()} />
+                  <SpecRow label="Base prompt" value={estimate.breakdown.baseTokens.toLocaleString()} />
+                  <SpecRow label="Your context" value={estimate.breakdown.contextTokens.toLocaleString()} />
+                  <SpecRow label="Skills" value={estimate.breakdown.skillTokens.toLocaleString()} />
                 </dl>
               ) : null}
             </CardBody>

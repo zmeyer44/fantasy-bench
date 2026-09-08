@@ -1,11 +1,13 @@
 /**
  * `GET /api/leagues/[leagueId]/traces/[runId]/export` — JSON download of a
  * single trace (PRD 5.8). Public within the league, and to spectators when the
- * league is public.
+ * league is public: `runs.export` runs `requireLeagueRead` itself, so the route
+ * only has to translate a thrown `ConvexError` into a status code.
  */
-import { getSession } from "@/lib/auth/session";
-import { canReadLeague } from "@/lib/services/league/access";
-import { traceExport } from "@/lib/services/views";
+import { messageForError, statusForError } from "@/components/league/convex-errors";
+import { api } from "@/convex/_generated/api";
+import type { Id } from "@/convex/_generated/dataModel";
+import { fetchAuthQuery } from "@/lib/convex/server";
 
 export async function GET(
   _request: Request,
@@ -13,14 +15,17 @@ export async function GET(
 ) {
   const { leagueId, runId } = await ctx.params;
 
-  const session = await getSession();
-  const access = await canReadLeague(leagueId, session?.user.id ?? null);
-  if (!access.ok) {
-    return Response.json({ error: access.reason }, { status: access.status });
+  let payload;
+  try {
+    payload = await fetchAuthQuery(api.runs.export, { runId: runId as Id<"runs"> });
+  } catch (error) {
+    return Response.json(
+      { error: messageForError(error, "Run not found") },
+      { status: statusForError(error) },
+    );
   }
 
-  const payload = await traceExport(runId);
-  if (!payload || payload.trace.run.leagueId !== leagueId) {
+  if (payload.trace.run.leagueId !== leagueId) {
     return Response.json({ error: "Run not found" }, { status: 404 });
   }
 

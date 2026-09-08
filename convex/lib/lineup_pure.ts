@@ -472,3 +472,93 @@ export function pointsLeftOnBench(args: { actual: number; optimal: number }): nu
 export function startingOnly(slots: LineupSlot[]): LineupSlot[] {
   return slots.filter((s) => !BENCH_SLOTS.has(s.slot.toUpperCase()));
 }
+
+/**
+ * Safety autopilot planning (PRD 5.4 fallbacks) — the pure half of the old
+ * `applySafetyAutopilot`.
+ *
+ * Keeps the base lineup and fills any starting slot that is empty, holds a
+ * player who is no longer on the roster, or holds a player who cannot play (out,
+ * IR, bye) — with the highest-projected eligible bench player who is not locked.
+ * Slots whose player is already locked are left alone: they cannot be changed.
+ *
+ * Returns the full slot list (starters then bench) plus which slots it filled;
+ * an empty `filledSlots` means the caller should not write a new version.
+ */
+export function planSafetyAutopilot(args: {
+  snapshot: SnapshotPayload;
+  teamId: string;
+  base: LineupSlot[];
+  now: Date;
+}): { slots: LineupSlot[]; filledSlots: string[] } {
+  const { snapshot, teamId, base, now } = args;
+  const team = teamOf(snapshot, teamId);
+  if (!team) return { slots: [], filledSlots: [] };
+
+  const rosterSlots = snapshot.rules.rosterSlots;
+  const superflex = snapshot.rules.superflex;
+  const preset = snapshot.rules.scoringPreset;
+  const benchLabel = benchSlotLabel(rosterSlots);
+  const roster = new Set(team.rosterPlayerIds);
+
+  // Normalise to the league's slot shape, preserving whatever the base had.
+  const bySlot = new Map<string, string[]>();
+  for (const entry of base) {
+    if (!entry.playerId) continue;
+    if (BENCH_SLOTS.has(entry.slot.toUpperCase())) continue;
+    const list = bySlot.get(entry.slot) ?? [];
+    list.push(entry.playerId);
+    bySlot.set(entry.slot, list);
+  }
+  const starting: LineupSlot[] = startingSlotLabels(rosterSlots).map((slot) => {
+    const list = bySlot.get(slot) ?? [];
+    return { slot, playerId: list.shift() ?? null };
+  });
+
+  const used = new Set(starting.map((s) => s.playerId).filter((id): id is string => !!id));
+  const filledSlots: string[] = [];
+
+  const holes = starting
+    .map((entry, index) => ({ entry, index }))
+    .filter(({ entry }) => {
+      if (!entry.playerId) return true;
+      if (!roster.has(entry.playerId)) return true;
+      const player = snapshot.players[entry.playerId];
+      if (isLocked(player, now)) return false; // frozen — nothing we can do
+      return isUnavailable(player, snapshot.weekNo);
+    })
+    .sort(
+      (a, b) =>
+        (eligiblePositions(a.entry.slot, { superflex }) ?? []).length -
+        (eligiblePositions(b.entry.slot, { superflex }) ?? []).length,
+    );
+
+  for (const hole of holes) {
+    const slot = hole.entry.slot;
+    const candidate = team.rosterPlayerIds
+      .filter((id) => !used.has(id))
+      .map((id) => ({ id, player: snapshot.players[id] }))
+      .filter(
+        ({ player }) =>
+          player && !isLocked(player, now) && !isUnavailable(player, snapshot.weekNo),
+      )
+      .filter(({ player }) => isEligible(player!.position, slot, { superflex }))
+      .sort(
+        (a, b) =>
+          projectedPoints(b.player, preset) - projectedPoints(a.player, preset) ||
+          a.id.localeCompare(b.id),
+      )[0];
+    if (!candidate) continue;
+    if (hole.entry.playerId) used.delete(hole.entry.playerId);
+    used.add(candidate.id);
+    starting[hole.index] = { slot, playerId: candidate.id };
+    filledSlots.push(slot);
+  }
+
+  const slots: LineupSlot[] = [...starting];
+  for (const playerId of team.rosterPlayerIds) {
+    if (used.has(playerId)) continue;
+    slots.push({ slot: benchLabel, playerId });
+  }
+  return { slots, filledSlots };
+}

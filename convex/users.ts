@@ -9,7 +9,7 @@ import { v } from "convex/values";
 
 import { internalQuery, query } from "./_generated/server";
 import type { Doc, Id } from "./_generated/dataModel";
-import type { QueryCtx } from "./_generated/server";
+import type { MutationCtx, QueryCtx } from "./_generated/server";
 import { optionalUser } from "./lib/auth";
 import { requireSeedSecret } from "./lib/seed_secret";
 import { leagueRole } from "./schema";
@@ -83,8 +83,11 @@ export const me = query({
   },
 });
 
-/** `commissioner.assignOwnerByEmail` (Phase 3) and the seed script resolve users this way. */
-export async function findByEmail(ctx: QueryCtx, email: string): Promise<Doc<"users"> | null> {
+/** `commissioner.assignOwnerByEmail` and the seed script resolve users this way. */
+export async function findByEmail(
+  ctx: QueryCtx | MutationCtx,
+  email: string,
+): Promise<Doc<"users"> | null> {
   return ctx.db
     .query("users")
     .withIndex("email", (q) => q.eq("email", email.trim().toLowerCase()))

@@ -1,6 +1,9 @@
-import Link from "next/link";
+"use client";
 
-import { getUser } from "@/lib/auth/session";
+import Link from "next/link";
+import { useQuery } from "convex/react";
+
+import { api } from "@/convex/_generated/api";
 import { Button } from "@/components/ui";
 
 import { UserMenu } from "./user-menu";
@@ -11,8 +14,13 @@ const LINKS = [
   { href: "/bench", label: "Bench" },
 ] as const;
 
-export async function SiteNav() {
-  const user = await getUser();
+/**
+ * The nav reads the viewer through a live `users.me` subscription rather than
+ * the request's session, so signing in or out updates it without a reload and
+ * without `router.refresh()`.
+ */
+export function SiteNav() {
+  const viewer = useQuery(api.users.me, {});
 
   return (
     <header className="sticky top-0 z-40 border-b border-line bg-canvas/85 backdrop-blur">
@@ -37,8 +45,12 @@ export async function SiteNav() {
         </div>
 
         <div className="ml-auto flex items-center gap-2">
-          {user ? (
-            <UserMenu name={user.name} email={user.email} />
+          {viewer === undefined ? (
+            // First paint before the subscription resolves: reserve the space
+            // rather than flashing "Log in" at someone who is signed in.
+            <span className="h-8 w-24" aria-hidden />
+          ) : viewer ? (
+            <UserMenu name={viewer.name ?? ""} email={viewer.email ?? ""} />
           ) : (
             <>
               <Link href="/login">

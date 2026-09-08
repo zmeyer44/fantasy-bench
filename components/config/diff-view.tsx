@@ -1,7 +1,7 @@
 import Link from "next/link";
 
 import { Badge, Card, CardBody, CardHeader, cn } from "@/components/ui";
-import type { ConfigDiff, DiffHunk } from "@/lib/services/config";
+import type { ConfigDiff, DiffHunk } from "@/convex/lib/config_pure";
 
 /**
  * Renders a `ConfigDiff`: the context as a unified diff with a two-column

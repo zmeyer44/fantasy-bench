@@ -1,16 +1,15 @@
 import Link from "next/link";
 
 import { formatET } from "@/lib/time";
-import type { TraceListItem } from "@/lib/services/views";
 
-import { RunTags } from "./run-tags";
+import { RunTags, type RunListItem } from "./run-tags";
 
 export function TraceRow({
   run,
   leagueId,
   showTeam = true,
 }: {
-  run: TraceListItem;
+  run: RunListItem;
   leagueId: string;
   showTeam?: boolean;
 }) {

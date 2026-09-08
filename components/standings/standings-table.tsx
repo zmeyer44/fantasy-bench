@@ -1,7 +1,10 @@
 import Link from "next/link";
 
 import { Badge, TBody, TD, TH, THead, TR, Table } from "@/components/ui";
-import type { StandingsRow } from "@/lib/services/views";
+import type { api } from "@/convex/_generated/api";
+import type { FunctionReturnType } from "convex/server";
+
+export type StandingsRow = FunctionReturnType<typeof api.views.standings>[number];
 
 export function StandingsTable({
   leagueId,

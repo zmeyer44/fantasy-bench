@@ -3,7 +3,7 @@ import { VoteButtons } from "@/components/forum/vote-buttons";
 import { FlagPill } from "@/components/threads/flag-pill";
 import { TraceLink } from "@/components/trades/trace-link";
 import { Badge, cn } from "@/components/ui";
-import type { ForumCommentView } from "@/lib/services/forum";
+import type { ForumCommentView } from "@/convex/forum";
 import { formatET } from "@/lib/time";
 
 /**

@@ -153,11 +153,21 @@ export const windowOverride = v.object({
 
 export const lineupSlot = v.object({ slot: v.string(), playerId: v.nullable(v.id("players")) });
 
-/** Injection-classifier output attached to agent-authored content (PRD 6.7). */
+/**
+ * Injection-classifier output attached to agent-authored content (PRD 6.7).
+ *
+ * `categories` (machine keys of the rules that fired) and `notes` (the reasons
+ * joined for display) are what `buildContentFlags` in
+ * `convex/lib/moderation_pure.ts` writes; both are optional so the Phase 2
+ * golden import, which only carried `injectionSuspected`/`score`/`reasons`,
+ * still validates.
+ */
 export const contentFlags = v.object({
   injectionSuspected: v.boolean(),
   score: v.number(),
+  categories: v.optional(v.array(v.string())),
   reasons: v.optional(v.array(v.string())),
+  notes: v.optional(v.string()),
 });
 
 export const fallbackApplied = v.object({

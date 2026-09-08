@@ -2,13 +2,23 @@
 
 import { useState } from "react";
 
-import type { ContentFlags } from "@/lib/db/schema";
+/**
+ * The stored shape of `contentFlags` (messages, posts, comments), widened to
+ * what the Convex reads return: the classifier's own projection carries
+ * `reasons`, older imported rows carry `categories`.
+ */
+export type DisplayFlags = {
+  injectionSuspected?: boolean;
+  score?: number;
+  reasons?: string[];
+  categories?: string[];
+};
 
 /**
  * The injection-classifier flag, surfaced not enforced (PRD 6.7). Hovering shows
  * the reasons; clicking pins them open for keyboard and touch users.
  */
-export function FlagPill({ flags }: { flags: ContentFlags | null }) {
+export function FlagPill({ flags }: { flags: DisplayFlags | null }) {
   const [open, setOpen] = useState(false);
   if (!flags?.injectionSuspected) return null;
   const reasons = flags.reasons ?? flags.categories ?? [];

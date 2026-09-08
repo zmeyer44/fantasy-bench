@@ -22,8 +22,8 @@ export function CreateLeagueForm() {
   const createLeague = useMutation(
     trpc.league.create.mutationOptions({
       onSuccess: (league) => {
+        // The league pages read Convex live; navigating is enough.
         router.push(`/leagues/${league.id}`);
-        router.refresh();
       },
       onError: (err) => setError(err.message),
     }),

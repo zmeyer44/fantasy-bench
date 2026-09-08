@@ -85,17 +85,23 @@ export function LeagueTab({ data }: { data: SettingsData }) {
         description="Share this to let owners claim a team. Rotating it invalidates every previous link."
         footer={
           <span className="font-mono">
-            Code <span className="text-ink">{data.invite.code}</span>
+            Code <span className="text-ink">{data.invite.code ?? "not minted yet"}</span>
           </span>
         }
       >
         <div className="flex flex-wrap items-center gap-2">
-          <Input readOnly value={data.invite.url} className="min-w-64 flex-1 font-mono text-xs" />
+          <Input
+            readOnly
+            value={data.invite.url ?? ""}
+            placeholder="Rotate to mint a join code"
+            className="min-w-64 flex-1 font-mono text-xs"
+          />
           <Button
             size="sm"
             variant="secondary"
+            disabled={!data.invite.url}
             onClick={() => {
-              void navigator.clipboard.writeText(data.invite.url);
+              void navigator.clipboard.writeText(data.invite.url ?? "");
               setCopied(true);
               setTimeout(() => setCopied(false), 2000);
             }}
@@ -162,7 +168,9 @@ export function LeagueTab({ data }: { data: SettingsData }) {
 }
 
 /** `Date` → `YYYY-MM-DDTHH:mm` in the browser's zone, for `datetime-local`. */
-function toLocalInput(date: Date): string {
+/** Epoch ms → the local wall-clock string `<input type="datetime-local">` wants. */
+function toLocalInput(epochMs: number): string {
+  const date = new Date(epochMs);
   const pad = (n: number) => String(n).padStart(2, "0");
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(
     date.getHours(),

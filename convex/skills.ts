@@ -6,15 +6,22 @@
  * `usageCount` is denormalized onto the row (the Postgres version counted
  * `config_version_skills` joined to current configs at query time; §2.3).
  *
- * Mutations (`create`, `update`, `fork`) are Phase 3.
+ * IMPORTANT — skills are attached by id, not by value: `config_versions.skillIds`
+ * points at the live row, so `update` changes the prompt of every team whose
+ * *current* version attaches it, retroactively and without a new config version.
+ * That is deliberate (authors maintain their skills); the editor surfaces
+ * `usageCount` as a warning first.
  */
 import { v } from "convex/values";
 
 import type { Doc } from "./_generated/dataModel";
-import { query } from "./_generated/server";
-import { optionalUser } from "./lib/auth";
+import type { MutationCtx } from "./_generated/server";
+import { mutation, query } from "./_generated/server";
+import { optionalUser, requireUser } from "./lib/auth";
 import { appError } from "./lib/errors";
+import { slugifySkill } from "./lib/season";
 import { skillDoc } from "./lib/validators";
+import { skillVisibility } from "./schema";
 
 /** The library index page shows at most this many rows. */
 const LIST_LIMIT = 200;
@@ -177,5 +184,162 @@ export const get = query({
       forkedFrom: parent ? { _id: parent._id, name: parent.name, slug: parent.slug } : null,
       forks,
     };
+  },
+});
+
+// ----------------------------------------------------------------- write paths
+
+export const MAX_SKILL_BODY_CHARS = 20_000;
+export const MAX_SKILL_NAME_CHARS = 80;
+export const MAX_SKILL_DESCRIPTION_CHARS = 280;
+const MIN_SKILL_NAME_CHARS = 3;
+
+/** `SkillValidationError` → BAD_REQUEST, as `lib/trpc/routers/skills.ts` mapped it. */
+function validateBody(bodyMd: string): void {
+  if (!bodyMd.trim()) throw appError("BAD_REQUEST", "The skill body cannot be empty");
+  if (bodyMd.length > MAX_SKILL_BODY_CHARS) {
+    throw appError(
+      "BAD_REQUEST",
+      `Skill markdown is ${bodyMd.length.toLocaleString()} characters; the limit is ${MAX_SKILL_BODY_CHARS.toLocaleString()}`,
+    );
+  }
+}
+
+function validateName(name: string): string {
+  const trimmed = name.trim();
+  if (trimmed.length < MIN_SKILL_NAME_CHARS) {
+    throw appError("BAD_REQUEST", "Give the skill a name of at least 3 characters");
+  }
+  if (trimmed.length > MAX_SKILL_NAME_CHARS) {
+    throw appError("BAD_REQUEST", `Names are limited to ${MAX_SKILL_NAME_CHARS} characters`);
+  }
+  return trimmed;
+}
+
+/**
+ * First free slug: `foo`, then `foo-2`, `foo-3`, … The Postgres version read
+ * every `foo%` row at once; here each candidate is one `by_slug` lookup, capped
+ * so the probe loop stays bounded.
+ */
+const SLUG_PROBES = 64;
+
+async function uniqueSkillSlug(ctx: MutationCtx, base: string): Promise<string> {
+  const candidate = slugifySkill(base);
+  for (let n = 1; n <= SLUG_PROBES; n++) {
+    const slug = n === 1 ? candidate : `${candidate}-${n}`;
+    const clash = await ctx.db
+      .query("skills")
+      .withIndex("by_slug", (q) => q.eq("slug", slug))
+      .unique();
+    if (!clash) return slug;
+  }
+  return `${candidate}-${Date.now()}`;
+}
+
+/** Author a new skill. The slug is derived from the name and made unique. */
+export const create = mutation({
+  args: {
+    name: v.string(),
+    description: v.optional(v.string()),
+    bodyMd: v.string(),
+    visibility: v.optional(skillVisibility),
+  },
+  returns: skillDoc,
+  handler: async (ctx, args) => {
+    const viewer = await requireUser(ctx);
+    const name = validateName(args.name);
+    validateBody(args.bodyMd);
+
+    const now = Date.now();
+    const skillId = await ctx.db.insert("skills", {
+      authorUserId: viewer.userId,
+      name,
+      slug: await uniqueSkillSlug(ctx, name),
+      description: (args.description ?? "").trim().slice(0, MAX_SKILL_DESCRIPTION_CHARS),
+      bodyMd: args.bodyMd,
+      visibility: args.visibility ?? "public",
+      usageCount: 0,
+      createdAt: now,
+      updatedAt: now,
+    });
+    const created = await ctx.db.get("skills", skillId);
+    if (!created) throw appError("NOT_FOUND", "Skill not found");
+    return created;
+  },
+});
+
+/**
+ * Edit a skill in place. Author only, and NOT versioned: the edit takes effect
+ * immediately for every config version that attaches this skill, including ones
+ * saved months ago. The only record of the change is `updatedAt`.
+ */
+export const update = mutation({
+  args: {
+    skillId: v.id("skills"),
+    name: v.optional(v.string()),
+    description: v.optional(v.string()),
+    bodyMd: v.optional(v.string()),
+    visibility: v.optional(skillVisibility),
+  },
+  returns: skillDoc,
+  handler: async (ctx, args) => {
+    const viewer = await requireUser(ctx);
+    const existing = await ctx.db.get("skills", args.skillId);
+    if (!existing) throw appError("NOT_FOUND", "Skill not found");
+    if (existing.authorUserId !== viewer.userId) {
+      throw appError("FORBIDDEN", "Only the author may edit this skill");
+    }
+
+    if (args.bodyMd !== undefined) validateBody(args.bodyMd);
+    const name = args.name !== undefined ? validateName(args.name) : undefined;
+
+    // The slug never moves — attached configs point at the id anyway.
+    await ctx.db.patch("skills", args.skillId, {
+      ...(name !== undefined ? { name } : {}),
+      ...(args.description !== undefined
+        ? { description: args.description.trim().slice(0, MAX_SKILL_DESCRIPTION_CHARS) }
+        : {}),
+      ...(args.bodyMd !== undefined ? { bodyMd: args.bodyMd } : {}),
+      ...(args.visibility !== undefined ? { visibility: args.visibility } : {}),
+      updatedAt: Date.now(),
+    });
+    const updated = await ctx.db.get("skills", args.skillId);
+    if (!updated) throw appError("NOT_FOUND", "Skill not found");
+    return updated;
+  },
+});
+
+/**
+ * Copy a skill into the caller's own library so they can diverge from it. The
+ * copy records `forkedFromSkillId`, starts public, and starts at zero usage.
+ */
+export const fork = mutation({
+  args: { slug: v.string() },
+  returns: skillDoc,
+  handler: async (ctx, { slug }) => {
+    const viewer = await requireUser(ctx);
+    const source = await ctx.db
+      .query("skills")
+      .withIndex("by_slug", (q) => q.eq("slug", slug))
+      .unique();
+    if (!source) throw appError("NOT_FOUND", `No skill with slug "${slug}"`);
+
+    const now = Date.now();
+    const name = `${source.name} (fork)`.slice(0, MAX_SKILL_NAME_CHARS);
+    const skillId = await ctx.db.insert("skills", {
+      authorUserId: viewer.userId,
+      name,
+      slug: await uniqueSkillSlug(ctx, name),
+      description: source.description,
+      bodyMd: source.bodyMd,
+      visibility: "public",
+      forkedFromSkillId: source._id,
+      usageCount: 0,
+      createdAt: now,
+      updatedAt: now,
+    });
+    const created = await ctx.db.get("skills", skillId);
+    if (!created) throw appError("NOT_FOUND", "Skill not found");
+    return created;
   },
 });

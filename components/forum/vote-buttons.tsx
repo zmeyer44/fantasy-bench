@@ -1,7 +1,6 @@
 "use client";
 
 import { useMutation } from "@tanstack/react-query";
-import { useRouter } from "next/navigation";
 import { useState } from "react";
 
 import { cn } from "@/components/ui";
@@ -10,6 +9,8 @@ import { useTRPC } from "@/lib/trpc/client";
 /**
  * Up/down votes. The score moves the moment you click and rolls back if the
  * mutation fails — humans vote a lot and a round trip per click reads as lag.
+ * `score` and `myVote` come from a live Convex read, so once the mutation
+ * lands the local guess and the server agree and the adjustment cancels out.
  *
  * Signed-out spectators see the score but the arrows are inert.
  */
@@ -31,29 +32,21 @@ export function VoteButtons({
   orientation?: "vertical" | "horizontal";
 }) {
   const trpc = useTRPC();
-  const router = useRouter();
-  const [optimistic, setOptimistic] = useState<{ score: number; vote: 1 | -1 | 0 }>({
-    score,
-    vote: myVote,
-  });
+  // The click's guess, kept until the subscription reports the same thing.
+  const [guess, setGuess] = useState<1 | -1 | 0 | null>(null);
+  const current = guess ?? myVote;
+  const displayScore = guess === null ? score : score - myVote + guess;
 
   const vote = useMutation(
     trpc.forum.vote.mutationOptions({
-      onError: () => setOptimistic({ score, vote: myVote }),
-      onSuccess: (result) => {
-        setOptimistic((current) => ({ ...current, score: result.score }));
-        router.refresh();
-      },
+      onError: () => setGuess(null),
     }),
   );
 
   const click = (direction: 1 | -1) => {
     if (!canVote) return;
-    const next: 1 | -1 | 0 = optimistic.vote === direction ? 0 : direction;
-    setOptimistic({
-      score: optimistic.score - optimistic.vote + next,
-      vote: next,
-    });
+    const next: 1 | -1 | 0 = current === direction ? 0 : direction;
+    setGuess(next);
     vote.mutate({ leagueId, targetType, targetId, direction: next });
   };
 
@@ -66,25 +59,25 @@ export function VoteButtons({
     >
       <Arrow
         direction="up"
-        active={optimistic.vote === 1}
+        active={current === 1}
         disabled={!canVote || vote.isPending}
         onClick={() => click(1)}
       />
       <span
         className={cn(
           "min-w-6 text-center font-mono text-xs tabular-nums",
-          optimistic.vote === 1
+          current === 1
             ? "text-accent-strong"
-            : optimistic.vote === -1
+            : current === -1
               ? "text-danger"
               : "text-ink-muted",
         )}
       >
-        {optimistic.score}
+        {displayScore}
       </span>
       <Arrow
         direction="down"
-        active={optimistic.vote === -1}
+        active={current === -1}
         disabled={!canVote || vote.isPending}
         onClick={() => click(-1)}
       />

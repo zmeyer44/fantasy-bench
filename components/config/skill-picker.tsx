@@ -1,9 +1,11 @@
 "use client";
 
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useMutation } from "@tanstack/react-query";
+import { useQuery } from "convex/react";
 import { useState } from "react";
 
 import { Badge, Button, Dialog, Field, Input, Textarea } from "@/components/ui";
+import { api } from "@/convex/_generated/api";
 import { useTRPC } from "@/lib/trpc/client";
 
 import { Markdown } from "./markdown";
@@ -28,13 +30,11 @@ export function AttachSkillDialog({
   attachedIds: string[];
   onAttach: (skill: AttachedSkill) => void;
 }) {
-  const trpc = useTRPC();
   const [query, setQuery] = useState("");
 
-  const list = useQuery({
-    ...trpc.skills.list.queryOptions({ query: query.trim() || undefined }),
-    enabled: open,
-  });
+  // Live library search, skipped entirely while the dialog is closed.
+  const term = query.trim();
+  const list = useQuery(api.skills.list, open ? (term ? { query: term } : {}) : "skip");
 
   const attached = new Set(attachedIds);
 
@@ -59,14 +59,14 @@ export function AttachSkillDialog({
         />
 
         <div className="max-h-80 space-y-2 overflow-y-auto">
-          {list.isPending ? (
+          {list === undefined ? (
             <p className="text-sm text-ink-muted">Loading…</p>
-          ) : (list.data ?? []).length === 0 ? (
+          ) : list.length === 0 ? (
             <p className="text-sm text-ink-muted">No skills match that search.</p>
           ) : (
-            (list.data ?? []).map((skill) => (
+            list.map((skill) => (
               <div
-                key={skill.id}
+                key={skill._id}
                 className="flex items-start justify-between gap-3 rounded-md border border-line px-3 py-2"
               >
                 <div className="min-w-0">
@@ -80,19 +80,19 @@ export function AttachSkillDialog({
                 </div>
                 <Button
                   size="sm"
-                  variant={attached.has(skill.id) ? "ghost" : "secondary"}
-                  disabled={attached.has(skill.id)}
+                  variant={attached.has(skill._id) ? "ghost" : "secondary"}
+                  disabled={attached.has(skill._id)}
                   onClick={() =>
                     onAttach({
-                      id: skill.id,
+                      id: skill._id,
                       name: skill.name,
                       slug: skill.slug,
-                      description: skill.description,
+                      description: skill.description ?? "",
                       bodyMd: skill.bodyMd,
                     })
                   }
                 >
-                  {attached.has(skill.id) ? "Attached" : "Attach"}
+                  {attached.has(skill._id) ? "Attached" : "Attach"}
                 </Button>
               </div>
             ))

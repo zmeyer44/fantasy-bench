@@ -1,22 +1,25 @@
 "use client";
 
+import { useAuthActions } from "@convex-dev/auth/react";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
-import { authClient } from "@/lib/auth/client";
 import { Button } from "@/components/ui";
 
 export function UserMenu({ name, email }: { name: string; email: string }) {
   const router = useRouter();
+  const { signOut } = useAuthActions();
   const [open, setOpen] = useState(false);
   const [pending, setPending] = useState(false);
 
   async function handleSignOut() {
     setPending(true);
-    await authClient.signOut();
+    // `signOut()` clears the Convex Auth cookie; the nav's `users.me`
+    // subscription flips to `null` on its own.
+    await signOut();
     setOpen(false);
+    setPending(false);
     router.push("/");
-    router.refresh();
   }
 
   return (
