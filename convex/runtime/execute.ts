@@ -112,6 +112,23 @@ class BudgetExceededError extends Error {
   }
 }
 
+/**
+ * Thrown (via the abort signal) when a step could not be persisted after
+ * retries. The AI SDK swallows errors thrown from `onStepEnd` and keeps looping,
+ * so a failed `persistStep` would otherwise silently lose the step, its usage
+ * event and its tool commits from the trace. Aborting the run and rethrowing
+ * turns it into a Workpool retry, which resumes from `lastPersistedStep`.
+ */
+class PersistFailedError extends Error {
+  constructor(readonly stepIndex: number, cause: unknown) {
+    super(`could not persist step ${stepIndex}: ${cause instanceof Error ? cause.message : String(cause)}`);
+    this.name = "PersistFailedError";
+  }
+}
+
+const PERSIST_ATTEMPTS = 5;
+const PERSIST_BACKOFF_MS = 250;
+
 class WallClockTimeoutError extends Error {
   constructor(readonly limitMs: number) {
     super(`run exceeded its ${Math.round(limitMs / 1000)}s wall-clock budget`);
@@ -453,6 +470,30 @@ export const executeRun = internalAction({
     const initialMessages: ModelMessage[] = [{ role: "user", content: prompt.user }];
     const replayed = await resumeMessages(ctx, runId, run.lastPersistedStep);
 
+    /** Set when a step could not be persisted; the run is aborted and rethrown. */
+    let persistFailure: PersistFailedError | null = null;
+    /** The controller of the model call in flight, so a persist failure can stop it. */
+    let activeController: AbortController | null = null;
+
+    async function persistWithRetry<T>(stepIndex: number, attempt: () => Promise<T>): Promise<T | null> {
+      let lastError: unknown = null;
+      for (let i = 0; i < PERSIST_ATTEMPTS; i++) {
+        try {
+          return await attempt();
+        } catch (error) {
+          lastError = error;
+          if (i < PERSIST_ATTEMPTS - 1) {
+            const backoff = PERSIST_BACKOFF_MS * 2 ** i * (0.5 + Math.random());
+            await new Promise((resolve) => setTimeout(resolve, backoff));
+          }
+        }
+      }
+      persistFailure = new PersistFailedError(stepIndex, lastError);
+      console.error(`[runtime] run ${runId}: ${persistFailure.message}`);
+      activeController?.abort(persistFailure);
+      return null;
+    }
+
     /** Per-step ledger write + persistence. `offset` shifts indices past the plan step. */
     function makeOnStepEnd(modelId: string, offset: () => number) {
       return async (step: StepResult<ToolSet>) => {
@@ -468,8 +509,10 @@ export const executeRun = internalAction({
         state.rejectedThisStep = 0;
 
         // One transaction: step document + usage event + rollups (persistStep
-        // calls internal.ledger.recordStep inside the same mutation).
-        const persisted = await ctx.runMutation(internal.runs.persistStep, {
+        // calls internal.ledger.recordStep inside the same mutation). Retried with
+        // backoff: at window open every team's first step lands on the same
+        // league/model rollup rows, so transient write conflicts are expected.
+        const persisted = await persistWithRetry(stepIndex, () => ctx.runMutation(internal.runs.persistStep, {
           runId,
           stepIndex,
           modelId,
@@ -491,7 +534,8 @@ export const executeRun = internalAction({
           ...(state.rationale ? { rationale: state.rationale } : {}),
           ...(isFallbackRun ? { isFallbackStep: true } : {}),
           ...(invalidActionCount > 0 ? { invalidActionCount } : {}),
-        });
+        }));
+        if (!persisted) return; // the run has been aborted; nothing to count
 
         totalCostUsd += persisted.costUsd;
         totalInputTokens += inputTokens;
@@ -549,6 +593,7 @@ export const executeRun = internalAction({
 
     async function runModel(modelId: string): Promise<void> {
       const controller = new AbortController();
+      activeController = controller;
       const timeout = new WallClockTimeoutError(wallClockMs);
       const timer = setTimeout(() => controller.abort(timeout), wallClockMs);
       // Step indices continue from whatever this run already persisted, so a
@@ -618,6 +663,7 @@ export const executeRun = internalAction({
 
     try {
       await runModel(primaryModelId);
+      if (persistFailure) throw persistFailure;
       if (budgetStopReason) {
         // The pre-step check aborted, but the provider had already returned and
         // the loop wound down through `toolChoice: 'none'` instead of throwing.

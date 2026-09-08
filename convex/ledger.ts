@@ -794,6 +794,13 @@ export const recordStep = internalMutation({
     const weekNo = run.weekNo;
     const createdAt = args.createdAt ?? Date.now();
 
+    // A run is counted once, on its first recorded event — regardless of which
+    // step index that is (a resumed run may start at lastPersistedStep + 1).
+    const priorEventForRun = await ctx.db
+      .query("usage_events")
+      .withIndex("by_runId_stepIndex", (q) => q.eq("runId", args.runId))
+      .first();
+
     const price = await resolvePriceAt(ctx, args.modelId, createdAt);
     const provider = args.provider ?? price.provider;
 
@@ -864,7 +871,7 @@ export const recordStep = internalMutation({
         stepCount: 1,
         // A run is counted once, on its first step — the same "distinct run ids"
         // figure the golden importer produced.
-        runCount: args.stepIndex === 0 ? 1 : 0,
+        runCount: priorEventForRun ? 0 : 1,
         fallbackCount: isFallbackStep && !run.ledgerOutcomeRecorded ? 1 : 0,
         invalidActionCount: Math.max(0, Math.round(args.invalidActionCount ?? 0)),
       },

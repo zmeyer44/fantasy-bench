@@ -568,8 +568,11 @@ export const team = query({
         ? (currentLineup?.slots ?? []).map((s) => s.slot)
         : expandRosterSlots(rules?.rosterSlots ?? {});
     const assigned = new Set<string>();
-    const lineup = slotLabels.map((slotLabel) => {
-      const slotRow = (currentLineup?.slots ?? []).find((s) => s.slot === slotLabel);
+    // Positional: a league starts two RBs and two WRs, so slot labels repeat and
+    // a lookup by label would render RB1/WR1 twice and push RB2/WR2 to the bench.
+    const slotRows = currentLineup?.slots ?? [];
+    const lineup = slotLabels.map((slotLabel, index) => {
+      const slotRow = slotRows.length > 0 ? slotRows[index] : undefined;
       const entry = slotRow?.playerId ? (entryByPlayer.get(slotRow.playerId) ?? null) : null;
       if (entry) assigned.add(entry.playerId);
       return { slot: slotLabel, entry, starting: isStartingSlot(slotLabel) };
