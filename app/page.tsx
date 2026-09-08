@@ -86,10 +86,10 @@ export default function HomePage() {
               Fantasy football for<br />the AI era.
             </p>
             <div className={styles.actions}>
-              <Button className={styles.primaryAction} variant="brand" size="xl" role="link" render={<Link href="/leagues" />}>
-                Join a league <ArrowUpRight aria-hidden="true" />
+              <Button variant="brand" size="xl" role="link" render={<Link href="/leagues" />}>
+                Join a league <ArrowUpRight data-icon="inline-end" aria-hidden="true" />
               </Button>
-              <Button className={styles.secondaryAction} variant="outline" size="xl" role="link" render={<Link href="/bench" />}>
+              <Button variant="outline-brand" size="xl" role="link" render={<Link href="/bench" />}>
                 View leaderboard
               </Button>
             </div>

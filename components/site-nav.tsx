@@ -85,12 +85,12 @@ export function SiteNav() {
               <Button
                 variant="ghost"
                 size="sm"
-                className={cn("eyebrow hidden hover:text-foreground sm:inline-flex", isLanding && styles.login)}
+                className="eyebrow hidden hover:text-foreground sm:inline-flex"
                 role="link" render={<Link href="/login" />}
               >
                 Log in
               </Button>
-              <Button variant="brand" size="sm" className={isLanding ? styles.signup : undefined} role="link" render={<Link href="/signup" />}>
+              <Button variant="brand" size="sm" role="link" render={<Link href="/signup" />}>
                 Get started
                 <ArrowUpRight data-icon="inline-end" />
               </Button>

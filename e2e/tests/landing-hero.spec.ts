@@ -35,6 +35,7 @@ test("landing hero remains readable and navigable across screen sizes", async ({
       expect(box!.x + box!.width).toBeLessThanOrEqual(width);
     }
     await page.screenshot({ path: `${screenshots}/${name}.png`, fullPage: true });
+    await page.screenshot({ path: `${screenshots}/${name}-hero.png`, fullPage: true, clip: { x: 0, y: 0, width, height: Math.ceil((await hero.boundingBox())!.y + (await hero.boundingBox())!.height) } });
   }
 
   // The mobile menu must expose the same destinations and dismiss on selection.
@@ -43,6 +44,7 @@ test("landing hero remains readable and navigable across screen sizes", async ({
   const menu = page.getByRole("dialog");
   await expect(menu).toBeVisible();
   await expect(menu.getByRole("link", { name: "Leaderboard" })).toHaveAttribute("href", "/bench");
+  await menu.evaluate((element) => Promise.all(element.getAnimations({ subtree: true }).map((animation) => animation.finished)));
   await page.screenshot({ path: `${screenshots}/mobile-menu.png` });
   await menu.getByRole("link", { name: "Docs" }).click();
   await expect(menu).not.toBeVisible();

@@ -5,8 +5,6 @@
   --hero-blue: #193fe5;
   --hero-ink: #a9b9e0;
   --hero-rule: #29303d;
-  --brand: var(--hero-lime);
-  --primary: var(--hero-lime);
   background: #090c0d;
 }
 
@@ -21,12 +19,7 @@
 .heading span + span { margin-top: .025em; }
 .heading span:last-child { color: var(--hero-lime); }
 .description { margin-top: 1.15vw; font-size: clamp(17px, 1.28vw, 23px); line-height: 1.35; letter-spacing: .11em; color: var(--hero-ink); }
-.actions { display: flex; gap: 1.55vw; margin-top: 2.3vw; }
-.primaryAction, .secondaryAction { height: clamp(48px, 3.65vw, 66px); border-radius: 0; font-family: var(--font-geist-mono), monospace; font-size: clamp(11px, .94vw, 17px); letter-spacing: .08em; text-transform: uppercase; padding-inline: 1.9vw; }
-.primaryAction { gap: 2vw; background: var(--hero-lime); color: #090c0d; }
-.primaryAction svg { width: 24px; height: 24px; }
-.secondaryAction { border-color: var(--hero-rule); background: transparent; color: var(--hero-ink); }
-.secondaryAction:hover { border-color: var(--hero-ink); background: #14191e; }
+.actions { display: flex; flex-wrap: wrap; gap: 1.55vw; margin-top: 2.3vw; }
 .signature { display: flex; align-items: center; gap: 2.7vw; margin-top: 3.05vw; color: var(--hero-ink); font-size: clamp(10px, .76vw, 14px); letter-spacing: .07em; line-height: 1.45; text-transform: uppercase; }
 .signal { display: flex; gap: 9px; }
 .signal i { height: 3px; width: 2.3vw; background: var(--hero-rule); }
@@ -53,15 +46,13 @@
 
 .header { position: relative; backdrop-filter: none; border-color: var(--hero-rule); }
 .header::before { content: ""; position: absolute; left: 0; top: 0; width: 7px; height: 76%; background: #5070f5; }
-.nav { height: clamp(80px, 6.35vw, 114px); max-width: 1800px; padding-inline: 5.1%; gap: 4.5vw; }
+.nav { height: clamp(80px, 6.35vw, 114px); max-width: 1800px; padding-inline: 5.1% 3.2%; gap: 4.5vw; }
 .brandLink { gap: 1.6vw; }
 .brandLogo { width: 43px; height: 43px; }
 .brandName { font-family: var(--font-geist-mono), monospace; font-size: clamp(16px, 1.36vw, 24px); font-weight: 700; letter-spacing: .08em; white-space: nowrap; }
 .navLinks { gap: 2.2vw; }
-.navLinks a, .login { font-size: clamp(11px, .86vw, 15px); color: var(--hero-ink); letter-spacing: .08em; }
+.navLinks a { font-size: clamp(11px, .86vw, 15px); color: var(--hero-ink); letter-spacing: .08em; }
 .account { gap: 2.5vw; }
-.signup { height: clamp(44px, 3.25vw, 59px); border-radius: 0; padding-inline: 1.45vw; gap: 1.55vw; font-size: clamp(11px, .93vw, 16px); }
-.signup svg { width: 23px; height: 23px; }
 
 @media (min-width: 1800px) {
   .heading { margin-top: 33px; }
@@ -74,7 +65,6 @@
   .heading { font-size: 9.65vw; }
   .description { margin-top: 24px; }
   .actions { gap: 12px; margin-top: 32px; }
-  .primaryAction, .secondaryAction { padding-inline: 15px; font-size: 10px; }
   .signature { margin-top: 40px; }
   .nav { gap: 3vw; }
   .navLinks { gap: 1vw; }
@@ -87,8 +77,6 @@
   .heading { font-size: clamp(96px, 15.5vw, 139px); margin-top: 30px; line-height: .81; }
   .description { margin-top: 26px; font-size: 19px; }
   .actions { margin-top: 28px; gap: 16px; }
-  .primaryAction, .secondaryAction { height: 54px; padding-inline: 24px; font-size: 12px; }
-  .primaryAction { gap: 28px; }
   .signature { margin-top: 32px; font-size: 10px; gap: 24px; }
   .signal i { width: 28px; }
   .art { position: relative; left: auto; right: auto; width: 100%; height: auto; aspect-ratio: 1.2; margin-top: 20px; font-size: 11px; }
@@ -103,7 +91,6 @@
   .navLinks { display: none; }
   .menuTrigger { display: inline-flex; width: 44px; height: 44px; }
   .account { gap: 12px; }
-  .signup { padding-inline: 16px; font-size: 11px; gap: 12px; }
 }
 @media (max-width: 600px) {
   .nav { height: 72px; gap: 8px; }
@@ -111,8 +98,6 @@
   .brandLogo { width: 31px; height: 31px; }
   .brandLink { gap: 7px; }
   .account { gap: 4px; }
-  .signup { padding-inline: 10px; font-size: 9px; gap: 4px; height: 40px; letter-spacing: .04em; }
-  .signup svg { width: 16px; height: 16px; }
   .menuTrigger { width: 36px; }
   .copy { padding-top: 42px; }
   .kicker { font-size: 10px; gap: 12px; letter-spacing: .08em; }
@@ -120,9 +105,6 @@
   .heading span { transform: scaleX(1.1); }
   .description { font-size: 16px; margin-top: 24px; }
   .actions { gap: 10px; }
-  .primaryAction, .secondaryAction { flex: 1; font-size: 9px; padding-inline: 10px; height: 48px; }
-  .primaryAction { gap: 12px; }
-  .primaryAction svg { width: 19px; height: 19px; }
   .signature { gap: 20px; margin-top: 26px; font-size: 9px; }
   .signal { gap: 6px; }
   .signal i { width: 22px; height: 2px; }
@@ -144,5 +126,4 @@
 @media (max-width: 359px) {
   .brandName { max-width: 76px; white-space: normal; line-height: 1.2; }
   .kicker { font-size: 9px; }
-  .primaryAction, .secondaryAction { font-size: 8px; letter-spacing: .04em; }
 }
