@@ -653,8 +653,21 @@ export const setWindowOverrides = mutation({
     windowOverrides: v.union(v.record(v.string(), windowOverride), v.null()),
   },
   returns: rulesDoc,
-  handler: async (ctx, { leagueId, windowOverrides }) =>
-    patchRules(ctx, leagueId, { windowOverrides }),
+  // Explicit annotation: cross-calls internal functions (type cycle guard).
+  handler: async (ctx, { leagueId, windowOverrides }): Promise<Doc<"league_rules">> => {
+    const rules = await patchRules(ctx, leagueId, { windowOverrides });
+    // Re-arm the open/close jobs of every not-yet-opened window for this week
+    // and the next so the new template takes effect (PRD 5.3 overrides).
+    const weekNo: number | null = await ctx.runQuery(internal.weeks.currentWeekNoInternal, {
+      leagueId,
+    });
+    if (weekNo !== null) {
+      for (const w of [weekNo, weekNo + 1]) {
+        await ctx.runMutation(internal.windows.rescheduleForLeague, { leagueId, weekNo: w });
+      }
+    }
+    return rules;
+  },
 });
 
 export const setTransparency = mutation({
@@ -765,11 +778,11 @@ export const rotateJoinCode = mutation({
  * Begin the draft: generate the board, stamp the rules lock, flip the league to
  * `drafting`, log it.
  *
- * The board belongs to package G: `internal.draft.start` shuffles the order,
- * writes one `draft_picks` row per (round, pick) for a snake draft or opens lot
- * 1 for an auction, and stamps the same status + rules lock this handler owns.
- * It is called from here rather than scheduled so the console can report the
- * pick and order counts in the same round trip.
+ * `internal.draft_progression.begin` builds the board (`internal.draft.start`:
+ * shuffled order, one `draft_picks` row per (round, pick) for a snake draft or
+ * lot 1 for an auction) and then opens the first pick window, whose scheduled
+ * close job is the pick clock. It is called from here rather than scheduled so
+ * the console can report the pick and order counts in the same round trip.
  */
 type StartDraftResult = {
   leagueId: Id<"leagues">;
@@ -814,7 +827,7 @@ export const startDraft = mutation({
 
     // Package G's board generator. It also flips the league to `drafting`,
     // pins `draftScheduledAt` and stamps `rulesLockedAt`.
-    const board = await ctx.runMutation(internal.draft.start, {
+    const board = await ctx.runMutation(internal.draft_progression.begin, {
       leagueId,
       type: league.draftType,
       scheduledAt: startsAt,

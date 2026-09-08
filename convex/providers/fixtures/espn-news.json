@@ -1,0 +1,2049 @@
+{
+ "header": "NFL News",
+ "link": {
+  "language": "en",
+  "rel": [
+   "index",
+   "desktop",
+   "league"
+  ],
+  "href": "https://www.espn.com/nfl/",
+  "text": "All NFL News",
+  "shortText": "All News",
+  "isExternal": false,
+  "isPremium": false
+ },
+ "articles": [
+  {
+   "id": 49843209,
+   "nowId": "1-49843209",
+   "contentKey": "49843209-1-6-1",
+   "dataSourceIdentifier": "f8b5701a867ac",
+   "type": "Story",
+   "headline": "Peyton, Eli Manning take 'ManningCast' to new heights in 'ManningCast: Heist'",
+   "description": "\"ManningCast\" is back with a new season on Monday Night Football -- and the Manning brothers with a new look.",
+   "lastModified": "2026-09-08T13:04:57Z",
+   "published": "2026-09-08T13:04:57Z",
+   "images": [
+    {
+     "dataSourceIdentifier": "eeeaf68b280f9",
+     "id": 49859710,
+     "type": "header",
+     "name": "ManningCast [1296x729]",
+     "credit": "Omaha Productions",
+     "height": 729,
+     "width": 1296,
+     "url": "https://a.espncdn.com/photo/2026/0907/r1712794_1296x729_16-9.jpg"
+    }
+   ],
+   "categories": [
+    {
+     "id": 9572,
+     "type": "league",
+     "uid": "s:20~l:28",
+     "guid": "ad4c3bd2-ddb6-3f8c-8abf-744855a08fa4",
+     "description": "NFL",
+     "sportId": 28,
+     "leagueId": 28,
+     "league": {
+      "id": 28,
+      "description": "NFL",
+      "abbreviation": "NFL",
+      "links": {
+       "mobile": {
+        "leagues": {
+         "href": "https://www.espn.com/nfl/"
+        }
+       },
+       "web": {
+        "leagues": {
+         "href": "https://www.espn.com/nfl/"
+        }
+       }
+      }
+     }
+    },
+    {
+     "id": 696252,
+     "type": "contributor",
+     "guid": "dbb0fd73-550f-375b-8618-5de6a836f3c4",
+     "description": "Kalan Hooks",
+     "slug": "kalan-hooks",
+     "contributor": {
+      "id": 4058,
+      "description": "Kalan Hooks"
+     }
+    }
+   ],
+   "byline": "Kalan Hooks",
+   "links": {
+    "api": {
+     "self": {
+      "href": "https://content.core.api.espn.com/v1/sports/news/49843209"
+     }
+    },
+    "app": {
+     "sportscenter": {
+      "href": "sportscenter://x-callback-url/showStory?uid=49843209"
+     }
+    },
+    "mobile": {
+     "href": "http://m.espn.go.com/nfl/story?storyId=49843209"
+    },
+    "web": {
+     "href": "https://www.espn.com/nfl/story/_/id/49843209/peyton-eli-manning-manningcast-heist-2026"
+    }
+   },
+   "premium": false
+  },
+  {
+   "id": 49868293,
+   "nowId": "1-49868293",
+   "contentKey": "49868293-1-293-1",
+   "dataSourceIdentifier": "6a51531f5b760",
+   "type": "Media",
+   "headline": "'This is massive!': Saturday discusses Cowboys' big loss before the season",
+   "description": "'This is massive!': Saturday discusses Cowboys' big loss before the season",
+   "lastModified": "2026-09-08T13:25:07Z",
+   "published": "2026-09-08T13:25:07Z",
+   "images": [
+    {
+     "name": "'This is massive!': Saturday discusses Cowboys' big loss before the season",
+     "caption": "'This is massive!': Saturday discusses Cowboys' big loss before the season",
+     "alt": "",
+     "height": 324,
+     "width": 576,
+     "url": "https://espnmedia-cdn.akamaized.net/espn/media/common/2026/0908/ss_20260908_084946516_3652393533/ss_20260908_084946516_3652393533.jpg"
+    }
+   ],
+   "categories": [
+    {
+     "id": 9572,
+     "type": "league",
+     "uid": "s:20~l:28",
+     "guid": "ad4c3bd2-ddb6-3f8c-8abf-744855a08fa4",
+     "description": "NFL",
+     "sportId": 28,
+     "leagueId": 28,
+     "league": {
+      "id": 28,
+      "description": "NFL",
+      "abbreviation": "NFL",
+      "links": {
+       "mobile": {
+        "leagues": {
+         "href": "https://www.espn.com/nfl/"
+        }
+       },
+       "web": {
+        "leagues": {
+         "href": "https://www.espn.com/nfl/"
+        }
+       }
+      }
+     }
+    },
+    {
+     "id": 711826,
+     "type": "editorialindicator",
+     "guid": "122acb1b-7e9e-31cf-88a1-d2dc784385cf",
+     "description": "2 Star Rating"
+    },
+    {
+     "id": 730035,
+     "type": "editorialindicator",
+     "guid": "765b3968-7a2d-3d80-bded-8ba8b1e1cc03",
+     "description": "Verts - Exclude Content"
+    },
+    {
+     "id": 1298,
+     "type": "team",
+     "uid": "s:20~l:28~t:6",
+     "guid": "b0fc8fb7-9dbe-e574-9008-6f0ee7c6b234",
+     "description": "Dallas Cowboys",
+     "sportId": 28,
+     "teamId": 6,
+     "team": {
+      "id": 6,
+      "description": "Dallas Cowboys",
+      "abbreviation": "DAL",
+      "shortDisplayName": "Cowboys",
+      "links": {
+       "mobile": {
+        "teams": {
+         "href": "https://www.espn.com/nfl/team/_/name/dal/dallas-cowboys"
+        }
+       },
+       "web": {
+        "teams": {
+         "href": "https://www.espn.com/nfl/team/_/name/dal/dallas-cowboys"
+        }
+       }
+      }
+     }
+    },
+    {
+     "id": 529379,
+     "type": "athlete",
+     "uid": "s:20~l:28~a:4568652",
+     "guid": "84db0c55-2277-2d48-f164-595a103b4acf",
+     "description": "Tyler Smith",
+     "sportId": 28,
+     "athleteId": 4568652,
+     "athlete": {
+      "id": 4568652,
+      "description": "Tyler Smith",
+      "links": {
+       "mobile": {
+        "athletes": {
+         "href": "https://www.espn.com/nfl/player/_/id/4568652/tyler-smith"
+        }
+       },
+       "web": {
+        "athletes": {
+         "href": "https://www.espn.com/nfl/player/_/id/4568652/tyler-smith"
+        }
+       }
+      }
+     }
+    },
+    {
+     "id": 756046,
+     "type": "series",
+     "guid": "e114d885-c579-4bfb-b35c-4fc63c302d00",
+     "description": "Get Up!",
+     "series": {
+      "description": "Get Up!"
+     }
+    }
+   ],
+   "links": {
+    "api": {
+     "artwork": {
+      "href": "https://artwork.api.espn.com/artwork/collections/media/c18be281-e8f6-43bf-8b50-3ef4cc8c1da7"
+     },
+     "self": {
+      "href": "https://content.core.api.espn.com/v1/video/clips/49868293"
+     }
+    },
+    "sportscenter": {
+     "href": "sportscenter://x-callback-url/showVideo?videoID=49868293&videoDSI=6a51531f5b760"
+    },
+    "web": {
+     "href": "https://www.espn.com/video/clip/_/id/49868293/saturday-discusses-cowboys-big-loss-season",
+     "self": {
+      "href": "https://www.espn.com/video/clip/_/id/49868293/saturday-discusses-cowboys-big-loss-season",
+      "dsi": {
+       "href": "https://www.espn.com/video/clip?id=6a51531f5b760"
+      }
+     }
+    }
+   },
+   "premium": false
+  },
+  {
+   "id": 49868230,
+   "nowId": "1-49868230",
+   "contentKey": "49868230-1-293-1",
+   "dataSourceIdentifier": "786de5c028fc1",
+   "type": "Media",
+   "headline": "How Christian Gonzalez became the NFL’s highest-paid cornerback",
+   "description": "How Christian Gonzalez became the NFL’s highest-paid cornerback  ",
+   "lastModified": "2026-09-08T12:53:33Z",
+   "published": "2026-09-08T12:53:33Z",
+   "images": [
+    {
+     "name": "How Christian Gonzalez became the NFL’s highest-paid cornerback",
+     "caption": "How Christian Gonzalez became the NFL’s highest-paid cornerback ",
+     "alt": "",
+     "height": 324,
+     "width": 576,
+     "url": "https://espnmedia-cdn.akamaized.net/espn/media/common/2026/0908/ss_20260908_083720563_3652384/ss_20260908_083720563_3652384.jpg"
+    }
+   ],
+   "categories": [
+    {
+     "id": 9572,
+     "type": "league",
+     "uid": "s:20~l:28",
+     "guid": "ad4c3bd2-ddb6-3f8c-8abf-744855a08fa4",
+     "description": "NFL",
+     "sportId": 28,
+     "leagueId": 28,
+     "league": {
+      "id": 28,
+      "description": "NFL",
+      "abbreviation": "NFL",
+      "links": {
+       "mobile": {
+        "leagues": {
+         "href": "https://www.espn.com/nfl/"
+        }
+       },
+       "web": {
+        "leagues": {
+         "href": "https://www.espn.com/nfl/"
+        }
+       }
+      }
+     }
+    },
+    {
+     "id": 2321,
+     "type": "team",
+     "uid": "s:20~l:28~t:17",
+     "guid": "0078f353-fe3e-67ed-a42c-43cca0568e21",
+     "description": "New England Patriots",
+     "sportId": 28,
+     "teamId": 17,
+     "team": {
+      "id": 17,
+      "description": "New England Patriots",
+      "abbreviation": "NE",
+      "shortDisplayName": "Patriots",
+      "links": {
+       "mobile": {
+        "teams": {
+         "href": "https://www.espn.com/nfl/team/_/name/ne/new-england-patriots"
+        }
+       },
+       "web": {
+        "teams": {
+         "href": "https://www.espn.com/nfl/team/_/name/ne/new-england-patriots"
+        }
+       }
+      }
+     }
+    },
+    {
+     "id": 440999,
+     "type": "athlete",
+     "uid": "s:20~l:28~a:4686772",
+     "guid": "ba95b578-b00e-3156-8e2b-b24e3974f8ef",
+     "description": "Christian Gonzalez",
+     "sportId": 28,
+     "athleteId": 4686772,
+     "athlete": {
+      "id": 4686772,
+      "description": "Christian Gonzalez",
+      "links": {
+       "mobile": {
+        "athletes": {
+         "href": "https://www.espn.com/nfl/player/_/id/4686772/christian-gonzalez"
+        }
+       },
+       "web": {
+        "athletes": {
+         "href": "https://www.espn.com/nfl/player/_/id/4686772/christian-gonzalez"
+        }
+       }
+      }
+     }
+    },
+    {
+     "id": 730035,
+     "type": "editorialindicator",
+     "guid": "765b3968-7a2d-3d80-bded-8ba8b1e1cc03",
+     "description": "Verts - Exclude Content"
+    },
+    {
+     "id": 778545,
+     "type": "series",
+     "guid": "d5288db3-1a32-4b86-817e-92d8a31b5baf",
+     "description": "Good Morning Football",
+     "series": {
+      "description": "Good Morning Football"
+     }
+    },
+    {
+     "id": 177758,
+     "type": "topic",
+     "guid": "17256dc5-749f-706a-efe0-b8d4f205c4f3",
+     "description": "nfl game footage",
+     "sportId": 0,
+     "topicId": 615
+    }
+   ],
+   "links": {
+    "api": {
+     "artwork": {
+      "href": "https://artwork.api.espn.com/artwork/collections/media/26705b91-bd04-4f06-86b4-52b20d44ae0d"
+     },
+     "self": {
+      "href": "https://content.core.api.espn.com/v1/video/clips/49868230"
+     }
+    },
+    "sportscenter": {
+     "href": "sportscenter://x-callback-url/showVideo?videoID=49868230&videoDSI=786de5c028fc1"
+    },
+    "web": {
+     "href": "https://www.espn.com/video/clip/_/id/49868230/how-christian-gonzalez-became-nfls-highest-paid-cornerback",
+     "self": {
+      "href": "https://www.espn.com/video/clip/_/id/49868230/how-christian-gonzalez-became-nfls-highest-paid-cornerback",
+      "dsi": {
+       "href": "https://www.espn.com/video/clip?id=786de5c028fc1"
+      }
+     }
+    }
+   },
+   "premium": false
+  },
+  {
+   "id": 49674623,
+   "nowId": "1-49674623",
+   "contentKey": "49674623-1-6-1",
+   "dataSourceIdentifier": "20b759eaebd44",
+   "type": "Story",
+   "headline": "Four keys for betting the 2026 NFL season, plus three early prop plays",
+   "description": "Ben Solak offers his keys to betting the 2026 NFL season, strategies and early bets before Week 1.",
+   "lastModified": "2026-09-08T10:47:22Z",
+   "published": "2026-09-08T10:47:22Z",
+   "images": [
+    {
+     "dataSourceIdentifier": "fda21d4a3079e",
+     "id": 47756868,
+     "type": "header",
+     "name": "2025 NFL Betting wrapped: The teams on repeat, the bad beats and the perfect playlist for 2026 [1500x844]",
+     "alt": "Matthew Stafford, Drake Maye, Jaxson Smith-Njigba and Saquon Barkley",
+     "credit": "Illustration by ESPN",
+     "height": 844,
+     "width": 1500,
+     "url": "https://a.espncdn.com/photo/2026/0128/nfl_betting-wrapped_fc_16x9.jpg"
+    },
+    {
+     "dataSourceIdentifier": "24f65a033fd0f",
+     "id": 49806841,
+     "type": "header",
+     "name": "Las Vegas betting [608x342] - Copy",
+     "caption": "Make sure you do your research and have a budget before laying down your hard-earned money.",
+     "alt": "Las Vegas bets",
+     "credit": "Ethan Miller/Getty Images",
+     "height": 342,
+     "width": 608,
+     "url": "https://a.espncdn.com/photo/2024/1106/r1411280_608x342_16-9.jpg"
+    },
+    {
+     "dataSourceIdentifier": "068bb84158fb6",
+     "id": 49806803,
+     "type": "header",
+     "name": "Detroit Lions wide receiver Jameson Williams [608x342]",
+     "caption": "Jameson Williams has produced back-to-back 1,000-yard receiving seasons in a potent Lions offense.",
+     "alt": "Jameson Williams",
+     "credit": "Scott W. Grau/Icon Sportswire",
+     "height": 342,
+     "width": 608,
+     "url": "https://a.espncdn.com/photo/2026/0902/r1710593_608x342_16-9.jpg"
+    },
+    {
+     "dataSourceIdentifier": "12499b5697e4d",
+     "id": 15477487,
+     "type": "header",
+     "name": "Numbers Column illustration [608x342]",
+     "credit": "Illustration by Jason Schneider",
+     "height": 342,
+     "width": 608,
+     "url": "https://a.espncdn.com/photo/2016/0506/r80767_608x342_16-9.jpg"
+    }
+   ],
+   "categories": [
+    {
+     "id": 611584,
+     "type": "league",
+     "guid": "550a1e9e-377e-3019-bf5e-19c027d50a49",
+     "description": "Sports Betting",
+     "sportId": 22000,
+     "leagueId": 22000,
+     "league": {
+      "id": 22000,
+      "description": "Sports Betting"
+     }
+    },
+    {
+     "id": 137817,
+     "type": "topic",
+     "guid": "14f579db-79ec-a898-9405-8fec63e16063",
+     "description": "news – sports betting",
+     "sportId": 0,
+     "topicId": 179
+    },
+    {
+     "id": 9572,
+     "type": "league",
+     "uid": "s:20~l:28",
+     "guid": "ad4c3bd2-ddb6-3f8c-8abf-744855a08fa4",
+     "description": "NFL",
+     "sportId": 28,
+     "leagueId": 28,
+     "league": {
+      "id": 28,
+      "description": "NFL",
+      "abbreviation": "NFL",
+      "links": {
+       "mobile": {
+        "leagues": {
+         "href": "https://www.espn.com/nfl/"
+        }
+       },
+       "web": {
+        "leagues": {
+         "href": "https://www.espn.com/nfl/"
+        }
+       }
+      }
+     }
+    },
+    {
+     "id": 129297,
+     "type": "topic",
+     "guid": "ffd795dd-dc60-d4c3-f868-831dc2ec21b3",
+     "description": "news - nfl",
+     "sportId": 0,
+     "topicId": 121
+    }
+   ],
+   "byline": "Ben Solak",
+   "links": {
+    "api": {
+     "self": {
+      "href": "https://content.core.api.espn.com/v1/sports/news/49674623"
+     }
+    },
+    "app": {
+     "sportscenter": {
+      "href": "sportscenter://x-callback-url/showStory?uid=49674623"
+     }
+    },
+    "mobile": {
+     "href": "http://m.espn.go.com/wireless/story?storyId=49674623"
+    },
+    "web": {
+     "href": "https://www.espn.com/espn/betting/story/_/id/49674623/nfl-betting-guide-2026-strategy-tips-odds-props-parlays"
+    }
+   },
+   "premium": false
+  },
+  {
+   "id": 49860263,
+   "nowId": "1-49860263",
+   "contentKey": "49860263-1-6-1",
+   "dataSourceIdentifier": "d8a3b349dee6a",
+   "type": "Story",
+   "headline": "Panthers banking on RBs Hubbard, Brooks despite injury histories",
+   "description": "Carolina wants to run the ball more, but how will each back -- including AJ Dillon -- handle the workload?",
+   "lastModified": "2026-09-08T12:24:34Z",
+   "published": "2026-09-08T12:24:34Z",
+   "images": [
+    {
+     "dataSourceIdentifier": "f1531aa10a82f",
+     "id": 49860472,
+     "type": "header",
+     "name": "Chuba Hubbard & AJ Dillon & Jonathon Brooks [608x342]",
+     "caption": "From left: Chuba Hubbard, AJ Dillon and Jonathon Brooks will form the Panthers' backfield in 2026.",
+     "alt": "Chuba Hubbard, AJ Dillon, Jonathon Brooks",
+     "credit": "Jim Dedmon/Imagn Images",
+     "height": 342,
+     "width": 608,
+     "url": "https://a.espncdn.com/photo/2026/0907/r1712828_608x342_16-9.jpg"
+    }
+   ],
+   "categories": [
+    {
+     "id": 9572,
+     "type": "league",
+     "uid": "s:20~l:28",
+     "guid": "ad4c3bd2-ddb6-3f8c-8abf-744855a08fa4",
+     "description": "NFL",
+     "sportId": 28,
+     "leagueId": 28,
+     "league": {
+      "id": 28,
+      "description": "NFL",
+      "abbreviation": "NFL",
+      "links": {
+       "mobile": {
+        "leagues": {
+         "href": "https://www.espn.com/nfl/"
+        }
+       },
+       "web": {
+        "leagues": {
+         "href": "https://www.espn.com/nfl/"
+        }
+       }
+      }
+     }
+    },
+    {
+     "id": 2146,
+     "type": "team",
+     "uid": "s:20~l:28~t:29",
+     "guid": "647c27bf-ab86-550e-5b83-91c29e73e4a9",
+     "description": "Carolina Panthers",
+     "sportId": 28,
+     "teamId": 29,
+     "team": {
+      "id": 29,
+      "description": "Carolina Panthers",
+      "abbreviation": "CAR",
+      "shortDisplayName": "Panthers",
+      "links": {
+       "mobile": {
+        "teams": {
+         "href": "https://www.espn.com/nfl/team/_/name/car/carolina-panthers"
+        }
+       },
+       "web": {
+        "teams": {
+         "href": "https://www.espn.com/nfl/team/_/name/car/carolina-panthers"
+        }
+       }
+      }
+     }
+    },
+    {
+     "id": 470498,
+     "type": "athlete",
+     "uid": "s:20~l:28~a:4241416",
+     "guid": "7c6b0551-49b5-aa13-9e26-7db2f9dad46f",
+     "description": "Chuba Hubbard",
+     "sportId": 28,
+     "athleteId": 4241416,
+     "athlete": {
+      "id": 4241416,
+      "description": "Chuba Hubbard",
+      "links": {
+       "mobile": {
+        "athletes": {
+         "href": "https://www.espn.com/nfl/player/_/id/4241416/chuba-hubbard"
+        }
+       },
+       "web": {
+        "athletes": {
+         "href": "https://www.espn.com/nfl/player/_/id/4241416/chuba-hubbard"
+        }
+       }
+      }
+     }
+    },
+    {
+     "id": 497629,
+     "type": "athlete",
+     "uid": "s:20~l:28~a:4678008",
+     "guid": "c349695b-9c76-39bf-878f-699e76ba2131",
+     "description": "Jonathon Brooks",
+     "sportId": 28,
+     "athleteId": 4678008,
+     "athlete": {
+      "id": 4678008,
+      "description": "Jonathon Brooks",
+      "links": {
+       "mobile": {
+        "athletes": {
+         "href": "https://www.espn.com/nfl/player/_/id/4678008/jonathon-brooks"
+        }
+       },
+       "web": {
+        "athletes": {
+         "href": "https://www.espn.com/nfl/player/_/id/4678008/jonathon-brooks"
+        }
+       }
+      }
+     }
+    }
+   ],
+   "byline": "Mike Kaye",
+   "links": {
+    "api": {
+     "self": {
+      "href": "https://content.core.api.espn.com/v1/sports/news/49860263"
+     }
+    },
+    "app": {
+     "sportscenter": {
+      "href": "sportscenter://x-callback-url/showStory?uid=49860263"
+     }
+    },
+    "mobile": {
+     "href": "http://m.espn.go.com/nfl/story?storyId=49860263"
+    },
+    "web": {
+     "href": "https://www.espn.com/nfl/story/_/id/49860263/carolina-panthers-banking-running-backs-chuba-hubbard-jonathon-brooks-injury-histories"
+    }
+   },
+   "premium": false
+  },
+  {
+   "id": 49803391,
+   "nowId": "1-49803391",
+   "contentKey": "49803391-1-6-1",
+   "dataSourceIdentifier": "d1ee42f0d5a7e",
+   "type": "Story",
+   "headline": "NFC East: Sizing up the Cowboys, Eagles, Giants and Commanders",
+   "description": "Our reporters discuss what needs to go right for the Eagles, Cowboys, Commanders and Giants in 2026.",
+   "lastModified": "2026-09-08T10:00:03Z",
+   "published": "2026-09-08T10:00:03Z",
+   "images": [
+    {
+     "dataSourceIdentifier": "843da82b622be",
+     "id": 49217221,
+     "type": "header",
+     "name": "NFC East roundtable [1296x729] 1",
+     "caption": "Giants WR Malik Nabers, Cowboys QB Dak Prescott, Commanders QB Jayden Daniels, Eagles RB Saquon Barkley",
+     "alt": "NFC East roundtable",
+     "credit": "ESPN",
+     "height": 729,
+     "width": 1296,
+     "url": "https://a.espncdn.com/photo/2025/0619/nfc_east_roundtable_1296x729.png"
+    },
+    {
+     "dataSourceIdentifier": "3d8d791a5a16f",
+     "id": 49859194,
+     "type": "header",
+     "name": "Hurts [608x342]",
+     "caption": "Jalen Hurts will be commanding an Eagles offense under a new coordinator again.",
+     "credit": "Scott Taetsch/Getty Images",
+     "height": 342,
+     "width": 608,
+     "url": "https://a.espncdn.com/photo/2026/0907/r1712752_608x342_16-9.jpg"
+    },
+    {
+     "dataSourceIdentifier": "33662a2feede9",
+     "id": 49577278,
+     "type": "header",
+     "name": "Dak [608x342]",
+     "caption": "Dallas Cowboys quarterback Dak Prescott gives a thumbs-up during training camp in Oxnard, California.",
+     "credit": "AP Photo/Mark J. Terrill",
+     "height": 342,
+     "width": 608,
+     "url": "https://a.espncdn.com/photo/2026/0810/r1700099_608x342_16-9.jpg"
+    },
+    {
+     "dataSourceIdentifier": "fe7b20973808a",
+     "id": 49859040,
+     "type": "header",
+     "name": "Odafe Oweh [608x342]",
+     "caption": "The Commanders are counting on linebacker Odafe Oweh, right, to make a big impact on a defense that also includes cornerback Mike Sainristil, left.",
+     "credit": "Tasos Katopodis/Getty Images for SiriusXM",
+     "height": 342,
+     "width": 608,
+     "url": "https://a.espncdn.com/photo/2026/0907/r1712744_608x342_16-9.jpg"
+    },
+    {
+     "type": "Media",
+     "name": "Stephen A. crashes 'Get Up' to respond to Schefter's Cowboys warning",
+     "caption": "Stephen A. crashes 'Get Up' to respond to Schefter's Cowboys warning",
+     "height": 324,
+     "width": 576,
+     "url": "https://espnmedia-cdn.akamaized.net/espn/media/common/2026/0902/dm_260902_Stephen_A_crashed_Get_up/dm_260902_Stephen_A_crashed_Get_up.jpg"
+    }
+   ],
+   "categories": [
+    {
+     "id": 9572,
+     "type": "league",
+     "uid": "s:20~l:28",
+     "guid": "ad4c3bd2-ddb6-3f8c-8abf-744855a08fa4",
+     "description": "NFL",
+     "sportId": 28,
+     "leagueId": 28,
+     "league": {
+      "id": 28,
+      "description": "NFL",
+      "abbreviation": "NFL",
+      "links": {
+       "mobile": {
+        "leagues": {
+         "href": "https://www.espn.com/nfl/"
+        }
+       },
+       "web": {
+        "leagues": {
+         "href": "https://www.espn.com/nfl/"
+        }
+       }
+      }
+     }
+    },
+    {
+     "id": 1298,
+     "type": "team",
+     "uid": "s:20~l:28~t:6",
+     "guid": "b0fc8fb7-9dbe-e574-9008-6f0ee7c6b234",
+     "description": "Dallas Cowboys",
+     "sportId": 28,
+     "teamId": 6,
+     "team": {
+      "id": 6,
+      "description": "Dallas Cowboys",
+      "abbreviation": "DAL",
+      "shortDisplayName": "Cowboys",
+      "links": {
+       "mobile": {
+        "teams": {
+         "href": "https://www.espn.com/nfl/team/_/name/dal/dallas-cowboys"
+        }
+       },
+       "web": {
+        "teams": {
+         "href": "https://www.espn.com/nfl/team/_/name/dal/dallas-cowboys"
+        }
+       }
+      }
+     }
+    },
+    {
+     "id": 1352,
+     "type": "team",
+     "uid": "s:20~l:28~t:19",
+     "guid": "378600ea-2397-8364-8399-b7c1606a49a7",
+     "description": "New York Giants",
+     "sportId": 28,
+     "teamId": 19,
+     "team": {
+      "id": 19,
+      "description": "New York Giants",
+      "abbreviation": "NYG",
+      "shortDisplayName": "Giants",
+      "links": {
+       "mobile": {
+        "teams": {
+         "href": "https://www.espn.com/nfl/team/_/name/nyg/new-york-giants"
+        }
+       },
+       "web": {
+        "teams": {
+         "href": "https://www.espn.com/nfl/team/_/name/nyg/new-york-giants"
+        }
+       }
+      }
+     }
+    },
+    {
+     "id": 1407,
+     "type": "team",
+     "uid": "s:20~l:28~t:21",
+     "guid": "d1a9b001-1df7-fbd7-ae4c-6ca7065286ec",
+     "description": "Philadelphia Eagles",
+     "sportId": 28,
+     "teamId": 21,
+     "team": {
+      "id": 21,
+      "description": "Philadelphia Eagles",
+      "abbreviation": "PHI",
+      "shortDisplayName": "Eagles",
+      "links": {
+       "mobile": {
+        "teams": {
+         "href": "https://www.espn.com/nfl/team/_/name/phi/philadelphia-eagles"
+        }
+       },
+       "web": {
+        "teams": {
+         "href": "https://www.espn.com/nfl/team/_/name/phi/philadelphia-eagles"
+        }
+       }
+      }
+     }
+    },
+    {
+     "id": 1462,
+     "type": "team",
+     "uid": "s:20~l:28~t:28",
+     "guid": "fbeaf73e-6d6c-cca4-0809-713d9d741f90",
+     "description": "Washington Commanders",
+     "sportId": 28,
+     "teamId": 28,
+     "team": {
+      "id": 28,
+      "description": "Washington Commanders",
+      "abbreviation": "WSH",
+      "shortDisplayName": "Commanders",
+      "links": {
+       "mobile": {
+        "teams": {
+         "href": "https://www.espn.com/nfl/team/_/name/wsh/washington-commanders"
+        }
+       },
+       "web": {
+        "teams": {
+         "href": "https://www.espn.com/nfl/team/_/name/wsh/washington-commanders"
+        }
+       }
+      }
+     }
+    },
+    {
+     "id": 153118,
+     "type": "athlete",
+     "uid": "s:20~l:28~a:2577417",
+     "guid": "5f09781b-6b0b-7325-049b-a91e60d794e6",
+     "description": "Dak Prescott",
+     "sportId": 28,
+     "athleteId": 2577417,
+     "athlete": {
+      "id": 2577417,
+      "description": "Dak Prescott",
+      "links": {
+       "mobile": {
+        "athletes": {
+         "href": "https://www.espn.com/nfl/player/_/id/2577417/dak-prescott"
+        }
+       },
+       "web": {
+        "athletes": {
+         "href": "https://www.espn.com/nfl/player/_/id/2577417/dak-prescott"
+        }
+       }
+      }
+     }
+    },
+    {
+     "id": 529504,
+     "type": "athlete",
+     "uid": "s:20~l:28~a:4426354",
+     "guid": "ab0fe70b-0fb4-fc8e-55e1-8f5204851a9d",
+     "description": "George Pickens",
+     "sportId": 28,
+     "athleteId": 4426354,
+     "athlete": {
+      "id": 4426354,
+      "description": "George Pickens",
+      "links": {
+       "mobile": {
+        "athletes": {
+         "href": "https://www.espn.com/nfl/player/_/id/4426354/george-pickens"
+        }
+       },
+       "web": {
+        "athletes": {
+         "href": "https://www.espn.com/nfl/player/_/id/4426354/george-pickens"
+        }
+       }
+      }
+     }
+    },
+    {
+     "id": 489486,
+     "type": "athlete",
+     "uid": "s:20~l:28~a:4595348",
+     "guid": "44a2174b-1d11-3acf-8e75-fe0c13db47a6",
+     "description": "Malik Nabers",
+     "sportId": 28,
+     "athleteId": 4595348,
+     "athlete": {
+      "id": 4595348,
+      "description": "Malik Nabers",
+      "links": {
+       "mobile": {
+        "athletes": {
+         "href": "https://www.espn.com/nfl/player/_/id/4595348/malik-nabers"
+        }
+       },
+       "web": {
+        "athletes": {
+         "href": "https://www.espn.com/nfl/player/_/id/4595348/malik-nabers"
+        }
+       }
+      }
+     }
+    },
+    {
+     "id": 491567,
+     "type": "athlete",
+     "uid": "s:20~l:28~a:4689114",
+     "guid": "13e97d3e-2171-371b-9a7a-2c44670b5a62",
+     "description": "Jaxson Dart",
+     "sportId": 28,
+     "athleteId": 4689114,
+     "athlete": {
+      "id": 4689114,
+      "description": "Jaxson Dart",
+      "links": {
+       "mobile": {
+        "athletes": {
+         "href": "https://www.espn.com/nfl/player/_/id/4689114/jaxson-dart"
+        }
+       },
+       "web": {
+        "athletes": {
+         "href": "https://www.espn.com/nfl/player/_/id/4689114/jaxson-dart"
+        }
+       }
+      }
+     }
+    },
+    {
+     "id": 435090,
+     "type": "athlete",
+     "uid": "s:20~l:28~a:4040715",
+     "guid": "caceb80c-6350-a107-9fcf-7c7bd1b4edd8",
+     "description": "Jalen Hurts",
+     "sportId": 28,
+     "athleteId": 4040715,
+     "athlete": {
+      "id": 4040715,
+      "description": "Jalen Hurts",
+      "links": {
+       "mobile": {
+        "athletes": {
+         "href": "https://www.espn.com/nfl/player/_/id/4040715/jalen-hurts"
+        }
+       },
+       "web": {
+        "athletes": {
+         "href": "https://www.espn.com/nfl/player/_/id/4040715/jalen-hurts"
+        }
+       }
+      }
+     }
+    },
+    {
+     "id": 184478,
+     "type": "athlete",
+     "uid": "s:20~l:28~a:3929630",
+     "guid": "94486c18-dd3e-6081-a3fe-4a26b71ddcdc",
+     "description": "Saquon Barkley",
+     "sportId": 28,
+     "athleteId": 3929630,
+     "athlete": {
+      "id": 3929630,
+      "description": "Saquon Barkley",
+      "links": {
+       "mobile": {
+        "athletes": {
+         "href": "https://www.espn.com/nfl/player/_/id/3929630/saquon-barkley"
+        }
+       },
+       "web": {
+        "athletes": {
+         "href": "https://www.espn.com/nfl/player/_/id/3929630/saquon-barkley"
+        }
+       }
+      }
+     }
+    },
+    {
+     "id": 390109,
+     "type": "athlete",
+     "uid": "s:20~l:28~a:4426348",
+     "guid": "f03f3238-b035-6f0e-5844-1529ca021c3a",
+     "description": "Jayden Daniels",
+     "sportId": 28,
+     "athleteId": 4426348,
+     "athlete": {
+      "id": 4426348,
+      "description": "Jayden Daniels",
+      "links": {
+       "mobile": {
+        "athletes": {
+         "href": "https://www.espn.com/nfl/player/_/id/4426348/jayden-daniels"
+        }
+       },
+       "web": {
+        "athletes": {
+         "href": "https://www.espn.com/nfl/player/_/id/4426348/jayden-daniels"
+        }
+       }
+      }
+     }
+    },
+    {
+     "id": 470132,
+     "type": "athlete",
+     "uid": "s:20~l:28~a:4361422",
+     "guid": "3abbb66c-4907-9b5f-08cd-19b5d7914c6e",
+     "description": "Odafe Oweh",
+     "sportId": 28,
+     "athleteId": 4361422,
+     "athlete": {
+      "id": 4361422,
+      "description": "Odafe Oweh",
+      "links": {
+       "mobile": {
+        "athletes": {
+         "href": "https://www.espn.com/nfl/player/_/id/4361422/odafe-oweh"
+        }
+       },
+       "web": {
+        "athletes": {
+         "href": "https://www.espn.com/nfl/player/_/id/4361422/odafe-oweh"
+        }
+       }
+      }
+     }
+    },
+    {
+     "id": 700448,
+     "type": "contributor",
+     "guid": "037de313-2fe3-3e3c-a5f6-da543b98e5d2",
+     "description": "NFL Nation",
+     "slug": "nfl-nation",
+     "contributor": {
+      "id": 3824,
+      "description": "NFL Nation"
+     }
+    }
+   ],
+   "byline": "NFL Nation",
+   "links": {
+    "api": {
+     "self": {
+      "href": "https://content.core.api.espn.com/v1/sports/news/49803391"
+     }
+    },
+    "app": {
+     "sportscenter": {
+      "href": "sportscenter://x-callback-url/showStory?uid=49803391"
+     }
+    },
+    "mobile": {
+     "href": "http://m.espn.go.com/nfl/story?storyId=49803391"
+    },
+    "web": {
+     "href": "https://www.espn.com/nfl/story/_/id/49803391/nfl-nfc-east-cowboys-giants-eagles-commanders-dak-prescott-malik-nabers-jayden-daniels-jalen-hurts"
+    }
+   },
+   "premium": false
+  },
+  {
+   "id": 49860607,
+   "nowId": "1-49860607",
+   "contentKey": "49860607-1-6-1",
+   "dataSourceIdentifier": "7a50b7da13610",
+   "type": "Story",
+   "headline": "Todd Monken, QBs, the Browns and a lifetime in pursuit",
+   "description": "At age 60, the first-time head coach brings to Cleveland a gritty resolve, an ability to cut through to QBs and a dream that this will be \"my last job.\"",
+   "lastModified": "2026-09-08T12:39:15Z",
+   "published": "2026-09-08T12:39:15Z",
+   "images": [
+    {
+     "dataSourceIdentifier": "96ae4b8e527e0",
+     "id": 49861338,
+     "type": "header",
+     "name": "Todd Monken lede [1296x729]",
+     "caption": "Todd Monken inherited a Browns team that went 5-12 last season and a franchise that hasn't been to the postseason since a wild-card loss on Jan. 13, 2024.",
+     "credit": "Nick Cammett/Diamond Images via Getty Images",
+     "height": 729,
+     "width": 1296,
+     "url": "https://a.espncdn.com/photo/2026/0907/r1712894_1296x729_16-9.jpg"
+    },
+    {
+     "dataSourceIdentifier": "9251606f6f78f",
+     "id": 49861216,
+     "type": "header",
+     "name": "Jeff Monken [576x324]",
+     "caption": "Football is in the Monken blood, as Todd's cousin Jeff is the head football coach at Army.",
+     "alt": "Jeff Monken",
+     "credit": "Danny Wild/Imagn Images",
+     "height": 324,
+     "width": 576,
+     "url": "https://a.espncdn.com/photo/2026/0907/r1712887_576x324_16-9.jpg"
+    },
+    {
+     "dataSourceIdentifier": "420df2957934a",
+     "id": 49861308,
+     "type": "header",
+     "name": "Todd Monken inline [1609x2400]",
+     "caption": "Quarterback Todd Monken (No. 11) played at Division III Knox College from 1986 to 1988.",
+     "credit": "Courtesy Knox College",
+     "height": 2400,
+     "width": 1609,
+     "url": "https://a.espncdn.com/photo/2026/0907/r1712897_1609x2400cc.jpg"
+    },
+    {
+     "dataSourceIdentifier": "118787dee92dd",
+     "id": 28383327,
+     "type": "header",
+     "name": "Ryan Lindley, Baker Mayfield, Todd Monken [576x324]",
+     "caption": "From left, quarterbacks coach Ryan Lindley, quarterback Baker Mayfield and offensive coordinator Todd Monken watch the Browns practice during the 2019 training camp in Berea, Ohio.",
+     "alt": "Ryan Lindley, Baker Mayfield, Todd Monken",
+     "credit": "Nick Cammett/Diamond Images via Getty Images",
+     "height": 324,
+     "width": 576,
+     "url": "https://a.espncdn.com/photo/2019/1228/r646523_576x324_16-9.jpg"
+    },
+    {
+     "dataSourceIdentifier": "77937b7a9c4fa",
+     "id": 47554836,
+     "type": "header",
+     "name": "Monken Lamar [576x324]",
+     "caption": "In January, Todd Monken accepted blame for the regression of quarterback Lamar Jackson and the Baltimore Ravens in his third season as the team's offensive coordinator.",
+     "credit": "Mitch Stringer-Imagn Images",
+     "height": 324,
+     "width": 576,
+     "url": "https://a.espncdn.com/photo/2026/0109/r1598272_576x324_16-9.jpg"
+    },
+    {
+     "dataSourceIdentifier": "6e240143022c2",
+     "id": 49862472,
+     "type": "header",
+     "name": "Todd Monken family [6708x4472]",
+     "caption": "Todd Monken's family showed up to support his him on Feb. 3, 2026 when he was introduced as the Browns' head coach.",
+     "credit": "Courtesy of Cleveland Browns",
+     "height": 4472,
+     "width": 6708,
+     "url": "https://a.espncdn.com/photo/2026/0907/r1712968_6708x4472cc.jpg"
+    },
+    {
+     "type": "Media",
+     "name": "Mad Dog fired up over discourse surrounding Deshaun Watson starting for Browns",
+     "caption": "Mad Dog fired up over discourse surrounding Deshaun Watson starting for Browns",
+     "height": 324,
+     "width": 576,
+     "url": "https://espnmedia-cdn.akamaized.net/espn/media/common/2026/0826/ss_20260826_114549292_3636723713/ss_20260826_114549292_3636723713.jpg"
+    }
+   ],
+   "categories": [
+    {
+     "id": 9572,
+     "type": "league",
+     "uid": "s:20~l:28",
+     "guid": "ad4c3bd2-ddb6-3f8c-8abf-744855a08fa4",
+     "description": "NFL",
+     "sportId": 28,
+     "leagueId": 28,
+     "league": {
+      "id": 28,
+      "description": "NFL",
+      "abbreviation": "NFL",
+      "links": {
+       "mobile": {
+        "leagues": {
+         "href": "https://www.espn.com/nfl/"
+        }
+       },
+       "web": {
+        "leagues": {
+         "href": "https://www.espn.com/nfl/"
+        }
+       }
+      }
+     }
+    },
+    {
+     "id": 2719,
+     "type": "team",
+     "uid": "s:20~l:28~t:5",
+     "guid": "539babc5-e5fb-753b-8ae1-c15032a91ef4",
+     "description": "Cleveland Browns",
+     "sportId": 28,
+     "teamId": 5,
+     "team": {
+      "id": 5,
+      "description": "Cleveland Browns",
+      "abbreviation": "CLE",
+      "shortDisplayName": "Browns",
+      "links": {
+       "mobile": {
+        "teams": {
+         "href": "https://www.espn.com/nfl/team/_/name/cle/cleveland-browns"
+        }
+       },
+       "web": {
+        "teams": {
+         "href": "https://www.espn.com/nfl/team/_/name/cle/cleveland-browns"
+        }
+       }
+      }
+     }
+    },
+    {
+     "id": 466378,
+     "type": "athlete",
+     "uid": "s:20~l:28~a:4432762",
+     "guid": "fecbc03c-f8bf-342e-82be-991901cf6449",
+     "description": "Shedeur Sanders",
+     "sportId": 28,
+     "athleteId": 4432762,
+     "athlete": {
+      "id": 4432762,
+      "description": "Shedeur Sanders",
+      "links": {
+       "mobile": {
+        "athletes": {
+         "href": "https://www.espn.com/nfl/player/_/id/4432762/shedeur-sanders"
+        }
+       },
+       "web": {
+        "athletes": {
+         "href": "https://www.espn.com/nfl/player/_/id/4432762/shedeur-sanders"
+        }
+       }
+      }
+     }
+    },
+    {
+     "id": 166843,
+     "type": "athlete",
+     "uid": "s:20~l:28~a:3122840",
+     "guid": "b6ec8e9e-3d85-a1de-9d0a-5a51621a9c20",
+     "description": "Deshaun Watson",
+     "sportId": 28,
+     "athleteId": 3122840,
+     "athlete": {
+      "id": 3122840,
+      "description": "Deshaun Watson",
+      "links": {
+       "mobile": {
+        "athletes": {
+         "href": "https://www.espn.com/nfl/player/_/id/3122840/deshaun-watson"
+        }
+       },
+       "web": {
+        "athletes": {
+         "href": "https://www.espn.com/nfl/player/_/id/3122840/deshaun-watson"
+        }
+       }
+      }
+     }
+    },
+    {
+     "id": 696247,
+     "type": "contributor",
+     "guid": "48ff5193-afea-319f-914b-89b575869d5a",
+     "description": "Daniel Oyefusi",
+     "slug": "daniel-oyefusi",
+     "contributor": {
+      "id": 4053,
+      "description": "Daniel Oyefusi"
+     }
+    }
+   ],
+   "byline": "Daniel Oyefusi",
+   "links": {
+    "api": {
+     "self": {
+      "href": "https://content.core.api.espn.com/v1/sports/news/49860607"
+     }
+    },
+    "app": {
+     "sportscenter": {
+      "href": "sportscenter://x-callback-url/showStory?uid=49860607"
+     }
+    },
+    "mobile": {
+     "href": "http://m.espn.go.com/nfl/story?storyId=49860607"
+    },
+    "web": {
+     "href": "https://www.espn.com/nfl/story/_/id/49860607/todd-monken-cleveland-browns-quarterbacks-life-pursuit-2026-head-coach"
+    }
+   },
+   "premium": false
+  },
+  {
+   "id": 49860900,
+   "nowId": "1-49860900",
+   "contentKey": "49860900-1-6-1",
+   "dataSourceIdentifier": "700a867af0b26",
+   "type": "Story",
+   "headline": "Can Patriots QB Drake Maye repeat MVP-caliber season in 2026?",
+   "description": "The New England quarterback is letting the Super Bowl loss motivate him in 2026, starting with the rematch at Seahawks on Wednesday.",
+   "lastModified": "2026-09-08T10:00:11Z",
+   "published": "2026-09-08T10:00:11Z",
+   "images": [
+    {
+     "dataSourceIdentifier": "af84e9d8660f2",
+     "id": 49861876,
+     "type": "header",
+     "name": "Drake Maye\n] [608x342]",
+     "credit": "Kevin Sabitus/Getty Images",
+     "height": 342,
+     "width": 608,
+     "url": "https://a.espncdn.com/photo/2026/0907/r1712924_608x342_16-9.jpg"
+    },
+    {
+     "dataSourceIdentifier": "07aa44b47d56c",
+     "id": 49861824,
+     "type": "header",
+     "name": "Confetti Maye [608x342]",
+     "caption": "Drake Maye is the second-youngest QB to ever start in a Super Bowl (Dan Marino, 1985).",
+     "credit": "AP Photo/Julio Cortez",
+     "height": 342,
+     "width": 608,
+     "url": "https://a.espncdn.com/photo/2026/0907/r1712923_608x342_16-9.jpg"
+    },
+    {
+     "dataSourceIdentifier": "42776910ca7fb",
+     "id": 49861488,
+     "type": "header",
+     "name": "McDaniels / Maye",
+     "caption": "Josh McDaniels returned to the Patriots for a third stint as offensive coordinator in 2025.",
+     "credit": "Billie Weiss/Getty Images",
+     "height": 342,
+     "width": 608,
+     "url": "https://a.espncdn.com/photo/2026/0907/r1712908_608x342_16-9.jpg"
+    },
+    {
+     "dataSourceIdentifier": "af6fb12c93813",
+     "id": 49861948,
+     "type": "header",
+     "name": "Lomu/Campbell [608x342]",
+     "caption": "Patriots drafted offensive tackle Caleb Lomu in the first round (28th) of the 2026 NFL draft, one year after taking guard Will Campbell at No. 4 in 2025.",
+     "credit": "AP Photo/Charles Krupa",
+     "height": 342,
+     "width": 608,
+     "url": "https://a.espncdn.com/photo/2026/0907/r1712931_608x342_16-9.jpg"
+    },
+    {
+     "dataSourceIdentifier": "068ecba938eed",
+     "id": 49861670,
+     "type": "header",
+     "name": "AJ Brown [608x342]",
+     "caption": "The Patriots traded for wide receiver A.J. Brown on June 1. Brown played on Mike Vrabel's Titans squad and later won a Super Bowl as a member of the Eagles.",
+     "credit": "Michael Owens/Getty Images",
+     "height": 342,
+     "width": 608,
+     "url": "https://a.espncdn.com/photo/2026/0907/r1712916_608x342_16-9.jpg"
+    },
+    {
+     "dataSourceIdentifier": "b6d8c567daf52",
+     "id": 49861461,
+     "type": "header",
+     "name": "Drake Maye [608x342]",
+     "credit": "Jaiden Tripi/Getty Images",
+     "height": 342,
+     "width": 608,
+     "url": "https://a.espncdn.com/photo/2026/0907/r1712904_608x342_16-9.jpg"
+    },
+    {
+     "type": "Media",
+     "name": "How A.J. Brown can elevate Drake Maye's fantasy appeal",
+     "caption": "How A.J. Brown can elevate Drake Maye's fantasy appeal",
+     "height": 324,
+     "width": 576,
+     "url": "https://espnmedia-cdn.akamaized.net/espn/media/common/2026/0903/ss_20260903_104155063_3645271/ss_20260903_104155063_3645271.jpg"
+    }
+   ],
+   "categories": [
+    {
+     "id": 9572,
+     "type": "league",
+     "uid": "s:20~l:28",
+     "guid": "ad4c3bd2-ddb6-3f8c-8abf-744855a08fa4",
+     "description": "NFL",
+     "sportId": 28,
+     "leagueId": 28,
+     "league": {
+      "id": 28,
+      "description": "NFL",
+      "abbreviation": "NFL",
+      "links": {
+       "mobile": {
+        "leagues": {
+         "href": "https://www.espn.com/nfl/"
+        }
+       },
+       "web": {
+        "leagues": {
+         "href": "https://www.espn.com/nfl/"
+        }
+       }
+      }
+     }
+    },
+    {
+     "id": 2321,
+     "type": "team",
+     "uid": "s:20~l:28~t:17",
+     "guid": "0078f353-fe3e-67ed-a42c-43cca0568e21",
+     "description": "New England Patriots",
+     "sportId": 28,
+     "teamId": 17,
+     "team": {
+      "id": 17,
+      "description": "New England Patriots",
+      "abbreviation": "NE",
+      "shortDisplayName": "Patriots",
+      "links": {
+       "mobile": {
+        "teams": {
+         "href": "https://www.espn.com/nfl/team/_/name/ne/new-england-patriots"
+        }
+       },
+       "web": {
+        "teams": {
+         "href": "https://www.espn.com/nfl/team/_/name/ne/new-england-patriots"
+        }
+       }
+      }
+     }
+    },
+    {
+     "id": 380051,
+     "type": "athlete",
+     "uid": "s:20~l:28~a:4047646",
+     "guid": "53cf1afe-22f9-ea1f-7d9b-a992d25c8ac5",
+     "description": "AJ Brown",
+     "sportId": 28,
+     "athleteId": 4047646,
+     "athlete": {
+      "id": 4047646,
+      "description": "AJ Brown",
+      "links": {
+       "mobile": {
+        "athletes": {
+         "href": "https://www.espn.com/nfl/player/_/id/4047646/aj-brown"
+        }
+       },
+       "web": {
+        "athletes": {
+         "href": "https://www.espn.com/nfl/player/_/id/4047646/aj-brown"
+        }
+       }
+      }
+     }
+    },
+    {
+     "id": 490129,
+     "type": "athlete",
+     "uid": "s:20~l:28~a:4431452",
+     "guid": "2fbd2f9e-624d-3e63-9bb5-9bb965782b68",
+     "description": "Drake Maye",
+     "sportId": 28,
+     "athleteId": 4431452,
+     "athlete": {
+      "id": 4431452,
+      "description": "Drake Maye",
+      "links": {
+       "mobile": {
+        "athletes": {
+         "href": "https://www.espn.com/nfl/player/_/id/4431452/drake-maye"
+        }
+       },
+       "web": {
+        "athletes": {
+         "href": "https://www.espn.com/nfl/player/_/id/4431452/drake-maye"
+        }
+       }
+      }
+     }
+    },
+    {
+     "id": 696440,
+     "type": "contributor",
+     "guid": "bdee10fe-a1a2-3ced-87dd-43089bf47931",
+     "description": "Mike Reiss",
+     "slug": "mike-reiss",
+     "contributor": {
+      "id": 1800,
+      "description": "Mike Reiss"
+     }
+    }
+   ],
+   "byline": "Mike Reiss",
+   "links": {
+    "api": {
+     "self": {
+      "href": "https://content.core.api.espn.com/v1/sports/news/49860900"
+     }
+    },
+    "app": {
+     "sportscenter": {
+      "href": "sportscenter://x-callback-url/showStory?uid=49860900"
+     }
+    },
+    "mobile": {
+     "href": "http://m.espn.go.com/nfl/story?storyId=49860900"
+    },
+    "web": {
+     "href": "https://www.espn.com/nfl/story/_/id/49860900/new-england-patriots-qb-drake-maye-2026-nfl-season-aj-brown"
+    }
+   },
+   "premium": false
+  },
+  {
+   "id": 49859670,
+   "nowId": "1-49859670",
+   "contentKey": "49859670-1-6-1",
+   "dataSourceIdentifier": "4deb778b35d24",
+   "type": "Story",
+   "headline": "NFL execs predict 2026 award winners: MVP, top rookies, more",
+   "description": "Who will win MVP? Who will take Offensive and Defensive Rookie of the Year? Who is primed for a breakout? We asked execs and scouts for their picks.",
+   "lastModified": "2026-09-08T10:11:33Z",
+   "published": "2026-09-08T10:11:33Z",
+   "images": [
+    {
+     "dataSourceIdentifier": "9d9fb0333ec3e",
+     "id": 49829058,
+     "type": "header",
+     "name": "Joe Burrow [1296x729]",
+     "caption": "Bengals quarterback Joe Burrow is once again a popular pick to take home the MVP award.",
+     "alt": "Joe Burrow",
+     "credit": "Katie Stratman/Imagn Images",
+     "height": 729,
+     "width": 1296,
+     "url": "https://a.espncdn.com/photo/2026/0904/r1711551_1296x729_16-9.jpg"
+    },
+    {
+     "type": "Media",
+     "name": "Jordan Rodgers: Joe Burrow is not the problem at the Bengals",
+     "caption": "Jordan Rodgers: Joe Burrow is not the problem at the Bengals",
+     "height": 324,
+     "width": 576,
+     "url": "https://espnmedia-cdn.akamaized.net/espn/media/common/2026/0821/ss_20260821_084709294_3631116/ss_20260821_084709294_3631116.jpg"
+    }
+   ],
+   "categories": [
+    {
+     "id": 9572,
+     "type": "league",
+     "uid": "s:20~l:28",
+     "guid": "ad4c3bd2-ddb6-3f8c-8abf-744855a08fa4",
+     "description": "NFL",
+     "sportId": 28,
+     "leagueId": 28,
+     "league": {
+      "id": 28,
+      "description": "NFL",
+      "abbreviation": "NFL",
+      "links": {
+       "mobile": {
+        "leagues": {
+         "href": "https://www.espn.com/nfl/"
+        }
+       },
+       "web": {
+        "leagues": {
+         "href": "https://www.espn.com/nfl/"
+        }
+       }
+      }
+     }
+    },
+    {
+     "id": 2610,
+     "type": "team",
+     "uid": "s:20~l:28~t:24",
+     "guid": "84caf62b-c753-71ea-a787-44fd224a4294",
+     "description": "Los Angeles Chargers",
+     "sportId": 28,
+     "teamId": 24,
+     "team": {
+      "id": 24,
+      "description": "Los Angeles Chargers",
+      "abbreviation": "LAC",
+      "shortDisplayName": "Chargers",
+      "links": {
+       "mobile": {
+        "teams": {
+         "href": "https://www.espn.com/nfl/team/_/name/lac/los-angeles-chargers"
+        }
+       },
+       "web": {
+        "teams": {
+         "href": "https://www.espn.com/nfl/team/_/name/lac/los-angeles-chargers"
+        }
+       }
+      }
+     }
+    },
+    {
+     "id": 2664,
+     "type": "team",
+     "uid": "s:20~l:28~t:4",
+     "guid": "75b8623b-8926-b411-0476-3d3602b78523",
+     "description": "Cincinnati Bengals",
+     "sportId": 28,
+     "teamId": 4,
+     "team": {
+      "id": 4,
+      "description": "Cincinnati Bengals",
+      "abbreviation": "CIN",
+      "shortDisplayName": "Bengals",
+      "links": {
+       "mobile": {
+        "teams": {
+         "href": "https://www.espn.com/nfl/team/_/name/cin/cincinnati-bengals"
+        }
+       },
+       "web": {
+        "teams": {
+         "href": "https://www.espn.com/nfl/team/_/name/cin/cincinnati-bengals"
+        }
+       }
+      }
+     }
+    },
+    {
+     "id": 435000,
+     "type": "athlete",
+     "uid": "s:20~l:28~a:3915511",
+     "guid": "e6957db5-5b2e-a82d-c788-d889115d9772",
+     "description": "Joe Burrow",
+     "sportId": 28,
+     "athleteId": 3915511,
+     "athlete": {
+      "id": 3915511,
+      "description": "Joe Burrow",
+      "links": {
+       "mobile": {
+        "athletes": {
+         "href": "https://www.espn.com/nfl/player/_/id/3915511/joe-burrow"
+        }
+       },
+       "web": {
+        "athletes": {
+         "href": "https://www.espn.com/nfl/player/_/id/3915511/joe-burrow"
+        }
+       }
+      }
+     }
+    },
+    {
+     "id": 3053,
+     "type": "team",
+     "uid": "s:20~l:28~t:34",
+     "guid": "595690b3-2161-4913-a7a7-814af2fd2621",
+     "description": "Houston Texans",
+     "sportId": 28,
+     "teamId": 34,
+     "team": {
+      "id": 34,
+      "description": "Houston Texans",
+      "abbreviation": "HOU",
+      "shortDisplayName": "Texans",
+      "links": {
+       "mobile": {
+        "teams": {
+         "href": "https://www.espn.com/nfl/team/_/name/hou/houston-texans"
+        }
+       },
+       "web": {
+        "teams": {
+         "href": "https://www.espn.com/nfl/team/_/name/hou/houston-texans"
+        }
+       }
+      }
+     }
+    },
+    {
+     "id": 1298,
+     "type": "team",
+     "uid": "s:20~l:28~t:6",
+     "guid": "b0fc8fb7-9dbe-e574-9008-6f0ee7c6b234",
+     "description": "Dallas Cowboys",
+     "sportId": 28,
+     "teamId": 6,
+     "team": {
+      "id": 6,
+      "description": "Dallas Cowboys",
+      "abbreviation": "DAL",
+      "shortDisplayName": "Cowboys",
+      "links": {
+       "mobile": {
+        "teams": {
+         "href": "https://www.espn.com/nfl/team/_/name/dal/dallas-cowboys"
+        }
+       },
+       "web": {
+        "teams": {
+         "href": "https://www.espn.com/nfl/team/_/name/dal/dallas-cowboys"
+        }
+       }
+      }
+     }
+    },
+    {
+     "id": 605552,
+     "type": "athlete",
+     "uid": "s:20~l:28~a:4870706",
+     "guid": "12c8597c-e9ff-36ba-a51a-61c91d87abf7",
+     "description": "Caleb Downs",
+     "sportId": 28,
+     "athleteId": 4870706,
+     "athlete": {
+      "id": 4870706,
+      "description": "Caleb Downs",
+      "links": {
+       "mobile": {
+        "athletes": {
+         "href": "https://www.espn.com/nfl/player/_/id/4870706/caleb-downs"
+        }
+       },
+       "web": {
+        "athletes": {
+         "href": "https://www.espn.com/nfl/player/_/id/4870706/caleb-downs"
+        }
+       }
+      }
+     }
+    },
+    {
+     "id": 537897,
+     "type": "athlete",
+     "uid": "s:20~l:28~a:4685512",
+     "guid": "705bfe8e-8678-32bc-a5b8-535fcca2e1cd",
+     "description": "Jadarian Price",
+     "sportId": 28,
+     "athleteId": 4685512,
+     "athlete": {
+      "id": 4685512,
+      "description": "Jadarian Price",
+      "links": {
+       "mobile": {
+        "athletes": {
+         "href": "https://www.espn.com/nfl/player/_/id/4685512/jadarian-price"
+        }
+       },
+       "web": {
+        "athletes": {
+         "href": "https://www.espn.com/nfl/player/_/id/4685512/jadarian-price"
+        }
+       }
+      }
+     }
+    },
+    {
+     "id": 1693,
+     "type": "team",
+     "uid": "s:20~l:28~t:26",
+     "guid": "3767a23c-a17d-294f-288a-9086ad1f0680",
+     "description": "Seattle Seahawks",
+     "sportId": 28,
+     "teamId": 26,
+     "team": {
+      "id": 26,
+      "description": "Seattle Seahawks",
+      "abbreviation": "SEA",
+      "shortDisplayName": "Seahawks",
+      "links": {
+       "mobile": {
+        "teams": {
+         "href": "https://www.espn.com/nfl/team/_/name/sea/seattle-seahawks"
+        }
+       },
+       "web": {
+        "teams": {
+         "href": "https://www.espn.com/nfl/team/_/name/sea/seattle-seahawks"
+        }
+       }
+      }
+     }
+    },
+    {
+     "id": 1805,
+     "type": "team",
+     "uid": "s:20~l:28~t:8",
+     "guid": "56caffee-178d-f6f2-a076-b277486b8c32",
+     "description": "Detroit Lions",
+     "sportId": 28,
+     "teamId": 8,
+     "team": {
+      "id": 8,
+      "description": "Detroit Lions",
+      "abbreviation": "DET",
+      "shortDisplayName": "Lions",
+      "links": {
+       "mobile": {
+        "teams": {
+         "href": "https://www.espn.com/nfl/team/_/name/det/detroit-lions"
+        }
+       },
+       "web": {
+        "teams": {
+         "href": "https://www.espn.com/nfl/team/_/name/det/detroit-lions"
+        }
+       }
+      }
+     }
+    },
+    {
+     "id": 438406,
+     "type": "athlete",
+     "uid": "s:20~l:28~a:4429795",
+     "guid": "d85aed19-e3b8-3788-935e-55f636ad86e9",
+     "description": "Jahmyr Gibbs",
+     "sportId": 28,
+     "athleteId": 4429795,
+     "athlete": {
+      "id": 4429795,
+      "description": "Jahmyr Gibbs",
+      "links": {
+       "mobile": {
+        "athletes": {
+         "href": "https://www.espn.com/nfl/player/_/id/4429795/jahmyr-gibbs"
+        }
+       },
+       "web": {
+        "athletes": {
+         "href": "https://www.espn.com/nfl/player/_/id/4429795/jahmyr-gibbs"
+        }
+       }
+      }
+     }
+    }
+   ],
+   "byline": "Jeremy Fowler",
+   "links": {
+    "api": {
+     "self": {
+      "href": "https://content.core.api.espn.com/v1/sports/news/49859670"
+     }
+    },
+    "app": {
+     "sportscenter": {
+      "href": "sportscenter://x-callback-url/showStory?uid=49859670"
+     }
+    },
+    "mobile": {
+     "href": "http://m.espn.go.com/nfl/story?storyId=49859670"
+    },
+    "web": {
+     "href": "https://www.espn.com/nfl/story/_/id/49859670/2026-nfl-season-executives-award-winners-mvp-rookies-honors-breakouts"
+    }
+   },
+   "premium": false
+  },
+  {
+   "id": 49865736,
+   "nowId": "1-49865736",
+   "contentKey": "49865736-1-5-1",
+   "dataSourceIdentifier": "71f35fd9de8be",
+   "type": "HeadlineNews",
+   "headline": "Sources: Christian Gonzalez, Patriots reach 4-year, $135M deal",
+   "description": "The Patriots and Christian Gonzalez agreed to terms on a four-year, $135 million extension that makes him the highest-paid CB in NFL history.",
+   "lastModified": "2026-09-08T13:46:45Z",
+   "published": "2026-09-08T13:46:45Z",
+   "images": [
+    {
+     "dataSourceIdentifier": "d961ba9d8244c",
+     "id": 43242286,
+     "type": "header",
+     "name": "Christian Gonzalez of the New England Patriots reacts after a pass break up in the fourth quarter of a game against the Indianapolis Colts at Gillette Stadium on Dec. 1, 2024 in Foxborough, Massachusetts. [600x600]",
+     "alt": "Christian Gonzalez of the New England Patriots reacts after a pass break up in the fourth quarter of a game against the Indianapolis Colts at Gillette Stadium on Dec. 1, 2024 in Foxborough, Massachusetts.",
+     "credit": "Photo by Jaiden Tripi/Getty Images",
+     "height": 600,
+     "width": 600,
+     "url": "https://a.espncdn.com/photo/2025/0101/r1433646_600x600_1-1.jpg"
+    },
+    {
+     "type": "Media",
+     "name": "How Christian Gonzalez became the NFL’s highest-paid cornerback",
+     "caption": "How Christian Gonzalez became the NFL’s highest-paid cornerback  ",
+     "height": 324,
+     "width": 576,
+     "url": "https://espnmedia-cdn.akamaized.net/espn/media/common/2026/0908/ss_20260908_083720563_3652384/ss_20260908_083720563_3652384.jpg"
+    }
+   ],
+   "categories": [
+    {
+     "id": 2321,
+     "type": "team",
+     "uid": "s:20~l:28~t:17",
+     "guid": "0078f353-fe3e-67ed-a42c-43cca0568e21",
+     "description": "New England Patriots",
+     "sportId": 28,
+     "teamId": 17,
+     "team": {
+      "id": 17,
+      "description": "New England Patriots",
+      "abbreviation": "NE",
+      "shortDisplayName": "Patriots",
+      "links": {
+       "mobile": {
+        "teams": {
+         "href": "https://www.espn.com/nfl/team/_/name/ne/new-england-patriots"
+        }
+       },
+       "web": {
+        "teams": {
+         "href": "https://www.espn.com/nfl/team/_/name/ne/new-england-patriots"
+        }
+       }
+      }
+     }
+    },
+    {
+     "id": 9572,
+     "type": "league",
+     "uid": "s:20~l:28",
+     "guid": "ad4c3bd2-ddb6-3f8c-8abf-744855a08fa4",
+     "description": "NFL",
+     "sportId": 28,
+     "leagueId": 28,
+     "league": {
+      "id": 28,
+      "description": "NFL",
+      "abbreviation": "NFL",
+      "links": {
+       "mobile": {
+        "leagues": {
+         "href": "https://www.espn.com/nfl/"
+        }
+       },
+       "web": {
+        "leagues": {
+         "href": "https://www.espn.com/nfl/"
+        }
+       }
+      }
+     }
+    },
+    {
+     "id": 440999,
+     "type": "athlete",
+     "uid": "s:20~l:28~a:4686772",
+     "guid": "ba95b578-b00e-3156-8e2b-b24e3974f8ef",
+     "description": "Christian Gonzalez",
+     "sportId": 28,
+     "athleteId": 4686772,
+     "athlete": {
+      "id": 4686772,
+      "description": "Christian Gonzalez",
+      "links": {
+       "mobile": {
+        "athletes": {
+         "href": "https://www.espn.com/nfl/player/_/id/4686772/christian-gonzalez"
+        }
+       },
+       "web": {
+        "athletes": {
+         "href": "https://www.espn.com/nfl/player/_/id/4686772/christian-gonzalez"
+        }
+       }
+      }
+     }
+    },
+    {
+     "id": 409224,
+     "type": "topic",
+     "guid": "52313677-19f8-b106-ec91-d8d17e6087fe",
+     "description": "news",
+     "sportId": 0,
+     "topicId": 781
+    },
+    {
+     "id": 696440,
+     "type": "contributor",
+     "guid": "bdee10fe-a1a2-3ced-87dd-43089bf47931",
+     "description": "Mike Reiss",
+     "slug": "mike-reiss",
+     "contributor": {
+      "id": 1800,
+      "description": "Mike Reiss"
+     }
+    }
+   ],
+   "byline": "Mike Reiss",
+   "links": {
+    "api": {
+     "self": {
+      "href": "https://content.core.api.espn.com/v1/sports/news/49865736"
+     }
+    },
+    "app": {
+     "sportscenter": {
+      "href": "sportscenter://x-callback-url/showStory?uid=49865736"
+     }
+    },
+    "mobile": {
+     "href": "http://m.espn.go.com/nfl/story?storyId=49865736"
+    },
+    "web": {
+     "href": "https://www.espn.com/nfl/story/_/id/49865736/sources-christian-gonzalez-patriots-reach-4-year-135m-deal"
+    }
+   },
+   "premium": false
+  }
+ ]
+}
