@@ -21,6 +21,7 @@
 import { paginationOptsValidator } from "convex/server";
 import { v, type Infer } from "convex/values";
 
+import { internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "./_generated/server";
 import { mutation, query } from "./_generated/server";
@@ -43,6 +44,8 @@ type Ctx = QueryCtx | MutationCtx;
 
 /** The change log page caps at the same 200 rows the tRPC procedure defaulted to. */
 const CHANGE_LOG_LIMIT = 200;
+/** A league has 8-14 teams (PRD 5.1); every per-team read below is bounded by it. */
+const MAX_TEAMS = 14;
 
 const inviteLinkShape = v.object({
   code: v.union(v.string(), v.null()),
@@ -152,6 +155,64 @@ async function withUserNames(
   return out;
 }
 
+const settingsTeam = v.object({
+  id: v.id("teams"),
+  name: v.string(),
+  abbreviation: v.string(),
+  ownerUserId: v.union(v.id("users"), v.null()),
+  ownerName: v.union(v.string(), v.null()),
+  ownerEmail: v.union(v.string(), v.null()),
+  modelId: v.union(v.string(), v.null()),
+  configVersionNo: v.union(v.number(), v.null()),
+  waiverPriority: v.number(),
+});
+
+/**
+ * The Teams tab's roster, ordered by waiver priority.
+ *
+ * The console used to read `views.teams` for this, which is the public standings
+ * card: it carries no owner email (the console assigns owners by email) and it
+ * folds the whole standings table to produce rows the commissioner does not
+ * need. This reads the teams directly and joins the owner and the team's current
+ * config version.
+ */
+async function settingsTeams(
+  ctx: Ctx,
+  leagueId: Id<"leagues">,
+): Promise<Array<Infer<typeof settingsTeam>>> {
+  // Bounded by construction: a league has at most MAX_TEAMS teams.
+  const teams = await ctx.db
+    .query("teams")
+    .withIndex("by_leagueId", (q) => q.eq("leagueId", leagueId))
+    .take(MAX_TEAMS);
+
+  const rows: Array<Infer<typeof settingsTeam>> = [];
+  for (const team of teams) {
+    const owner = team.ownerUserId ? await ctx.db.get("users", team.ownerUserId) : null;
+    const config = await ctx.db
+      .query("agent_configs")
+      .withIndex("by_teamId", (q) => q.eq("teamId", team._id))
+      .unique();
+    const version = config?.currentVersionId
+      ? await ctx.db.get("config_versions", config.currentVersionId)
+      : null;
+    rows.push({
+      id: team._id,
+      name: team.name,
+      abbreviation: team.abbreviation,
+      ownerUserId: team.ownerUserId ?? null,
+      ownerName: owner?.name ?? null,
+      ownerEmail: owner?.email ?? null,
+      modelId: version?.modelId ?? null,
+      configVersionNo: version?.versionNo ?? null,
+      waiverPriority: team.waiverPriority,
+    });
+  }
+  return rows.sort(
+    (a, b) => a.waiverPriority - b.waiverPriority || a.name.localeCompare(b.name),
+  );
+}
+
 /** Everything the settings console renders on first paint. */
 export const settings = query({
   args: { leagueId: v.id("leagues") },
@@ -163,6 +224,7 @@ export const settings = query({
     modelsInUse: v.array(modelInUse),
     catalog: v.array(catalogEntry),
     locked: v.boolean(),
+    teams: v.array(settingsTeam),
   }),
   handler: async (ctx, { leagueId }) => {
     const access = await requireCommissioner(ctx, leagueId);
@@ -175,6 +237,7 @@ export const settings = query({
       modelsInUse: await modelsInUse(ctx, leagueId),
       catalog: MODEL_CATALOG.map((m) => ({ ...m })),
       locked: rules.rulesLockedAt !== undefined || access.league.status !== "setup",
+      teams: await settingsTeams(ctx, leagueId),
     };
   },
 });
@@ -699,14 +762,24 @@ export const rotateJoinCode = mutation({
 // -------------------------------------------------------------------- draft
 
 /**
- * Begin the draft: stamp the rules lock, flip the league to `drafting`, log it.
+ * Begin the draft: generate the board, stamp the rules lock, flip the league to
+ * `drafting`, log it.
  *
- * The board itself belongs to package G (`convex/draft.ts`). At the time this
- * was written that file exposes only the `board` query, so nothing is called
- * here; when `internal.draft.start` lands, schedule/`runMutation` it from this
- * handler and set `boardGenerated`. Referencing a function that does not exist
- * yet would break the deployment for everyone.
+ * The board belongs to package G: `internal.draft.start` shuffles the order,
+ * writes one `draft_picks` row per (round, pick) for a snake draft or opens lot
+ * 1 for an auction, and stamps the same status + rules lock this handler owns.
+ * It is called from here rather than scheduled so the console can report the
+ * pick and order counts in the same round trip.
  */
+type StartDraftResult = {
+  leagueId: Id<"leagues">;
+  status: "drafting";
+  scheduledAt: number;
+  boardGenerated: boolean;
+  pickCount: number;
+  orderCount: number;
+};
+
 export const startDraft = mutation({
   args: { leagueId: v.id("leagues"), scheduledAt: v.optional(v.union(v.number(), v.null())) },
   returns: v.object({
@@ -714,8 +787,14 @@ export const startDraft = mutation({
     status: v.literal("drafting"),
     scheduledAt: v.number(),
     boardGenerated: v.boolean(),
+    /** Rows written to `draft_picks` (0 for an auction, which has no board). */
+    pickCount: v.number(),
+    /** Teams in the generated draft order. */
+    orderCount: v.number(),
   }),
-  handler: async (ctx, { leagueId, scheduledAt }) => {
+  // The explicit return type breaks the type cycle `commissioner -> _generated/api
+  // -> draft -> commissioner` that `ctx.runMutation(internal.draft.start)` creates.
+  handler: async (ctx, { leagueId, scheduledAt }): Promise<StartDraftResult> => {
     const access = await requireCommissioner(ctx, leagueId);
     const league = access.league;
     if (league.status !== "setup") {
@@ -732,6 +811,14 @@ export const startDraft = mutation({
 
     const now = Date.now();
     const startsAt = scheduledAt ?? league.draftScheduledAt ?? now;
+
+    // Package G's board generator. It also flips the league to `drafting`,
+    // pins `draftScheduledAt` and stamps `rulesLockedAt`.
+    const board = await ctx.runMutation(internal.draft.start, {
+      leagueId,
+      type: league.draftType,
+      scheduledAt: startsAt,
+    });
 
     await ctx.db.patch("leagues", leagueId, {
       status: "drafting",
@@ -756,7 +843,14 @@ export const startDraft = mutation({
           : "draft started; rules locked",
     });
 
-    return { leagueId, status: "drafting" as const, scheduledAt: startsAt, boardGenerated: false };
+    return {
+      leagueId,
+      status: "drafting" as const,
+      scheduledAt: startsAt,
+      boardGenerated: true,
+      pickCount: board.picks,
+      orderCount: board.order.length,
+    };
   },
 });
 

@@ -439,9 +439,18 @@ export default defineSchema({
     fantasyPositions: v.array(v.string()),
     /** Cross ids and other provider fields. Kept small (ids only, not the raw Sleeper blob). */
     externalIds: v.record(v.string(), v.string()),
+    /**
+     * `<name stripped to a-z>|<team>|<position>` — the ingest join key for feeds
+     * that carry no id (ESPN injuries, FantasyPros projections). Written by
+     * `internal.ingest.upsertPlayers`; absent on rows the golden seed imported,
+     * which the next full pull backfills.
+     */
+    nameKey: v.optional(v.string()),
     updatedAt: v.number(),
   })
     .index("by_sleeperId", ["sleeperId"])
+    .index("by_espnId", ["espnId"])
+    .index("by_nameKey", ["nameKey"])
     .index("by_position_searchRank", ["position", "searchRank"])
     .index("by_nflTeam", ["nflTeam"])
     .searchIndex("search_fullName", { searchField: "fullName", filterFields: ["position"] }),

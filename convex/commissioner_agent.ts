@@ -18,8 +18,8 @@
  *   5. publishes the `##` sections as `announcement` posts via
  *      `internal.forum.createPost`, and finishes the run.
  *
- * `recordStep` is a **temporary** local copy of the ledger write: Phase 4
- * replaces its body with a call to `internal.ledger.recordStep`. Every usage /
+ * `recordStep` records the trace step and delegates the usage/rollup write to
+ * `internal.ledger.recordStep` (the single ledger writer). Every usage /
  * rollup write in this file goes through that one function so the swap is a
  * one-line change.
  *
@@ -195,7 +195,7 @@ function defaultTitle(task: CommissionerTask, weekNo: number | null): string {
 }
 
 // ---------------------------------------------------------------------------
-// Usage + pricing (temporary; Phase 4 moves this to internal.ledger.recordStep)
+// Usage bookkeeping (pricing lives in convex/ledger.ts)
 // ---------------------------------------------------------------------------
 
 export type CommissionerUsage = {
@@ -226,167 +226,6 @@ export function normalizeUsage(usage: unknown): CommissionerUsage {
     cachedInputTokens: u.inputTokenDetails?.cacheReadTokens ?? 0,
     reasoningTokens: u.outputTokenDetails?.reasoningTokens ?? 0,
   };
-}
-
-type Price = {
-  provider: string;
-  inputPerM: number;
-  outputPerM: number;
-  cachedInputPerM: number | null;
-  reasoningPerM: number | null;
-};
-
-/** Effective-dated price, falling back to the static catalogue. */
-async function priceFor(ctx: QueryCtx, modelId: string, at: number): Promise<Price> {
-  const row = await ctx.db
-    .query("model_prices")
-    .withIndex("by_modelId_effectiveFrom", (q) =>
-      q.eq("modelId", modelId).lte("effectiveFrom", at),
-    )
-    .order("desc")
-    .first();
-  const catalog = findModel(modelId);
-  const slash = modelId.indexOf("/");
-  return {
-    provider:
-      row?.provider ?? catalog?.provider ?? (slash > 0 ? modelId.slice(0, slash) : "unknown"),
-    inputPerM: row?.inputPerM ?? catalog?.inputPerM ?? 0,
-    outputPerM: row?.outputPerM ?? catalog?.outputPerM ?? 0,
-    cachedInputPerM: row?.cachedInputPerM ?? catalog?.cachedInputPerM ?? null,
-    reasoningPerM: row?.reasoningPerM ?? catalog?.reasoningPerM ?? null,
-  };
-}
-
-/** USD for one step. Copy of `computeCostUsd` in `lib/services/ledger`. */
-export function computeCostUsd(args: { price: Price } & CommissionerUsage): number {
-  const { price } = args;
-  const input = Math.max(0, args.inputTokens);
-  const cached = Math.min(Math.max(0, args.cachedInputTokens), input);
-  const uncached = input - cached;
-  const output = Math.max(0, args.outputTokens);
-  const reasoning = Math.min(Math.max(0, args.reasoningTokens), output);
-
-  const cachedRate = price.cachedInputPerM ?? price.inputPerM;
-  let usd = (uncached / 1_000_000) * price.inputPerM + (cached / 1_000_000) * cachedRate;
-  if (price.reasoningPerM != null && reasoning > 0) {
-    usd += ((output - reasoning) / 1_000_000) * price.outputPerM;
-    usd += (reasoning / 1_000_000) * price.reasoningPerM;
-  } else {
-    usd += (output / 1_000_000) * price.outputPerM;
-  }
-  return Math.round(usd * 1e8) / 1e8;
-}
-
-type RollupDelta = {
-  usage: CommissionerUsage;
-  costUsd: number;
-  runCount: number;
-  stepCount: number;
-};
-
-function emptyCounters(now: number) {
-  return {
-    inputTokens: 0,
-    outputTokens: 0,
-    cachedInputTokens: 0,
-    reasoningTokens: 0,
-    costUsd: 0,
-    computedCostUsd: 0,
-    gatewayCostUsd: 0,
-    runCount: 0,
-    stepCount: 0,
-    fallbackCount: 0,
-    invalidActionCount: 0,
-    updatedAt: now,
-  };
-}
-
-function addCounters<T extends ReturnType<typeof emptyCounters>>(
-  base: T,
-  delta: RollupDelta,
-  now: number,
-) {
-  return {
-    inputTokens: base.inputTokens + delta.usage.inputTokens,
-    outputTokens: base.outputTokens + delta.usage.outputTokens,
-    cachedInputTokens: base.cachedInputTokens + delta.usage.cachedInputTokens,
-    reasoningTokens: base.reasoningTokens + delta.usage.reasoningTokens,
-    costUsd: base.costUsd + delta.costUsd,
-    computedCostUsd: base.computedCostUsd + delta.costUsd,
-    gatewayCostUsd: base.gatewayCostUsd,
-    runCount: base.runCount + delta.runCount,
-    stepCount: base.stepCount + delta.stepCount,
-    fallbackCount: base.fallbackCount,
-    invalidActionCount: base.invalidActionCount,
-    updatedAt: now,
-  };
-}
-
-/**
- * Fold one commissioner step into the rollups the cost dashboards read.
- *
- * `team_week_rollups` is skipped: commissioner spend is league-level and that
- * table's `teamId` is required. The per-league and cross-league
- * `model_week_rollups` rows and the `league_week_rollups` row are all updated.
- */
-async function bumpRollups(
-  ctx: MutationCtx,
-  args: {
-    leagueId: Id<"leagues">;
-    modelId: string;
-    provider: string;
-    season: number;
-    weekNo: number;
-    delta: RollupDelta;
-  },
-): Promise<void> {
-  const now = Date.now();
-
-  for (const leagueId of [args.leagueId, undefined]) {
-    const existing = await ctx.db
-      .query("model_week_rollups")
-      .withIndex("by_leagueId_modelId_season_weekNo", (q) =>
-        q
-          .eq("leagueId", leagueId)
-          .eq("modelId", args.modelId)
-          .eq("season", args.season)
-          .eq("weekNo", args.weekNo),
-      )
-      .unique();
-    if (existing) {
-      await ctx.db.patch("model_week_rollups", existing._id, {
-        ...addCounters(existing, args.delta, now),
-      });
-    } else {
-      await ctx.db.insert("model_week_rollups", {
-        ...(leagueId ? { leagueId } : {}),
-        modelId: args.modelId,
-        provider: args.provider,
-        season: args.season,
-        weekNo: args.weekNo,
-        ...addCounters(emptyCounters(now), args.delta, now),
-      });
-    }
-  }
-
-  const league = await ctx.db
-    .query("league_week_rollups")
-    .withIndex("by_leagueId_season_weekNo", (q) =>
-      q.eq("leagueId", args.leagueId).eq("season", args.season).eq("weekNo", args.weekNo),
-    )
-    .unique();
-  if (league) {
-    await ctx.db.patch("league_week_rollups", league._id, {
-      ...addCounters(league, args.delta, now),
-    });
-  } else {
-    await ctx.db.insert("league_week_rollups", {
-      leagueId: args.leagueId,
-      season: args.season,
-      weekNo: args.weekNo,
-      ...addCounters(emptyCounters(now), args.delta, now),
-    });
-  }
 }
 
 // ---------------------------------------------------------------------------
@@ -501,17 +340,9 @@ export const recordStep = internalMutation({
     latencyMs: v.optional(v.number()),
   },
   returns: v.object({ costUsd: v.number() }),
-  handler: async (ctx, args) => {
-    const now = Date.now();
-    const usage: CommissionerUsage = {
-      inputTokens: Math.max(0, Math.round(args.usage.inputTokens)),
-      outputTokens: Math.max(0, Math.round(args.usage.outputTokens)),
-      cachedInputTokens: Math.max(0, Math.round(args.usage.cachedInputTokens)),
-      reasoningTokens: Math.max(0, Math.round(args.usage.reasoningTokens)),
-    };
-    const price = await priceFor(ctx, args.modelId, now);
-    const costUsd = computeCostUsd({ price, ...usage });
-
+  // Explicit annotation: this mutation cross-calls `internal.ledger.recordStep`,
+  // and without it the generated `api` type collapses to `any` (type cycle).
+  handler: async (ctx, args): Promise<{ costUsd: number }> => {
     const already = await ctx.db
       .query("usage_events")
       .withIndex("by_runId_stepIndex", (q) =>
@@ -520,17 +351,31 @@ export const recordStep = internalMutation({
       .unique();
     if (already) return { costUsd: already.costUsd };
 
-    const messages = [
-      { role: "system", content: args.system },
-      { role: "user", content: args.prompt },
-    ];
+    // The shared ledger is the only writer of usage_events and the rollups
+    // (PRD 5.9); it runs in this same transaction.
+    const { costUsd }: { costUsd: number } = await ctx.runMutation(internal.ledger.recordStep, {
+      runId: args.runId,
+      stepIndex: args.stepIndex,
+      modelId: args.modelId,
+      usage: {
+        inputTokens: Math.max(0, Math.round(args.usage.inputTokens)),
+        outputTokens: Math.max(0, Math.round(args.usage.outputTokens)),
+        cachedInputTokens: Math.max(0, Math.round(args.usage.cachedInputTokens)),
+        reasoningTokens: Math.max(0, Math.round(args.usage.reasoningTokens)),
+      },
+      ...(args.latencyMs !== undefined ? { latencyMs: args.latencyMs } : {}),
+    });
+
     await ctx.db.insert("run_steps", {
       runId: args.runId,
       leagueId: args.leagueId,
       stepIndex: args.stepIndex,
       modelId: args.modelId,
       text: args.text,
-      responseMessages: messages,
+      responseMessages: [
+        { role: "system", content: args.system },
+        { role: "user", content: args.prompt },
+      ],
       toolCalls: [],
       toolResults: [],
       usage: args.usage,
@@ -538,38 +383,6 @@ export const recordStep = internalMutation({
       ...(args.latencyMs !== undefined ? { latencyMs: args.latencyMs } : {}),
       costUsd,
       bytes: args.text.length + args.prompt.length + args.system.length,
-    });
-
-    await ctx.db.insert("usage_events", {
-      runId: args.runId,
-      stepIndex: args.stepIndex,
-      leagueId: args.leagueId,
-      season: args.season,
-      weekNo: args.weekNo,
-      modelId: args.modelId,
-      provider: price.provider,
-      inputTokens: usage.inputTokens,
-      outputTokens: usage.outputTokens,
-      cachedInputTokens: usage.cachedInputTokens,
-      reasoningTokens: usage.reasoningTokens,
-      ...(args.latencyMs !== undefined ? { latencyMs: args.latencyMs } : {}),
-      computedCostUsd: costUsd,
-      costUsd,
-      createdAt: now,
-    });
-
-    await bumpRollups(ctx, {
-      leagueId: args.leagueId,
-      modelId: args.modelId,
-      provider: price.provider,
-      season: args.season,
-      weekNo: args.weekNo,
-      delta: {
-        usage,
-        costUsd,
-        runCount: args.stepIndex === 0 ? 1 : 0,
-        stepCount: 1,
-      },
     });
 
     const run = await ctx.db.get("runs", args.runId);

@@ -10,11 +10,14 @@ import { convexTest } from "convex-test";
 import { describe, expect, test } from "vitest";
 
 import type { SnapshotPayload } from "../lib/snapshot/types";
-import { api } from "./_generated/api";
+import { api, internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
 import schema from "./schema";
 
 const modules = import.meta.glob("./**/*.ts");
+
+const newTest = () => convexTest(schema, modules);
+type T = ReturnType<typeof newTest>;
 
 const NOW = Date.now();
 const SEASON = 2026;
@@ -75,7 +78,7 @@ function snapshotPlayer(id: string, fullName: string, position: "QB" | "RB", ppr
 }
 
 /** One team starting its *worse* running back — the case the metric exists for. */
-async function seed(t: ReturnType<typeof convexTest>, opts: { snapshot?: boolean } = {}) {
+async function seed(t: T, opts: { snapshot?: boolean } = {}) {
   return t.run(async (ctx) => {
     const userId = await ctx.db.insert("users", { email: "owner@x.dev" });
     const leagueId = await ctx.db.insert("leagues", {
@@ -429,5 +432,202 @@ describe("metrics.filmRoom", () => {
     expect(film.seasonSpend).toBe(0.3);
     expect(film.result).toMatchObject({ pointsFor: 21, won: true });
     expect(film.budget.teamWeekUsd).toBe(0.3);
+  });
+});
+
+// ===========================================================================
+// Phase 4 — the process-metrics writer
+// ===========================================================================
+
+/** A closed lineup window over the seeded snapshot, plus two runs for the team. */
+async function seedWindow(
+  t: T,
+  s: Awaited<ReturnType<typeof seed>>,
+  opts: { snapshot?: boolean } = {},
+) {
+  return t.run(async (ctx) => {
+    const windowId = await ctx.db.insert("windows", {
+      leagueId: s.leagueId,
+      type: "lineup",
+      label: "lineup_sun_early",
+      weekNo: 1,
+      roundNo: 1,
+      opensAt: NOW - 7_200_000,
+      submissionDeadlineAt: NOW - 3_600_000,
+      closesAt: NOW - 3_000_000,
+      snapshotId: opts.snapshot === false ? undefined : (s.snapshotId ?? undefined),
+      status: "closed",
+      scope: {},
+      runCount: 2,
+      terminalRunCount: 2,
+    });
+    const mkRun = (
+      status: "succeeded" | "fallback",
+      committed: number,
+      rejected: number,
+      fallback: boolean,
+    ) =>
+      ctx.db.insert("runs", {
+        leagueId: s.leagueId,
+        windowId,
+        teamId: s.teamId,
+        modelId: "mock/scripted",
+        kind: "team",
+        status,
+        windowType: "lineup",
+        windowLabel: "lineup_sun_early",
+        weekNo: 1,
+        attempt: 1,
+        lastPersistedStep: 0,
+        totalCostUsd: 0,
+        totalInputTokens: 0,
+        totalOutputTokens: 0,
+        stepCount: 1,
+        committedActionCount: committed,
+        rejectedActionCount: rejected,
+        fallbackApplied: fallback ? { kind: "safety_autopilot" as const } : undefined,
+      });
+    await mkRun("succeeded", 3, 1, false);
+    await mkRun("fallback", 0, 1, true);
+    return windowId;
+  });
+}
+
+async function storedMetrics(t: T, teamId: Id<"teams">) {
+  return t.run(async (ctx) =>
+    ctx.db
+      .query("team_week_metrics")
+      .withIndex("by_teamId_season_weekNo", (q) =>
+        q.eq("teamId", teamId).eq("season", SEASON).eq("weekNo", 1),
+      )
+      .unique(),
+  );
+}
+
+describe("metrics.writeTeamWeek", () => {
+  test("inserts, then overwrites — a recomputation clears a stale figure", async () => {
+    const t = newTest();
+    const s = await seed(t);
+
+    await t.mutation(internal.metrics.writeTeamWeek, {
+      leagueId: s.leagueId,
+      teamId: s.teamId,
+      season: SEASON,
+      weekNo: 1,
+      values: { actualPoints: 25, optimalPoints: 35, runCount: 2, fallbackCount: 1 },
+    });
+    const first = await storedMetrics(t, s.teamId);
+    expect(first).toMatchObject({ actualPoints: 25, optimalPoints: 35, runCount: 2 });
+
+    await t.mutation(internal.metrics.writeTeamWeek, {
+      leagueId: s.leagueId,
+      teamId: s.teamId,
+      season: SEASON,
+      weekNo: 1,
+      values: { runCount: 3, fallbackCount: 0 },
+    });
+    const second = await storedMetrics(t, s.teamId);
+    expect(second!._id).toBe(first!._id);
+    expect(second!.runCount).toBe(3);
+    expect(second!.actualPoints).toBeUndefined();
+    expect(second!.optimalPoints).toBeUndefined();
+  });
+});
+
+describe("metrics.computeForWindowClose", () => {
+  test("scores the week against the window's snapshot once stat lines exist", async () => {
+    const t = newTest();
+    const s = await seed(t);
+    await seedWindow(t, s);
+    await t.run(async (ctx) => {
+      const stat = (playerId: Id<"players">, points: number) =>
+        ctx.db.insert("player_stats_weekly", {
+          playerId,
+          season: SEASON,
+          week: 1,
+          source: "sleeper",
+          stats: {},
+          fantasyPointsPpr: points,
+          fantasyPointsHalf: points,
+          fantasyPointsStd: points,
+          effectiveAt: NOW,
+        });
+      await stat(s.qb, 18);
+      await stat(s.rbGood, 14);
+      await stat(s.rbBad, 3);
+    });
+    const windowId = await t.run(async (ctx) => {
+      const rows = await ctx.db.query("windows").collect();
+      return rows[0]._id;
+    });
+
+    const result = await t.mutation(internal.metrics.computeForWindowClose, { windowId });
+    expect(result).toEqual({ teamCount: 1, weekNo: 1 });
+
+    const metrics = await storedMetrics(t, s.teamId);
+    // Started QB (18) + the worse RB (3); the optimal call was QB + Rick (14).
+    expect(metrics).toMatchObject({
+      actualPoints: 21,
+      optimalPoints: 32,
+      pointsLeftOnBench: 11,
+      runCount: 2,
+      fallbackCount: 1,
+    });
+    expect(metrics!.lineupEfficiency).toBeCloseTo(21 / 32, 4);
+    // The started lineup was projected for 20 + 5 = 25 and banked 21.
+    expect(metrics!.projectionCapture).toBeCloseTo(21 / 25, 4);
+    // 2 rejected write-tool calls out of 5 attempted, across the window's two runs.
+    expect(metrics!.invalidActionRate).toBeCloseTo(0.4, 8);
+    expect(metrics!.waiverValue).toBeUndefined();
+    expect(metrics!.tradeDelta).toBeUndefined();
+
+    // The film room then prefers the stored headline figures.
+    const film = await t.query(api.metrics.filmRoom, { teamId: s.teamId, weekNo: 1 });
+    expect(film.efficiency).toMatchObject({ actual: 21, optimal: 32, fromMetrics: true });
+  });
+
+  test("records the run counters but no points before any stat line lands", async () => {
+    const t = newTest();
+    const s = await seed(t);
+    const windowId = await seedWindow(t, s);
+
+    await t.mutation(internal.metrics.computeForWindowClose, { windowId });
+    const metrics = await storedMetrics(t, s.teamId);
+    expect(metrics).toMatchObject({ runCount: 2, fallbackCount: 1 });
+    expect(metrics!.actualPoints).toBeUndefined();
+    expect(metrics!.optimalPoints).toBeUndefined();
+    expect(metrics!.lineupEfficiency).toBeUndefined();
+    expect(metrics!.projectionCapture).toBeUndefined();
+    expect(metrics!.invalidActionRate).toBeCloseTo(0.4, 8);
+
+    // Without stored points the film room keeps computing the projected view.
+    const film = await t.query(api.metrics.filmRoom, { teamId: s.teamId, weekNo: 1 });
+    expect(film.efficiency).toMatchObject({ basis: "projected", fromMetrics: false });
+  });
+
+  test("still writes run counters when the window has no snapshot", async () => {
+    const t = newTest();
+    const s = await seed(t, { snapshot: false });
+    const windowId = await seedWindow(t, s, { snapshot: false });
+
+    await t.mutation(internal.metrics.computeForWindowClose, { windowId });
+    const metrics = await storedMetrics(t, s.teamId);
+    expect(metrics).toMatchObject({ runCount: 2, fallbackCount: 1 });
+    expect(metrics!.actualPoints).toBeUndefined();
+  });
+
+  test("is idempotent: closing twice recomputes rather than accumulating", async () => {
+    const t = newTest();
+    const s = await seed(t);
+    const windowId = await seedWindow(t, s);
+
+    await t.mutation(internal.metrics.computeForWindowClose, { windowId });
+    const first = await storedMetrics(t, s.teamId);
+    await t.mutation(internal.metrics.computeForWindowClose, { windowId });
+    const second = await storedMetrics(t, s.teamId);
+
+    expect(second!._id).toBe(first!._id);
+    expect(second!.runCount).toBe(2);
+    expect(await t.run(async (ctx) => ctx.db.query("team_week_metrics").collect())).toHaveLength(1);
   });
 });

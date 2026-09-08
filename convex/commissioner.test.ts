@@ -113,6 +113,33 @@ describe("commissioner.settings — shape", () => {
     expect(settings.locked).toBe(false);
   });
 
+  it("carries the roster in waiver-priority order, with owner and model", async () => {
+    const { t, commish, owner, leagueId, teamIds } = await fixture();
+    // Make the first team the last on waivers: the list is ordered, not inserted.
+    await t.run(async (ctx) => ctx.db.patch("teams", teamIds[0], { waiverPriority: 99 }));
+
+    const { teams } = await commish.session.query(api.commissioner.settings, { leagueId });
+    expect(teams).toHaveLength(teamIds.length);
+    expect(teams.map((team) => team.waiverPriority)).toEqual(
+      [...teams.map((team) => team.waiverPriority)].sort((a, b) => a - b),
+    );
+    expect(teams.at(-1)!.id).toBe(teamIds[0]);
+
+    // `leagues.join` seated the owner on the first open team.
+    const seated = teams.find((team) => team.ownerUserId === owner.userId)!;
+    expect(seated.ownerName).toBe("Owner");
+    expect(seated.ownerEmail).toBe("owner@fantasybench.dev");
+    expect(seated.abbreviation.length).toBeGreaterThan(0);
+    // Every team starts on the first model of the allowlist, at version 1.
+    expect(seated.modelId).toBe("anthropic/claude-sonnet-4.5");
+    expect(seated.configVersionNo).toBe(1);
+
+    const unowned = teams.filter((team) => team.ownerUserId === null);
+    expect(unowned.length).toBe(teamIds.length - 1);
+    expect(unowned[0].ownerName).toBeNull();
+    expect(unowned[0].ownerEmail).toBeNull();
+  });
+
   it("counts the models teams actually run and reports the lock", async () => {
     const { t, commish, leagueId, teamIds } = await fixture();
     await t.run(async (ctx) => {
@@ -199,6 +226,16 @@ async function changes(t: T, leagueId: Id<"leagues">) {
       .withIndex("by_leagueId", (q) => q.eq("leagueId", leagueId))
       .order("desc")
       .take(200),
+  );
+}
+
+/** The generated draft board, in overall pick order. */
+async function draftPicks(t: T, leagueId: Id<"leagues">) {
+  return t.run(async (ctx) =>
+    ctx.db
+      .query("draft_picks")
+      .withIndex("by_leagueId_overallNo", (q) => q.eq("leagueId", leagueId))
+      .take(500),
   );
 }
 
@@ -746,13 +783,28 @@ describe("commissioner team management", () => {
 });
 
 describe("commissioner.startDraft", () => {
-  it("locks the rules, flips the status and logs it; a second call is refused", async () => {
-    const { t, commish, leagueId } = await fixture();
+  it("generates the board, locks the rules, flips the status and logs it; a second call is refused", async () => {
+    const { t, commish, leagueId, teamIds } = await fixture();
     const result = await commish.session.mutation(api.commissioner.startDraft, { leagueId });
     expect(result.status).toBe("drafting");
     expect(result.scheduledAt).toBeGreaterThan(0);
-    // Package G owns `convex/draft.ts`; nothing generates a board yet.
-    expect(result.boardGenerated).toBe(false);
+
+    // `internal.draft.start` (package G) wrote the board: one `draft_picks` row
+    // per (team, roster slot), i.e. teams x roster size, numbered 1..N overall.
+    const rules = (await rulesOf(t, leagueId))!;
+    const rosterSize = Object.values(rules.rosterSlots).reduce((sum, n) => sum + n, 0);
+    const picks = await draftPicks(t, leagueId);
+    expect(result.boardGenerated).toBe(true);
+    expect(picks).toHaveLength(teamIds.length * rosterSize);
+    expect(result.pickCount).toBe(teamIds.length * rosterSize);
+    expect(result.orderCount).toBe(teamIds.length);
+    expect(picks.map((pick) => pick.overallNo)).toEqual(
+      picks.map((_, index) => index + 1),
+    );
+    // Every team drafts once per round.
+    expect(new Set(picks.filter((pick) => pick.round === 1).map((pick) => pick.teamId)).size).toBe(
+      teamIds.length,
+    );
 
     const league = await t.run(async (ctx) => ctx.db.get("leagues", leagueId));
     expect(league?.status).toBe("drafting");
