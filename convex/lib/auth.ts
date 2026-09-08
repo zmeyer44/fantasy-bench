@@ -18,7 +18,12 @@ type Ctx = QueryCtx | MutationCtx;
 export type Viewer = { userId: Id<"users">; user: Doc<"users"> };
 
 export async function optionalUser(ctx: Ctx): Promise<Viewer | null> {
-  const userId = await getAuthUserId(ctx);
+  const subject = await getAuthUserId(ctx);
+  if (!subject) return null;
+  // Convex Auth's `subject` is `"<userId>|<sessionId>"`; a token from another
+  // issuer (or a hand-built test identity) yields a string that is not an id at
+  // all, and `ctx.db.get` throws on those. Treat that as "signed out".
+  const userId = ctx.db.normalizeId("users", subject);
   if (!userId) return null;
   const user = await ctx.db.get("users", userId);
   if (!user) return null;

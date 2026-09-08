@@ -246,6 +246,12 @@ export default defineSchema({
     joinCode: v.optional(v.string()),
     /** Scheduled `internal.draft.openNextPick` job while drafting; cancelled on reschedule. */
     draftJobId: v.optional(v.id("_scheduled_functions")),
+    /**
+     * Postgres `created_at`, preserved by the golden-dataset seed. `_creationTime`
+     * is the insert instant and cannot be back-dated, but `leagues.listMine` orders
+     * by creation date, so the original value is kept here. Removed in cleanup.
+     */
+    createdAt: v.optional(v.number()),
     updatedAt: v.number(),
   })
     .index("by_slug", ["slug"])
@@ -305,6 +311,8 @@ export default defineSchema({
     fromValue: v.optional(v.any()),
     toValue: v.optional(v.any()),
     note: v.optional(v.string()),
+    /** Postgres `created_at`, preserved by the seed (change log orders by it). */
+    createdAt: v.optional(v.number()),
   }).index("by_leagueId", ["leagueId"]),
 
   league_members: defineTable({
@@ -312,6 +320,8 @@ export default defineSchema({
     leagueId: v.id("leagues"),
     userId: v.id("users"),
     role: leagueRole,
+    /** Postgres `created_at`, preserved by the seed. */
+    createdAt: v.optional(v.number()),
   })
     .index("by_leagueId_userId", ["leagueId", "userId"])
     .index("by_userId", ["userId"]),
@@ -326,6 +336,8 @@ export default defineSchema({
     waiverPriority: v.number(),
     karma: v.number(),
     draftBudgetRemaining: v.number(),
+    /** Postgres `created_at`, preserved by the seed. */
+    createdAt: v.optional(v.number()),
   })
     .index("by_leagueId", ["leagueId"])
     .index("by_leagueId_name", ["leagueId", "name"])
@@ -608,6 +620,9 @@ export default defineSchema({
     currentVersionId: v.optional(v.id("config_versions")),
     pendingVersionId: v.optional(v.id("config_versions")),
     noteToAgent: v.optional(v.string()),
+    /** Postgres `created_at` / `updated_at`, preserved by the seed. */
+    createdAt: v.optional(v.number()),
+    updatedAt: v.optional(v.number()),
   })
     .index("by_teamId", ["teamId"])
     .index("by_leagueId", ["leagueId"]),
@@ -626,6 +641,11 @@ export default defineSchema({
     createdByUserId: v.optional(v.id("users")),
     appliedAt: v.optional(v.number()),
     changeSummary: v.optional(v.string()),
+    /**
+     * Postgres `created_at`, preserved by the seed: `configs.versions` reports
+     * `changedThisWeek` from it and the diff view stamps it. Removed in cleanup.
+     */
+    createdAt: v.optional(v.number()),
   })
     .index("by_configId_versionNo", ["configId", "versionNo"])
     .index("by_leagueId", ["leagueId"]),
@@ -641,6 +661,8 @@ export default defineSchema({
     forkedFromSkillId: v.optional(v.id("skills")),
     /** Denormalized: number of *current* config versions attaching this skill. */
     usageCount: v.number(),
+    /** Postgres `created_at`, preserved by the seed (fork lists order by it). */
+    createdAt: v.optional(v.number()),
     updatedAt: v.number(),
   })
     .index("by_slug", ["slug"])
@@ -672,6 +694,8 @@ export default defineSchema({
       draftType: v.optional(draftType),
       rounds: v.optional(v.number()),
       round: v.optional(v.number()),
+      /** Daily windows (the forum template) carry their day of the league week, 1-7. */
+      dayIndex: v.optional(v.number()),
       lotNo: v.optional(v.number()),
       phase: v.optional(v.string()),
     }),
@@ -978,7 +1002,9 @@ export default defineSchema({
     .index("by_recipientTeamId_status", ["recipientTeamId", "status"])
     .index("by_threadId", ["threadId"])
     .index("by_windowId_status", ["windowId", "status"])
-    .index("by_status_reviewEndsAt", ["status", "reviewEndsAt"]),
+    .index("by_status_reviewEndsAt", ["status", "reviewEndsAt"])
+    /** Counter-offers of a trade, for `trades.get`'s `counterTradeIds`. */
+    .index("by_parentTradeId", ["parentTradeId"]),
 
   trade_events: defineTable({
     ...legacy,
@@ -1011,6 +1037,13 @@ export default defineSchema({
     createdInWindowId: v.optional(v.id("windows")),
     lastMessageAt: v.optional(v.number()),
     messageCount: v.number(),
+    /**
+     * Denormalized count of messages in the thread whose injection classifier
+     * fired. `messaging.listThreads` shows it on every thread card and cannot
+     * afford to read every thread's messages; maintained by `messaging.send`
+     * (Phase 3) and by the golden-data import. Absent = 0.
+     */
+    flaggedCount: v.optional(v.number()),
   })
     .index("by_leagueId_teamAId_teamBId", ["leagueId", "teamAId", "teamBId"])
     .index("by_leagueId_lastMessageAt", ["leagueId", "lastMessageAt"])

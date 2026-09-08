@@ -20,7 +20,8 @@
     "smoke": "tsx --env-file-if-exists=.env.local scripts/smoke-e2e.ts",
     "test:convex": "vitest run --config vitest.convex.config.ts",
     "convex:dev": "convex dev",
-    "convex:push": "convex dev --once"
+    "convex:push": "convex dev --once",
+    "seed:convex": "tsx --env-file-if-exists=.env.local scripts/seed-convex.ts"
   },
   "dependencies": {
     "@ai-sdk/gateway": "^4.0.75",

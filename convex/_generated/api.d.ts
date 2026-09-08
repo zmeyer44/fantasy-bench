@@ -9,9 +9,38 @@
  */
 
 import type * as auth from "../auth.js";
+import type * as commissioner from "../commissioner.js";
+import type * as configs from "../configs.js";
+import type * as draft from "../draft.js";
+import type * as forum from "../forum.js";
 import type * as http from "../http.js";
+import type * as leagues from "../leagues.js";
+import type * as ledger from "../ledger.js";
 import type * as lib_auth from "../lib/auth.js";
+import type * as lib_config_pure from "../lib/config_pure.js";
+import type * as lib_defaults from "../lib/defaults.js";
 import type * as lib_errors from "../lib/errors.js";
+import type * as lib_lineup_pure from "../lib/lineup_pure.js";
+import type * as lib_season from "../lib/season.js";
+import type * as lib_seed_secret from "../lib/seed_secret.js";
+import type * as lib_social_pure from "../lib/social_pure.js";
+import type * as lib_standings_pure from "../lib/standings_pure.js";
+import type * as lib_templates from "../lib/templates.js";
+import type * as lib_validators from "../lib/validators.js";
+import type * as lib_views_shared from "../lib/views_shared.js";
+import type * as messaging from "../messaging.js";
+import type * as metrics from "../metrics.js";
+import type * as runs from "../runs.js";
+import type * as seed from "../seed.js";
+import type * as seed_skills from "../seed/skills.js";
+import type * as skills from "../skills.js";
+import type * as snapshot from "../snapshot.js";
+import type * as trades from "../trades.js";
+import type * as users from "../users.js";
+import type * as views from "../views.js";
+import type * as waivers from "../waivers.js";
+import type * as weeks from "../weeks.js";
+import type * as windows from "../windows.js";
 
 import type {
   ApiFromModules,
@@ -21,9 +50,38 @@ import type {
 
 declare const fullApi: ApiFromModules<{
   auth: typeof auth;
+  commissioner: typeof commissioner;
+  configs: typeof configs;
+  draft: typeof draft;
+  forum: typeof forum;
   http: typeof http;
+  leagues: typeof leagues;
+  ledger: typeof ledger;
   "lib/auth": typeof lib_auth;
+  "lib/config_pure": typeof lib_config_pure;
+  "lib/defaults": typeof lib_defaults;
   "lib/errors": typeof lib_errors;
+  "lib/lineup_pure": typeof lib_lineup_pure;
+  "lib/season": typeof lib_season;
+  "lib/seed_secret": typeof lib_seed_secret;
+  "lib/social_pure": typeof lib_social_pure;
+  "lib/standings_pure": typeof lib_standings_pure;
+  "lib/templates": typeof lib_templates;
+  "lib/validators": typeof lib_validators;
+  "lib/views_shared": typeof lib_views_shared;
+  messaging: typeof messaging;
+  metrics: typeof metrics;
+  runs: typeof runs;
+  seed: typeof seed;
+  "seed/skills": typeof seed_skills;
+  skills: typeof skills;
+  snapshot: typeof snapshot;
+  trades: typeof trades;
+  users: typeof users;
+  views: typeof views;
+  waivers: typeof waivers;
+  weeks: typeof weeks;
+  windows: typeof windows;
 }>;
 
 /**

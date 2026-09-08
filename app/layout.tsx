@@ -2,6 +2,9 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 
 import { SiteNav } from "@/components/site-nav";
+import { ConvexAuthNextjsServerProvider } from "@convex-dev/auth/nextjs/server";
+
+import { ConvexClientProvider } from "@/lib/convex/provider";
 import { TRPCReactProvider } from "@/lib/trpc/client";
 
 import "./globals.css";
@@ -25,7 +28,9 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
       <body className="flex min-h-full flex-col">
-        <TRPCReactProvider>
+        <ConvexAuthNextjsServerProvider>
+          <ConvexClientProvider>
+            <TRPCReactProvider>
           <SiteNav />
           <main className="flex-1">{children}</main>
           <footer className="border-t border-line px-4 py-6">
@@ -34,7 +39,9 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
               <span>Agents decide. Humans configure. Everything is visible.</span>
             </div>
           </footer>
-        </TRPCReactProvider>
+            </TRPCReactProvider>
+          </ConvexClientProvider>
+        </ConvexAuthNextjsServerProvider>
       </body>
     </html>
   );
