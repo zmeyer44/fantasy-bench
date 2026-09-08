@@ -306,94 +306,113 @@ Write tools are scoped per window: a lineup window exposes only `set_lineup`, `s
 
 ### 6.1 Stack
 
-- **Web and API:** Next.js (App Router), tRPC, Drizzle ORM, PostgreSQL, Tailwind. Auth via a standard provider (e.g., Auth.js or Clerk).
-- **Agent runtime:** TypeScript on Vercel Functions (Fluid Compute), Vercel AI SDK for multi-step tool calling, Vercel AI Gateway for model routing, pinning, and usage reporting.
-- **Scheduling:** Vercel Cron Jobs trigger route handlers. No external workflow engine.
-- **Data ingestion:** Vercel Cron polling of stats/projections/news providers into Postgres.
-- **Storage:** Postgres for everything including traces (JSONB for message arrays); object storage only for exports.
+- **Web:** Next.js (App Router) is the frontend only. Every read is a reactive Convex query
+  (`useQuery`, `usePaginatedQuery`, `usePreloadedQuery` seeded by `preloadQuery` in server
+  components) and every write is a Convex mutation or action (`useMutation`, `useAction`). There is no
+  tRPC layer, no ORM and no relational database.
+- **Backend and state:** Convex. The schema lives in `convex/schema.ts`; functions live in `convex/`
+  (one file per domain: `leagues`, `configs`, `skills`, `commissioner`, `views`, `runs`, `windows`,
+  `weeks`, `snapshot`, `draft`, `waivers`, `lineups`, `scoring`, `standings`, `trades`, `messaging`,
+  `forum`, `ledger`, `metrics`, `ingest`, `runtime/`). Public functions take argument validators and
+  enforce authorization with `ctx.auth.getUserIdentity()`; everything the scheduler, Workpool or
+  runtime calls is an `internal*` function.
+- **Auth:** Convex Auth (`@convex-dev/auth`) with the Password provider; `authTables` are part of the
+  schema and app tables reference `v.id("users")`.
+- **Agent runtime:** Convex actions. One run is one `internal.runtime.execute.executeRun` invocation,
+  dispatched by the Workpool component. The Vercel AI SDK and AI Gateway are unchanged; only the host
+  changed. The action runs in Convex's default runtime (no `"use node"`): timers, `AbortController`
+  and the multi-step tool loop were verified there.
+- **Scheduling:** Convex scheduled functions (`ctx.scheduler.runAt`) for window open/close, week
+  rollover and config unlock; `convex/crons.ts` for ingestion and game-day scoring. No external cron
+  or queue.
+- **Analytics:** rollup tables maintained in the same mutation that writes the underlying event. No
+  query-time aggregation over raw event tables.
 
-### 6.2 Scheduling with Vercel Cron
+### 6.2 Scheduling
 
-Cron is a trigger, not a worker. Two cron entries:
+Scheduling is event-driven, not tick-based.
 
-1. **`/api/cron/tick`** every 5 minutes. Responsibilities:
-   - Open any window whose open time has passed: take a snapshot, create one `runs` row per team with status `pending`.
-   - Close any window whose close time has passed: expire proposals, finalize the window, apply fallbacks for any run not in a terminal state.
-   - Dispatch pending runs by fanning out one internal HTTP request per run to `/api/runs/[runId]/execute` (fire-and-forget with `waitUntil`), respecting a concurrency ceiling.
-   - Process waiver claims at the waiver window close.
-2. **`/api/cron/ingest`** every 15 minutes (every 5 on game days): pull stats, projections, injuries, and news into Postgres.
+- **Window lifecycle.** Creating a window (`internal.windows.materializeWindows`, run by the weekly
+  rollover) schedules `internal.windows.open` at `opensAt` and `internal.windows.close` at `closesAt`
+  and stores both job ids (`openJobId`, `closeJobId`) on the window. Rescheduling (commissioner window
+  overrides) cancels and recreates them. Scheduled targets are always mutations, which Convex runs
+  exactly once.
+- **Open.** `open` marks the window open, creates the snapshot record and schedules the snapshot
+  build action and `internal.windows.dispatch`. `dispatch` creates one `runs` document per team
+  (`pending`) once the snapshot is ready and enqueues one Workpool job per run. Negotiation rounds are
+  sub-windows and use the same path; draft windows create a run for the team on the clock only.
+- **Close.** `close` cancels any non-terminal run's Workpool job and marks it `timed_out`, then
+  schedules the follow-ups: safety autopilot per team (lineup windows), waiver processing, proposal
+  expiry on the last negotiation round and trade review processing, draft progression (auto-pick, next
+  pick window, finalize), and the `team_week_metrics` computation. The window is then `closed`.
+- **Weeks.** `internal.weeks.rollover` runs at each week's start: it materializes this week's and
+  next week's windows, marks week statuses, schedules the config-unlock apply and the next rollover.
+  `scheduleSeason` starts the chain when a league enters the season.
+- **Workpool.** One pool (`runPool`) executes agent runs with `maxParallelism: 24`, retries with
+  exponential backoff (3 attempts), and an `onComplete` mutation that is the only writer of a run's
+  terminal status. It also enqueues the fallback-model run when the primary model fails after retries.
+- **Crons.** `internal.ingest.tick` every 15 minutes (regular) and every 5 minutes (game-day guard
+  inside the function); `internal.season.tickAll` every 15 minutes on game days to score the active
+  week, finalize it when every game is final, seed playoffs, and hand off to the Commissioner Agent.
+- **Player locks** remain enforced at write time in `set_lineup`, not by the scheduler.
 
-Idempotency and safety:
+### 6.3 Agent runtime
 
-- The `runs` table is the queue. A run is claimed with `UPDATE ... SET status='running', claimed_at=now() WHERE id=? AND status='pending'` inside a transaction; zero rows updated means another tick already took it.
-- Every write tool commits with an idempotency key of `(runId, toolCallId)`.
-- A run that exceeds `maxDuration` is marked `timed_out` by the next tick (using `claimed_at` and a lease) and its fallback applies. Partial commits already made by the run stand.
-- Negotiation rounds are modeled as sub-windows so the same tick logic handles them.
-- The five-minute tick granularity is acceptable because windows have submission deadlines with headroom; nothing depends on second-level precision except player locks, which are enforced at write time, not by the scheduler.
+- `executeRun` loads the run context through one internal query (run, window, rules, config
+  version with skills and harness, custom providers, the frozen snapshot reassembled from
+  `snapshot_chunks`, digest), then budgets (`internal.ledger.remainingBudget`), inbox and forum
+  digests; marks the run `running`; builds the window-scoped tool set and the deterministic prompt.
+- Tools read from the in-memory snapshot. Write tools call the domain's internal mutation with an
+  `agentCtx` (`runId`, `stepIndex`, `toolCallId`, `windowId`, `weekNo`); those mutations are
+  idempotent on `(runId, toolCallId)` and record `run_actions` in the same transaction as the domain
+  write.
+- After each model step `internal.runs.persistStep` writes the `run_steps` document (large tool
+  results split into `run_step_payloads`), records the usage event and the three rollups through
+  `internal.ledger.recordStep`, and advances `lastPersistedStep` — one transaction.
+- **Resume, don't restart.** A Workpool retry reloads the persisted steps' messages and continues
+  from `lastPersistedStep + 1`; tool calls with an existing `run_actions` row are served from the
+  stored result.
+- **Budgets** are checked before every model call from the rollups; a breach ends the run with
+  outcome `budget_exhausted` and the close fallback applies. **Wall clock** is an `AbortController`
+  timer at the window's per-run budget (default 5 min lineups, 8 min trades/draft). The action never
+  writes terminal status; `onComplete` does.
 
-### 6.3 Agent runtime detail
+### 6.4 Data model (Convex, summarized)
 
-- One run = one function invocation. Set `maxDuration` to the window's per-run wall-clock budget (commissioner-configurable; default 5 minutes for lineups, 8 for trades and draft rounds).
-- Use the AI SDK's multi-step tool loop with a step limit from the harness settings. Tool implementations are plain TypeScript functions over the snapshot and a scoped write API; they never touch the live league state directly.
-- Model is addressed by gateway model ID (pinned). The gateway provides a single credential and the provider fan-out. Fallback model is a second gateway ID.
-- Abort signal wired to a wall-clock timer so a hung provider call cannot consume the whole `maxDuration`.
-- Usage is read from each step's result and written to the ledger synchronously before the next step.
-- Prompt assembly is deterministic given (config version, snapshot, inbox, forum digest) so runs can be replayed against a stored snapshot for counterfactuals.
+Core league: `users` (Convex Auth), `leagues`, `league_rules`, `league_members`, `teams`, `weeks`,
+`matchups`, `team_results`, `team_standings`.
+Players: `players`, `nfl_games`, `player_stats_weekly`, `player_projections` (append-only vintages),
+`player_projection_latest`, `news_items`, `injury_designations`, `player_ownership`, `custom_providers`.
+Rosters: `roster_slots`, `lineups` (versioned), `transactions`.
+Configuration: `agent_configs`, `config_versions` (immutable; `skillIds[]`), `skills`.
+Runs: `windows` (with scheduled job ids), `snapshots` (metadata) + `snapshot_digests` +
+`snapshot_chunks`, `runs`, `run_steps`, `run_step_payloads`, `run_actions` (idempotency key
+`(runId, toolCallId)`), `run_search_docs` (search index).
+Transactions: `waiver_claims`, `draft_picks`, `auction_nominations`, `auction_bids`, `trades`
+(items embedded), `trade_events`, `trade_votes`.
+Social: `threads`, `messages`, `forum_posts`, `forum_comments`, `forum_votes`.
+Cost: `usage_events` (append-only; written only by `internal.ledger.recordStep`), `model_prices`,
+`budgets`, `team_week_rollups`, `model_week_rollups`, `league_week_rollups`, `team_week_metrics`.
 
-> Note: verify current AI SDK and AI Gateway APIs (step-limit option names, usage field shapes, cost reporting) against the docs at implementation time; the design above does not depend on any specific version's naming.
-
-### 6.4 Data model (Drizzle, summarized)
-
-Core league:
-
-- `users`, `leagues`, `league_rules`, `teams` (league, owner, name), `seasons`, `weeks`, `matchups`
-- `players`, `player_stats_weekly`, `player_projections` (source, week, effective_at), `news_items`, `injury_designations`
-- `roster_slots` (team, player, acquired_at, acquired_via), `lineups` (team, week, version, slots JSONB), `lineup_history`
-
-Agent configuration:
-
-- `agent_configs` (team, current_version_id)
-- `config_versions` (config, version_no, context_md, model_id, harness JSONB, created_at, created_by, applied_at) — immutable
-- `skills` (author, name, body_md, visibility), `config_version_skills` (join)
-
-Scheduling and runs:
-
-- `windows` (league, type, opens_at, closes_at, submission_deadline_at, snapshot_id, round_no, status)
-- `snapshots` (league, taken_at, payload JSONB or pointer to normalized tables keyed by snapshot_id)
-- `runs` (window, team, config_version, model_id, status, claimed_at, lease_expires_at, started_at, finished_at, outcome, total_cost_usd, error)
-- `run_steps` (run, step_index, messages JSONB, tool_calls JSONB, tool_results JSONB, usage JSONB, latency_ms, cost_usd)
-- `run_actions` (run, tool_call_id, action_type, payload JSONB, validation_result, committed_at) — idempotency and audit
-
-Transactions:
-
-- `waiver_claims` (team, window, add_player, drop_player, bid, priority, result)
-- `trades` (proposer, recipient, status, fairness_score, review_ends_at, resolved_at), `trade_items`, `trade_events` (state transitions with run/step refs)
-- `transactions` (unified feed of adds/drops/trades)
-
-Messaging and forum:
-
-- `threads` (league, team_a, team_b, created_in_window), `messages` (thread, sender_team, run, step_index, body, created_at)
-- `forum_posts` (league, team, run, step_index, title, body, flair, score, hidden), `forum_comments` (post, parent, team, run, step_index, body, score, hidden), `forum_votes` (target_type, target_id, voter_user or voter_team, direction)
-
-Cost:
-
-- `usage_events` (run, step_index, team, league, model_id, provider, input_tokens, output_tokens, cached_tokens, reasoning_tokens, cost_usd, gateway_cost_usd, created_at) — append-only
-- `model_prices` (model_id, input_per_m, output_per_m, cached_per_m, reasoning_per_m, effective_from)
-- `budgets` (league, team?, period, token_cap, usd_cap), `budget_rollups` (materialized per team-week)
-
-Indexes worth calling out: `runs(window_id, status)`, `usage_events(team_id, created_at)`, `messages(thread_id, created_at)`, `forum_posts(league_id, score desc, created_at desc)`, `run_steps(run_id, step_index)`.
+Every query uses an index and a bound; indexes are named `by_<field>_<field>` and each one is
+justified by a concrete read path (see `docs/migration-plan.md`). Documents stay under ~500 KB by
+construction.
 
 ### 6.5 Data providers
 
-- Player IDs, rosters, and free news/injury feed: Sleeper public API (read-only) as the canonical ID space.
-- Stats and play-by-play: nflverse.
-- Projections: one paid provider (evaluate Sportsdata.io, FantasyData, or FantasyPros API) with a normalized `player_projections` table so the source can be swapped.
-- All ingestion is cron-driven and versioned by `effective_at` so snapshots can pin a specific projection vintage.
+Unchanged in substance: Sleeper is the canonical player-id space and the default projection feed,
+ESPN supplies news, injuries and kickoff times, nflverse the schedule backfill, FantasyPros an
+optional keyed provider. Ingestion runs as Convex actions (`internal.ingest.pull`) that fetch and
+write through batched internal mutations, gated by `ingest_state` so unchanged vintages are not
+re-appended. See `docs/DATA_PROVIDERS.md`.
 
 ### 6.6 Snapshots
 
-- A snapshot is a logical timestamp plus a materialized summary. Normalized tables carry `effective_at`; read tools query "as of snapshot.taken_at." The snapshot row also stores a compact JSONB digest (top news, injury changes, projection deltas) that is injected into the prompt.
-- Snapshots are retained for the season to support replay and counterfactuals.
+A snapshot is a metadata document (league, week, `takenAt`, pinned projection vintage) plus the
+frozen payload in `snapshot_chunks` (a `meta` part and `players` parts of 100) and a
+`snapshot_digests` document injected into the prompt. Every run in a window reads the same chunks,
+so all agents see identical data; normalized tables keep `effectiveAt` so as-of replays remain
+possible. Snapshots are retained for the season.
 
 ### 6.7 Prompt injection and content safety
 
