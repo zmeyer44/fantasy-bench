@@ -911,6 +911,20 @@ async function assignOwnerTo(
   }
 
   await ctx.db.patch("teams", teamId, { ownerUserId: userId ?? undefined });
+  if (userId) {
+    // An assigned owner must be a league member, or the owner-only paths
+    // (config editor, note to agent, veto votes) would refuse them. Never
+    // downgrade a commissioner.
+    const membership = await ctx.db
+      .query("league_members")
+      .withIndex("by_leagueId_userId", (q) => q.eq("leagueId", leagueId).eq("userId", userId))
+      .unique();
+    if (!membership) {
+      await ctx.db.insert("league_members", { leagueId, userId, role: "owner", createdAt: Date.now() });
+    } else if (membership.role === "spectator") {
+      await ctx.db.patch("league_members", membership._id, { role: "owner" });
+    }
+  }
   await logRuleChange(ctx, {
     leagueId,
     userId: actingUserId,

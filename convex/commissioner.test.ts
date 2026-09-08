@@ -924,3 +924,37 @@ describe("commissioner.replaceDeprecatedModel", () => {
     expect(version?.versionNo).toBe(1);
   });
 });
+
+describe("commissioner.assignOwner membership", () => {
+  it("makes an assigned owner a league member so owner-only paths accept them", async () => {
+    const { t, commish, outsider, leagueId, teamIds } = await fixture();
+    await commish.session.mutation(api.commissioner.assignOwner, {
+      leagueId,
+      teamId: teamIds[3],
+      userId: outsider.userId,
+    });
+    const membership = await t.run(async (ctx) =>
+      ctx.db
+        .query("league_members")
+        .withIndex("by_leagueId_userId", (q) => q.eq("leagueId", leagueId).eq("userId", outsider.userId))
+        .unique(),
+    );
+    expect(membership?.role).toBe("owner");
+    // The new owner can now read their config through the member-gated path.
+    const me = await outsider.session.query(api.users.me, {});
+    expect(me?.memberships.some((m) => m.leagueId === leagueId && m.teamId === teamIds[3])).toBe(true);
+    // Re-assigning does not duplicate the membership.
+    await commish.session.mutation(api.commissioner.assignOwner, {
+      leagueId,
+      teamId: teamIds[3],
+      userId: outsider.userId,
+    });
+    const rows = await t.run(async (ctx) =>
+      ctx.db
+        .query("league_members")
+        .withIndex("by_leagueId_userId", (q) => q.eq("leagueId", leagueId).eq("userId", outsider.userId))
+        .collect(),
+    );
+    expect(rows).toHaveLength(1);
+  });
+});

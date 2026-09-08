@@ -19,6 +19,7 @@ cp .env.example .env.local        # CONVEX_DEPLOYMENT + the two NEXT_PUBLIC_CONV
 npm install
 npx convex dev                    # provisions/selects a deployment, pushes functions, watches
 npm run seed:convex               # demo league + the golden dataset (needs SEED_SECRET, below)
+npx tsx --env-file=.env.local scripts/seed-accounts.ts   # demo accounts: commissioner, second owner, spectator
 npm run dev                       # Next dev server on :3000
 ```
 
