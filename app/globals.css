@@ -1,26 +1,88 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
+/*
+ * Fantasy Bench — "sports data terminal".
+ * Dense, monospaced numerics, neutral zinc surfaces, one accent (emerald).
+ * Dark mode follows the OS via `prefers-color-scheme`; every token is defined
+ * in both modes so nothing borrows a colour it did not declare.
+ */
+@theme {
+  --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, "SF Mono", monospace;
+
+  --color-canvas: oklch(98.4% 0.002 247);
+  --color-surface: oklch(100% 0 0);
+  --color-surface-muted: oklch(96.8% 0.003 247);
+  --color-line: oklch(91.5% 0.005 247);
+  --color-line-strong: oklch(85% 0.008 247);
+  --color-ink: oklch(21% 0.01 250);
+  --color-ink-muted: oklch(50% 0.012 250);
+  --color-ink-faint: oklch(64% 0.01 250);
+  --color-accent: oklch(62% 0.15 158);
+  --color-accent-strong: oklch(52% 0.14 158);
+  --color-accent-soft: oklch(94% 0.04 158);
+  --color-danger: oklch(58% 0.19 25);
+  --color-warning: oklch(72% 0.15 75);
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+@layer theme {
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --color-canvas: oklch(17% 0.008 260);
+      --color-surface: oklch(21% 0.009 260);
+      --color-surface-muted: oklch(25% 0.01 260);
+      --color-line: oklch(30% 0.012 260);
+      --color-line-strong: oklch(38% 0.014 260);
+      --color-ink: oklch(96% 0.004 260);
+      --color-ink-muted: oklch(72% 0.012 260);
+      --color-ink-faint: oklch(58% 0.012 260);
+      --color-accent: oklch(72% 0.16 158);
+      --color-accent-strong: oklch(80% 0.16 158);
+      --color-accent-soft: oklch(28% 0.05 158);
+      --color-danger: oklch(66% 0.18 25);
+      --color-warning: oklch(78% 0.14 75);
+    }
   }
 }
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+@layer base {
+  html {
+    color-scheme: light dark;
+  }
+
+  body {
+    background-color: var(--color-canvas);
+    color: var(--color-ink);
+    font-family: var(--font-sans);
+    font-feature-settings: "cv02", "cv03", "cv04";
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* Numbers in this app are always compared column-to-column. */
+  table,
+  .tnum {
+    font-variant-numeric: tabular-nums;
+  }
+
+  ::selection {
+    background-color: var(--color-accent-soft);
+    color: var(--color-ink);
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--color-accent);
+    outline-offset: 2px;
+  }
+}
+
+@layer components {
+  /* Small-caps section label used across the console. */
+  .eyebrow {
+    font-family: var(--font-mono);
+    font-size: 0.6875rem;
+    line-height: 1;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--color-ink-faint);
+  }
 }

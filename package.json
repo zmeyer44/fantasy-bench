@@ -6,21 +6,51 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "tsx --env-file-if-exists=.env.local scripts/migrate.ts",
+    "db:push": "drizzle-kit push",
+    "db:seed": "tsx --env-file-if-exists=.env.local scripts/seed.ts",
+    "db:reset": "tsx --env-file-if-exists=.env.local scripts/reset.ts && npm run db:migrate && npm run db:seed"
   },
   "dependencies": {
+    "@ai-sdk/gateway": "^4.0.75",
+    "@ai-sdk/react": "^4.0.96",
+    "@date-fns/tz": "^1.5.0",
+    "@tanstack/react-query": "^5.102.8",
+    "@trpc/client": "^11.18.0",
+    "@trpc/server": "^11.18.0",
+    "@trpc/tanstack-react-query": "^11.18.0",
+    "ai": "^7.0.93",
+    "better-auth": "^1.7.3",
+    "date-fns": "^4.4.0",
+    "diff": "^9.0.0",
+    "drizzle-orm": "^0.45.2",
     "next": "16.3.4",
+    "postgres": "^3.4.9",
     "react": "19.2.8",
-    "react-dom": "19.2.8"
+    "react-dom": "19.2.8",
+    "react-markdown": "^10.1.0",
+    "remark-gfm": "^4.0.1",
+    "superjson": "^2.2.6",
+    "zod": "^4.5.4"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
+    "@types/diff": "^7.0.2",
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "dotenv": "^17.4.2",
+    "drizzle-kit": "^0.31.10",
     "eslint": "^9",
     "eslint-config-next": "16.3.4",
     "tailwindcss": "^4",
-    "typescript": "^5"
+    "tsx": "^4.23.13",
+    "typescript": "^5",
+    "vitest": "^4.1.11"
   }
 }

@@ -1,36 +1,55 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Fantasy Bench
 
-## Getting Started
+A fantasy football league in which AI agents make every decision — drafting, lineups, waivers,
+trades and trash talk. Humans never touch the roster; an owner influences their team only by tuning
+the agent that runs it (context, skills, model, harness).
 
-First, run the development server:
+- `prd.md` — product spec
+- `docs/ARCHITECTURE.md` — engineering contract. **Read this before writing code.**
+
+## Setup
+
+Requires Node 20+ and a local PostgreSQL 17.
 
 ```bash
+createdb fantasy_bench
+createdb fantasy_bench_test
+cp .env.example .env.local        # already present in a fresh checkout
+npm install
+npm run db:migrate
+npm run db:seed
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+The seed creates a demo account: `demo@fantasybench.dev` / `password1234`.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Scripts
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+| Script | What it does |
+| --- | --- |
+| `npm run dev` | Next dev server (Turbopack) on :3000 |
+| `npm run build` / `start` | Production build / server |
+| `npm run lint` | ESLint (flat config) |
+| `npm run typecheck` | `tsc --noEmit` |
+| `npm test` | Vitest against `fantasy_bench_test` |
+| `npm run db:generate` | Generate a migration from `lib/db/schema` |
+| `npm run db:migrate` | Apply migrations to `DATABASE_URL` |
+| `npm run db:push` | Push the schema directly (iteration only) |
+| `npm run db:seed` | Idempotent seed: model prices, players, demo user, built-in skills |
+| `npm run db:reset` | Drop the schema, then migrate + seed |
 
-## Learn More
+Tests read `.env.test`; everything else reads `.env.local`.
 
-To learn more about Next.js, take a look at the following resources:
+## Layout
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+```
+app/            routes only (thin) — (public), (console), (auth), api/
+components/     shared React; components/ui/* primitives
+lib/db/         drizzle schema (per domain), client, migrations, row types
+lib/auth/       better-auth server + client, getSession(), requireUser()
+lib/trpc/       context, procedures, routers, RSC caller, client provider
+lib/services/   domain logic over drizzle — all business rules live here
+lib/time.ts     Eastern-time helpers (league time is America/New_York)
+scripts/        migrate, seed, reset (run with tsx)
+tests/          vitest; tests/setup.ts migrates + exposes truncateAll()
+```
