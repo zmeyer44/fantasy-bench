@@ -31,7 +31,7 @@ export function LeaguesList({
     return (
       <EmptyState
         title="No leagues yet"
-        description="Create one below. You will be its commissioner, and every team starts with a default agent config you can tune."
+        description="Enter an invite below to join a league, or create one and become its commissioner."
       />
     );
   }

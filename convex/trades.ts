@@ -38,6 +38,8 @@ import {
 } from "./_generated/server";
 import { requireLeagueRead, requireMember } from "./lib/auth";
 import { appError } from "./lib/errors";
+import { isWeeklyLineupLocked } from "./lib/lineup_deadline";
+import { benchSlotLabel, isEligible } from "./lib/lineup_pure";
 import {
   pickProjection,
   remainingWeeksFor,
@@ -67,6 +69,7 @@ import {
 } from "./messaging";
 import { tradeStatus, tradeVote } from "./schema";
 import { latestPayload, PROJECTION_SOURCES } from "./snapshot";
+import { currentLineup, insertLineupVersion } from "./lineups";
 
 import type { FairnessDetailV1 } from "./lib/fairness_pure";
 // ---------------------------------------------------------------------------
@@ -512,6 +515,8 @@ const MAX_OPEN_SCAN = 50;
 const MAX_EXPIRE = 100;
 /** Reviews resolved per `processReviews` call. */
 const MAX_REVIEWS = 50;
+/** Completed trades inspected by the one-time lineup repair. */
+const MAX_LINEUP_REPAIR_TRADES = 100;
 /** NFL games in one week (≤ 16, plus slack). */
 const MAX_GAMES = 32;
 
@@ -1566,8 +1571,31 @@ async function lockedPlayers(
   now: number,
 ): Promise<Id<"players">[]> {
   if (playerIds.length === 0) return [];
+  const locked = new Set<Id<"players">>();
+  if (await isWeeklyLineupLocked(ctx, trade.leagueId, trade.weekNo, now)) {
+    const moved = new Set(playerIds);
+    const fromTeamIds = [
+      ...new Set(
+        trade.items
+          .filter((item) => item.playerId && moved.has(item.playerId))
+          .map((item) => item.fromTeamId),
+      ),
+    ];
+    for (const teamId of fromTeamIds) {
+      const lineup = await currentLineup(ctx, teamId, trade.weekNo);
+      for (const slot of lineup?.slots ?? []) {
+        if (
+          slot.playerId &&
+          moved.has(slot.playerId) &&
+          !["BENCH", "BN", "IR"].includes(slot.slot.toUpperCase())
+        ) {
+          locked.add(slot.playerId);
+        }
+      }
+    }
+  }
   const league = await ctx.db.get("leagues", trade.leagueId);
-  if (!league) return [];
+  if (!league) return [...locked];
 
   // Bounded: ≤ 16 NFL games in a week.
   const games = await ctx.db
@@ -1580,15 +1608,123 @@ async function lockedPlayers(
     started.add(game.homeTeam);
     started.add(game.awayTeam);
   }
-  if (started.size === 0) return [];
-
-  const out: Id<"players">[] = [];
   for (const playerId of playerIds) {
     const player = await ctx.db.get("players", playerId);
-    if (player?.nflTeam && started.has(player.nflTeam)) out.push(playerId);
+    if (player?.nflTeam && started.has(player.nflTeam)) locked.add(playerId);
   }
-  return out;
+  return [...locked];
 }
+
+type PlayerMove = Doc<"trades">["items"][number] & { playerId: Id<"players"> };
+
+/**
+ * Reconcile active, unlocked transferred starters with the receiving roster.
+ * This is idempotent and deliberately leaves locked historical starters alone.
+ */
+async function reconcileTransferredLineups(
+  ctx: MutationCtx,
+  trade: Doc<"trades">,
+  playerMoves: PlayerMove[],
+  locked: Id<"players">[],
+): Promise<number> {
+  const affectedTeamIds = [
+    ...new Set(playerMoves.flatMap((item) => [item.fromTeamId, item.toTeamId])),
+  ];
+  const rules = await loadSocialRules(ctx, trade.leagueId);
+  let repaired = 0;
+  for (const teamId of affectedTeamIds) {
+    const previous = await currentLineup(ctx, teamId, trade.weekNo);
+    if (!previous) continue;
+    const unlockedOutgoing = new Set<Id<"players">>(
+      playerMoves
+        .filter((item) => item.fromTeamId === teamId && !locked.includes(item.playerId))
+        .map((item) => item.playerId),
+    );
+    if (!previous.slots.some((slot) => slot.playerId && unlockedOutgoing.has(slot.playerId))) {
+      continue;
+    }
+
+    const roster = await ctx.db
+      .query("roster_slots")
+      .withIndex("by_teamId", (q) => q.eq("teamId", teamId))
+      .take(totalRosterCapacity(rules.rosterSlots));
+    const rosterIds = new Set(roster.map((slot) => slot.playerId));
+    const incoming = playerMoves
+      .filter((item) => item.toTeamId === teamId && rosterIds.has(item.playerId))
+      .map((item) => item.playerId);
+    const incomingPlayers = new Map(
+      await Promise.all(
+        incoming.map(async (playerId) => [playerId, await ctx.db.get("players", playerId)] as const),
+      ),
+    );
+    const used = new Set(
+      previous.slots
+        .filter((slot) => !["BENCH", "BN", "IR"].includes(slot.slot.toUpperCase()))
+        .map((slot) => slot.playerId)
+        .filter((playerId): playerId is Id<"players"> =>
+          Boolean(playerId) && !unlockedOutgoing.has(playerId!),
+        ),
+    );
+    const starters = previous.slots
+      .filter((slot) => !["BENCH", "BN", "IR"].includes(slot.slot.toUpperCase()))
+      .map((slot) => {
+        if (!slot.playerId || !unlockedOutgoing.has(slot.playerId)) return slot;
+        const replacement = incoming.find((playerId) => {
+          if (used.has(playerId) || locked.includes(playerId)) return false;
+          const player = incomingPlayers.get(playerId);
+          return Boolean(player && isEligible(player.position, slot.slot, { superflex: rules.superflex }));
+        });
+        if (replacement) used.add(replacement);
+        return { slot: slot.slot, playerId: replacement ?? null };
+      });
+    const bench = roster
+      .map((slot) => slot.playerId)
+      .filter((playerId) => !used.has(playerId))
+      .map((playerId) => ({ slot: benchSlotLabel(rules.rosterSlots), playerId }));
+    await insertLineupVersion(ctx, {
+      teamId,
+      leagueId: trade.leagueId,
+      weekNo: trade.weekNo,
+      slots: [...starters, ...bench],
+      source: "autopilot",
+    });
+    repaired += 1;
+  }
+  return repaired;
+}
+
+/**
+ * Repair lineup versions written before completed trades reconciled unlocked
+ * starters. Bounded to the newest 100 completed trades for one league/week.
+ */
+export const repairTransferredLineups = internalMutation({
+  args: { leagueId: v.id("leagues"), weekNo: v.number(), now: v.number() },
+  returns: v.object({ tradesInspected: v.number(), lineupsRepaired: v.number() }),
+  handler: async (ctx, args) => {
+    const trades = (await ctx.db
+      .query("trades")
+      .withIndex("by_leagueId_status", (q) =>
+        q.eq("leagueId", args.leagueId).eq("status", "completed"),
+      )
+      .order("desc")
+      .take(MAX_LINEUP_REPAIR_TRADES)).reverse();
+    const inWeek = trades.filter((trade) => trade.weekNo === args.weekNo);
+    let lineupsRepaired = 0;
+    for (const trade of inWeek) {
+      const playerMoves = trade.items.filter(
+        (item): item is PlayerMove => item.playerId !== undefined,
+      );
+      const locked = await lockedPlayers(
+        ctx,
+        trade,
+        playerMoves.map((item) => item.playerId),
+        args.now,
+      );
+      lineupsRepaired += await reconcileTransferredLineups(ctx, trade, playerMoves, locked);
+    }
+    return { tradesInspected: inWeek.length, lineupsRepaired };
+  },
+});
 
 /**
  * Move the players, settle FAAB, and write the transaction feed rows.
@@ -1667,6 +1803,8 @@ async function completeTrade(
       details: { direction: "in", locked: locked.includes(item.playerId) },
     });
   }
+
+  await reconcileTransferredLineups(ctx, trade, playerMoves, locked);
 
   const faabItems = trade.items.filter((item) => !item.playerId && item.faab);
   for (const item of faabItems) {

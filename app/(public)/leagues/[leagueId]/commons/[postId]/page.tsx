@@ -21,7 +21,7 @@ export async function generateMetadata({
       postId: postId as Id<"forum_posts">,
     }),
   );
-  return { title: view?.post.title ?? "Post" };
+  return { title: view?.post?.title ?? "Post" };
 }
 
 /** A post with its threaded comments, votes, and links back into the traces. */

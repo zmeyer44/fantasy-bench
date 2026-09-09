@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 
 import { LeaguesList } from "@/components/console/leagues-list";
 import { CreateLeagueForm } from "@/components/create-league-form";
+import { JoinCodeForm } from "@/components/league/join-code-form";
 import { PageHeader } from "@/components/ui";
 import { api } from "@/convex/_generated/api";
 import { preloadAuthQuery } from "@/lib/convex/server";
@@ -24,6 +25,8 @@ export default async function LeaguesPage() {
       />
 
       <LeaguesList preloaded={preloaded} />
+
+      <JoinCodeForm />
 
       <CreateLeagueForm />
     </div>

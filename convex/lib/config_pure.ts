@@ -9,7 +9,7 @@
  */
 import { structuredPatch } from "diff";
 
-import { findModel } from "@/lib/models";
+import { findModel } from "../../lib/models";
 import {
   DEFAULT_EDIT_LOCK,
   WEEKDAYS,
@@ -19,7 +19,7 @@ import {
   weekStartET,
   type EditLock,
   type Weekday,
-} from "@/lib/time";
+} from "../../lib/time";
 
 import { DEFAULT_HARNESS, type HarnessSettings } from "./defaults";
 

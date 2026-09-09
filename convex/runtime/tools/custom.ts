@@ -5,21 +5,21 @@
  * by `internal.runtime.load.runContext` and handed to the tools on `ctx`. The
  * `fetch` itself is legal here because the executor is an action.
  *
- * A commissioner or owner registers an HTTP/JSON source in `custom_providers`;
+ * A commissioner or owner registers an HTTPS/JSON source in `custom_providers`;
  * every enabled row that applies to this league/team becomes one read-only tool
  * named `custom_<slug>`. This is the "bring your own edge" hatch: an owner can
  * wire in a projection feed the platform does not ship.
  *
  * Guard rails, because the URL is attacker-adjacent input:
- *  - GET or POST only, https/http only, 10 second timeout, no redirects followed
- *    to a different origin by us (fetch's default `follow` is kept, but the body
- *    is size-capped either way).
+ *  - GET or POST only, HTTPS only, 10 second timeout, and redirects are rejected
+ *    so secret headers cannot be forwarded to an unexpected origin.
  *  - JSON responses only, 64 KB cap; anything larger or non-JSON is an error.
  *  - The body is returned to the model inside an <untrusted_data> block.
  */
 import { tool } from "ai";
 import { z } from "zod";
 
+import { customToolUrlError } from "../../lib/custom_tool_url";
 import type { CustomProvider, ToolContext } from "../types";
 import { wrapUntrusted } from "../untrusted";
 
@@ -95,8 +95,8 @@ export async function callProvider(
   } catch {
     return { ok: false, errors: [`Provider "${provider.name}" has an invalid URL.`] };
   }
-  if (url.protocol !== "https:" && url.protocol !== "http:") {
-    return { ok: false, errors: [`Provider "${provider.name}" must use http(s).`] };
+  if (customToolUrlError(config.url)) {
+    return { ok: false, errors: [`Provider "${provider.name}" must use a secure HTTPS URL.`] };
   }
   if (method === "GET" && query) url.searchParams.set("query", query);
 
@@ -111,6 +111,7 @@ export async function callProvider(
         ...(method === "POST" ? { "content-type": "application/json" } : {}),
       },
       body: method === "POST" ? JSON.stringify({ query: query ?? null }) : undefined,
+      redirect: "error",
       signal: controller.signal,
     });
     if (!response.ok) {

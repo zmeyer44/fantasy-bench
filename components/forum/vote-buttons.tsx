@@ -59,6 +59,7 @@ export function VoteButtons({
     for (const { args: queryArgs, value } of localStore.getAllQueries(api.forum.get)) {
       if (value === undefined || queryArgs.leagueId !== args.leagueId) continue;
       const post = value.post;
+      if (!post) continue;
       if (args.targetType === "post") {
         if (post.id !== args.targetId) continue;
         localStore.setQuery(api.forum.get, queryArgs, {

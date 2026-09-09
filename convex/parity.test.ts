@@ -2766,6 +2766,19 @@ describe("views.* (was views.*)", () => {
       picksMade: LEAF,
       totalPicks: LEAF,
       runningCostUsd: LEAF,
+      auction: LEAF,
+      startReview: {
+        teamCount: LEAF,
+        rosterSize: LEAF,
+        totalRosterSpots: LEAF,
+        scoringPreset: LEAF,
+        superflex: LEAF,
+        tePremium: LEAF,
+        draftPickSeconds: LEAF,
+        draftBudget: LEAF,
+        unownedTeams: LEAF,
+        modelAssignments: [{ modelId: LEAF, teamCount: LEAF, paid: LEAF }],
+      },
     } as const;
     assertSameKeys(expected, normalize(actual), "views.draftBoard");
 
@@ -3478,9 +3491,10 @@ describe("forum.* (was forum.*)", () => {
     } as const;
     assertSameKeys(expected, normalize(actual), "forum.get");
 
-    expect(actual.post.id).toBe(postId);
+    expect(actual.post).not.toBeNull();
+    expect(actual.post?.id).toBe(postId);
     // The golden dump has no comments.
-    expect(actual.post.comments).toEqual([]);
+    expect(actual.post?.comments).toEqual([]);
     expect(Object.keys(actual.karma)).toHaveLength(12);
   });
 

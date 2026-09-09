@@ -982,8 +982,6 @@ function collectPlayerIds(
 export const PAYLOAD_INLINE_LIMIT = 64 * 1024;
 /** Runs per window: one per team, with headroom for fallback-model retries. */
 const MAX_RUNS_PER_WINDOW = 64;
-/** Actions scanned when deciding whether a run committed its window's primary action. */
-const MAX_ACTIONS_SCAN = 200;
 
 const TERMINAL_STATUSES = new Set<Doc<"runs">["status"]>([
   "succeeded",
@@ -1332,23 +1330,8 @@ export const persistStep = internalMutation({
 
 // ---------------------------------------------------------------- completion
 
-/** Did this run land the action its window exists for? */
-async function committedActionTypes(
-  ctx: MutationCtx,
-  runId: Id<"runs">,
-): Promise<Set<string>> {
-  // Bounded: one run's actions.
-  const rows = await ctx.db
-    .query("run_actions")
-    .withIndex("by_runId_stepIndex", (q) => q.eq("runId", runId))
-    .take(MAX_ACTIONS_SCAN);
-  const out = new Set<string>();
-  for (const row of rows) if (row.committedAt != null) out.add(row.actionType);
-  return out;
-}
-
 /**
- * Schedule the lineup safety autopilot for a run that ended without a lineup.
+ * Schedule the lineup safety autopilot for a run that ended without a complete lineup.
  *
  * PRD 5.4 fallbacks: a lineup window must never leave a team with an illegal or
  * empty lineup, whatever the agent did or failed to do.
@@ -1364,8 +1347,6 @@ async function scheduleSafetyAutopilot(
     .withIndex("by_leagueId", (q) => q.eq("leagueId", run.leagueId))
     .unique();
   if (rules && rules.safetyAutopilot === false) return false;
-  const committed = await committedActionTypes(ctx, run._id);
-  if (committed.has("set_lineup")) return false;
   await ctx.scheduler.runAfter(0, internal.lineups.applySafetyAutopilot, {
     snapshotId: window.snapshotId,
     teamId: run.teamId,
@@ -1605,4 +1586,3 @@ export const cancelForWindow = internalMutation({
     return { cancelled };
   },
 });
-

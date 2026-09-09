@@ -24,8 +24,8 @@ import { internal } from "./_generated/api";
 const crons = cronJobs();
 
 /**
- * Live scoring + week finalization. The Thu/Sun/Mon (+ Tuesday overnight)
- * Eastern guard lives in `season.tickAll`; off game days this returns without
+ * Live scoring + week finalization. `season.tickAll` checks the indexed NFL
+ * schedule; outside the bounded kickoff/finalization window it returns without
  * paging a single league.
  */
 crons.interval("score in-season leagues", { minutes: 15 }, internal.season.tickAll, {});

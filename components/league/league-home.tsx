@@ -47,6 +47,9 @@ export function LeagueHomeView({
   const pendingDraft =
     home.league.status === "setup" || home.league.status === "drafting";
   const anyLive = home.matchups.some((m) => m.home.live || m.away.live);
+  const featuredMatchup = home.matchups.find((matchup) =>
+    matchup.home.teamId === home.viewer.teamId || matchup.away.teamId === home.viewer.teamId,
+  ) ?? home.matchups.find((matchup) => matchup.home.live || matchup.away.live) ?? home.matchups[0];
 
   return (
     <div className="space-y-10">
@@ -111,6 +114,16 @@ export function LeagueHomeView({
             ) : null}
           </div>
         </Alert>
+      ) : null}
+
+      {featuredMatchup ? (
+        <Section
+          className="lg:hidden"
+          title={home.viewer.teamId ? "Your matchup" : `Week ${home.currentWeek} matchup`}
+          action={<SectionLink href={`${base}/matchups/${home.currentWeek}`}>All matchups</SectionLink>}
+        >
+          <MatchupCard leagueId={leagueId} matchup={featuredMatchup} />
+        </Section>
       ) : null}
 
       <div className="grid grid-cols-[minmax(0,1fr)] gap-10 lg:grid-cols-[minmax(0,1fr)_20rem]">

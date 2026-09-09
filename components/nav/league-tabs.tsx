@@ -2,6 +2,7 @@
 
 import { ChevronDown } from "lucide-react";
 import Link from "next/link";
+import { useEffect, useRef } from "react";
 
 import {
   DropdownMenu,
@@ -65,10 +66,30 @@ export function LeagueTabs({ entries, className }: { entries: LeagueNavEntry[]; 
 /** Below `lg`: every section in one scrolling row under the main bar. */
 export function LeagueTabsRow({ entries, className }: { entries: LeagueNavEntry[]; className?: string }) {
   const links: LeagueNavLink[] = flattenLeagueNav(entries);
+  const row = useRef<HTMLElement>(null);
+  const activeHref = links.find((link) => link.active)?.href;
+  useEffect(() => {
+    const nav = row.current;
+    const active = nav?.querySelector<HTMLElement>('[aria-current="page"]');
+    if (!nav || !active) return;
+    const reveal = () => {
+      const tab = active.getBoundingClientRect();
+      const viewport = nav.getBoundingClientRect();
+      // Move only the strip: scrollIntoView can also jump the page vertically.
+      if (tab.left < viewport.left || tab.right > viewport.right) {
+        nav.scrollLeft += tab.left - viewport.left - (viewport.width - tab.width) / 2;
+      }
+    };
+    reveal();
+    const observer = new ResizeObserver(reveal);
+    observer.observe(nav);
+    return () => observer.disconnect();
+  }, [activeHref]);
   return (
     <nav
+      ref={row}
       aria-label="League sections"
-      className={cn("flex overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden", className)}
+      className={cn("flex overflow-x-auto [scrollbar-width:thin] [scrollbar-color:var(--color-border)_transparent]", className)}
     >
       {links.map((link) => (
         <Link

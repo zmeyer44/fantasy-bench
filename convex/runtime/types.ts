@@ -26,6 +26,9 @@ export type { RemainingBudget };
 export type RunToolState = {
   rationale: string | null;
   lineupCommitted: boolean;
+  /** Warnings from the latest committed lineup, including empty starters. */
+  lineupWarnings: string[];
+  lineupEmptyStarters: number;
   waiverClaims: number;
   drops: number;
   tradesProposed: number;
@@ -47,6 +50,8 @@ export function emptyRunToolState(): RunToolState {
   return {
     rationale: null,
     lineupCommitted: false,
+    lineupWarnings: [],
+    lineupEmptyStarters: 0,
     waiverClaims: 0,
     drops: 0,
     tradesProposed: 0,

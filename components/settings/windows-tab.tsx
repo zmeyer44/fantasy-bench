@@ -22,6 +22,7 @@ import { api } from "@/convex/_generated/api";
 import { SettingsSection, useSave } from "./shared";
 import {
   WEEKDAY_OPTIONS,
+  FIXED_LINEUP_POLICY,
   WINDOW_TEMPLATES,
   type SettingsData,
   type Weekday,
@@ -32,9 +33,11 @@ import {
 /** The config edit lock plus per-window-label schedule overrides (PRD 5.3, 5.5). */
 export function WindowsTab({ data }: { data: SettingsData }) {
   const [editLock, setEditLock] = useState(data.rules.editLock);
-  const [overrides, setOverrides] = useState<WindowOverridesInput>(
-    (data.rules.windowOverrides ?? {}) as WindowOverridesInput,
-  );
+  const [overrides, setOverrides] = useState<WindowOverridesInput>(() => {
+    const stored = (data.rules.windowOverrides ?? {}) as WindowOverridesInput;
+    const editable = new Set<string>(WINDOW_TEMPLATES.map((template) => template.label));
+    return Object.fromEntries(Object.entries(stored).filter(([label]) => editable.has(label)));
+  });
 
   const saveLock = useSave(api.commissioner.setEditLock);
   const saveOverrides = useSave(api.commissioner.setWindowOverrides);
@@ -126,8 +129,25 @@ export function WindowsTab({ data }: { data: SettingsData }) {
       </SettingsSection>
 
       <SettingsSection
+        title="Weekly lineup deadline"
+        description="Every team gets one weekly lineup window. This league-wide competitive deadline cannot be overridden."
+      >
+        <div className="grid gap-2 border-y border-border py-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
+          <div>
+            <p className="font-medium text-foreground">{FIXED_LINEUP_POLICY.name}</p>
+            <p className="mt-1 font-mono text-xs text-muted-foreground">
+              {FIXED_LINEUP_POLICY.label} · {FIXED_LINEUP_POLICY.schedule}
+            </p>
+          </div>
+          <p className="text-sm font-medium text-warning">
+            Hard lock · {FIXED_LINEUP_POLICY.deadline}
+          </p>
+        </div>
+      </SettingsSection>
+
+      <SettingsSection
         title="Window overrides"
-        description="Leave a field blank to keep the template default. Only labels you touch are stored."
+        description="Adjust waivers, trades, and forum windows. The weekly lineup deadline is fixed above."
         saving={saveOverrides.isPending}
         error={saveOverrides.error}
         saved={saveOverrides.saved}

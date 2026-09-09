@@ -7,7 +7,7 @@ import { convexTest, type TestConvex } from "convex-test";
 import { describe, expect, test } from "vitest";
 
 import type { SnapshotPayload, SnapshotPlayer } from "../lib/snapshot/types";
-import { internal } from "./_generated/api";
+import { api, internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
 import {
   resolveSealedBids,
@@ -133,7 +133,7 @@ async function fixture(
   });
 }
 
-/** A snapshot built from the league's *current* rosters — what `finalize` reads. */
+/** A projection snapshot whose ownership reflects the rosters at creation time. */
 async function snapshotFromRosters(
   t: TestConvex<typeof schema>,
   leagueId: Id<"leagues">,
@@ -148,21 +148,19 @@ async function snapshotFromRosters(
       .withIndex("by_leagueId_playerId", (q) => q.eq("leagueId", leagueId))
       .collect();
 
+    const ownerByPlayer = new Map(roster.map((row) => [row.playerId as string, row.teamId]));
+    const projections = await ctx.db
+      .query("player_projection_latest")
+      .withIndex("by_season_week_source_projectedPointsPpr", (q) =>
+        q.eq("season", 2026).eq("week", 1).eq("source", "sleeper_rotowire"),
+      )
+      .order("desc")
+      .take(100);
     const players: Record<string, SnapshotPlayer> = {};
-    for (const row of roster) {
-      const player = (await ctx.db.get("players", row.playerId))!;
-      const projection = await ctx.db
-        .query("player_projection_latest")
-        .withIndex("by_playerId_season_week_source", (q) =>
-          q
-            .eq("playerId", row.playerId)
-            .eq("season", 2026)
-            .eq("week", 1)
-            .eq("source", "sleeper_rotowire"),
-        )
-        .unique();
-      players[row.playerId] = {
-        id: row.playerId,
+    for (const projection of projections) {
+      const player = (await ctx.db.get("players", projection.playerId))!;
+      players[projection.playerId] = {
+        id: projection.playerId,
         sleeperId: player.sleeperId,
         fullName: player.fullName,
         position: player.position,
@@ -171,19 +169,17 @@ async function snapshotFromRosters(
         injuryStatus: null,
         injuryNotes: null,
         byeWeek: null,
-        projection: projection
-          ? {
-              ppr: projection.projectedPointsPpr,
-              half: projection.projectedPointsHalf,
-              std: projection.projectedPointsStd,
-              source: "sleeper_rotowire",
-              effectiveAt: new Date(NOW).toISOString(),
-            }
-          : null,
+        projection: {
+          ppr: projection.projectedPointsPpr,
+          half: projection.projectedPointsHalf,
+          std: projection.projectedPointsStd,
+          source: "sleeper_rotowire",
+          effectiveAt: new Date(NOW).toISOString(),
+        },
         rosProjection: null,
         lastWeekPoints: null,
         seasonPoints: null,
-        ownerTeamId: row.teamId,
+        ownerTeamId: ownerByPlayer.get(projection.playerId) ?? null,
         opponent: null,
         gameId: null,
         kickoffAt: null,
@@ -214,7 +210,9 @@ async function snapshotFromRosters(
         modelId: null,
       })),
       players,
-      freeAgentIds: [],
+      freeAgentIds: projections
+        .filter((projection) => !ownerByPlayer.has(projection.playerId))
+        .map((projection) => projection.playerId),
       games: [],
       matchups: [],
       standings: [],
@@ -409,6 +407,9 @@ describe("a whole snake draft", () => {
   test("auto-picks to completion, then finalize writes lineups and a schedule", async () => {
     const t = convexTest(schema, modules);
     const f = await fixture(t);
+    // This is the same projection snapshot every pick window reuses. It is
+    // intentionally created before the draft, so its ownership is empty.
+    const snapshotId = await snapshotFromRosters(t, f.leagueId);
     await t.mutation(internal.draft.start, { leagueId: f.leagueId, seed: 11 });
 
     let guard = 0;
@@ -462,7 +463,6 @@ describe("a whole snake draft", () => {
     expect(new Set(drafted.map((p) => p.playerId)).size).toBe(12);
     expect(drafted.every((p) => p.auto && p.madeAt === NOW)).toBe(true);
 
-    const snapshotId = await snapshotFromRosters(t, f.leagueId);
     const finalized = await t.mutation(internal.draft.finalize, {
       leagueId: f.leagueId,
       snapshotId,
@@ -503,6 +503,22 @@ describe("the auction", () => {
   test("nominates, takes sealed bids and resolves the lot to the smaller roster", async () => {
     const t = convexTest(schema, modules);
     const f = await fixture(t, { draftType: "auction" });
+    const setupBoard = await t.query(api.draft.board, { leagueId: f.leagueId });
+    expect(setupBoard.startReview).toMatchObject({
+      teamCount: 4,
+      rosterSize: 3,
+      totalRosterSpots: 12,
+      scoringPreset: "ppr",
+      superflex: false,
+      tePremium: false,
+      draftPickSeconds: 90,
+      draftBudget: 200,
+      unownedTeams: 4,
+    });
+    expect(setupBoard.startReview.modelAssignments).toEqual([
+      { modelId: "anthropic/claude-sonnet-4.5", teamCount: 4, paid: true },
+    ]);
+
     const started = await t.mutation(internal.draft.start, {
       leagueId: f.leagueId,
       type: "auction",
@@ -554,9 +570,35 @@ describe("the auction", () => {
         leagueId: f.leagueId,
         teamId: started.order[2],
         playerId: f.idOf.qb0,
+        amount: 7,
+      }),
+    ).toMatchObject({ ok: true, amount: 7 });
+    expect(
+      await t.mutation(internal.draft.bid, {
+        leagueId: f.leagueId,
+        teamId: started.order[2],
+        playerId: f.idOf.qb0,
         amount: 400,
       }),
     ).toMatchObject({ ok: false });
+
+    const liveBoard = await t.query(api.draft.board, { leagueId: f.leagueId });
+    expect(liveBoard.auction).toMatchObject({
+      phase: "bidding",
+      bidsSealed: true,
+      currentLot: {
+        lotNo: 1,
+        status: "bidding",
+        nominatorTeamId: nominator,
+        playerId: f.idOf.qb0,
+        openingBid: 15,
+      },
+    });
+    expect(liveBoard.totalPicks).toBe(12);
+    expect(liveBoard.auction?.budgets).toHaveLength(4);
+    expect(Object.keys(liveBoard.auction?.currentLot ?? {})).not.toEqual(
+      expect.arrayContaining(["bids", "bidAmounts", "bidderTeamIds", "submittedCount"]),
+    );
 
     const nominationId = (nominated as { nominationId: Id<"auction_nominations"> }).nominationId;
     const resolved = await t.mutation(internal.draft.resolveLot, { nominationId, now: NOW });
@@ -589,6 +631,19 @@ describe("the auction", () => {
     expect(state.roster.map((r) => r.playerId)).toContain(f.idOf.qb0);
     expect(state.nextLot?.status).toBe("pending");
     expect(state.nextLot?.nominatingTeamId).toBeDefined();
+
+    const resolvedBoard = await t.query(api.draft.board, { leagueId: f.leagueId });
+    expect(resolvedBoard.grid).toEqual([]);
+    expect(resolvedBoard.picksMade).toBe(1);
+    expect(resolvedBoard.picks[0]).toMatchObject({
+      playerId: f.idOf.qb0,
+      teamId: other,
+      price: 15,
+    });
+    expect(resolvedBoard.auction).toMatchObject({
+      phase: "nomination",
+      currentLot: { lotNo: 2, status: "pending" },
+    });
   });
 
   test("abandons a lot nobody bid on", async () => {

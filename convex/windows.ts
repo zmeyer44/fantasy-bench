@@ -17,6 +17,7 @@ import { internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
 import {
   internalMutation,
+  internalQuery,
   query,
   type MutationCtx,
   type QueryCtx,
@@ -26,7 +27,8 @@ import { appError } from "./lib/errors";
 import { resolveWindowsForWeek, type WindowOverrides } from "./lib/templates";
 import { countdown, windowLabelText } from "./lib/views_shared";
 import { enqueueRun } from "./runs";
-import { rescheduleWindow, scheduleWindowJobs } from "./scheduling";
+import { cancelWindowJobs, rescheduleWindow, scheduleWindowJobs } from "./scheduling";
+import { weeklyLineupDeadline } from "./lib/lineup_deadline";
 
 /** One decision window as the UI reads it (dates are epoch ms). */
 export type WindowView = {
@@ -697,6 +699,64 @@ export const rescheduleForLeague = internalMutation({
     }
 
     return { rescheduled, created, removed };
+  },
+});
+
+/** Read-only, paginated targets for the one-time weekly deadline migration. */
+export const weeklyDeadlineMigrationTargets = internalQuery({
+  args: { cursor: v.union(v.string(), v.null()), now: v.optional(v.number()) },
+  handler: async (ctx, args) => {
+    const now = args.now ?? Date.now();
+    const page = await ctx.db.query("leagues").withIndex("by_status", (q) => q.eq("status", "in_season"))
+      .paginate({ cursor: args.cursor, numItems: 10 });
+    const targets: { leagueId: Id<"leagues">; weekNo: number }[] = [];
+    for (const league of page.page) {
+      const weeks = await ctx.db.query("weeks")
+        .withIndex("by_leagueId_weekNo", (q) => q.eq("leagueId", league._id)).take(22);
+      for (const week of weeks) {
+        if (week.endsAt <= now || week.status === "complete") continue;
+        // Only replace materialized schedules. Week rollover uses the new defaults.
+        const window = await ctx.db.query("windows")
+          .withIndex("by_leagueId_weekNo_type", (q) => q.eq("leagueId", league._id).eq("weekNo", week.weekNo)).first();
+        if (window) targets.push({ leagueId: league._id, weekNo: week.weekNo });
+      }
+    }
+    return { targets, cursor: page.continueCursor, done: page.isDone };
+  },
+});
+
+/** Preserve completed history, cancel superseded lineup jobs, and install the weekly window. */
+export const migrateWeeklyDeadline = internalMutation({
+  args: { leagueId: v.id("leagues"), weekNo: v.number(), now: v.optional(v.number()) },
+  handler: async (ctx, args) => {
+    const now = args.now ?? Date.now();
+    const week = await ctx.db.query("weeks")
+      .withIndex("by_leagueId_weekNo", (q) => q.eq("leagueId", args.leagueId).eq("weekNo", args.weekNo)).first();
+    if (!week || week.endsAt <= now || week.status === "complete") return { retired: 0, created: false };
+    const rows = await ctx.db.query("windows")
+      .withIndex("by_leagueId_weekNo_type", (q) => q.eq("leagueId", args.leagueId).eq("weekNo", args.weekNo).eq("type", "lineup"))
+      .collect();
+    let retired = 0;
+    for (const row of rows) {
+      if (row.label === "lineup_weekly" || row.status === "closed") continue;
+      await cancelWindowJobs(ctx, row);
+      await ctx.runMutation(internal.runs.cancelForWindow, { windowId: row._id });
+      if (row.runCount === 0) await ctx.db.delete("windows", row._id);
+      else await ctx.db.patch("windows", row._id, { status: "closed", openJobId: undefined, closeJobId: undefined });
+      retired++;
+    }
+    if (rows.some((row) => row.label === "lineup_weekly")) return { retired, created: false };
+    const target = resolveWindowsForWeek(week.startsAt).find((window) => window.label === "lineup_weekly")!;
+    // Do not retroactively run agents or change an already locked week's lineup.
+    const expired = now >= weeklyLineupDeadline(week.startsAt);
+    const windowId = await ctx.db.insert("windows", {
+      leagueId: args.leagueId, weekNo: args.weekNo, type: "lineup", label: target.label,
+      roundNo: 1, opensAt: target.opensAt, closesAt: target.closesAt,
+      submissionDeadlineAt: target.submissionDeadlineAt, scope: {},
+      status: expired ? "closed" : "scheduled", runCount: 0, terminalRunCount: 0,
+    });
+    if (!expired) await scheduleWindowJobs(ctx, windowId, now);
+    return { retired, created: true };
   },
 });
 

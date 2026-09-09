@@ -29,6 +29,7 @@ import {
 import { agentCtxValidator, fail, withAgentAction, type AgentCtx } from "./lib/agent_action";
 import { computeOptimalLineup, planSafetyAutopilot, validateLineup } from "./lib/lineup_pure";
 import { lineupSlot, lineupSource } from "./schema";
+import { isWeeklyLineupLocked } from "./lib/lineup_deadline";
 import { readPayload } from "./snapshot";
 
 /** The stored slot shape (`playerId` is a real id or null), as the schema defines it. */
@@ -114,6 +115,10 @@ export const validate = internalQuery({
     if (!snapshot) {
       return { ok: false, errors: ["That window has no snapshot to validate against."], warnings: [] };
     }
+    const window = await ctx.db.get("windows", windowId);
+    if (window && await isWeeklyLineupLocked(ctx, window.leagueId, window.weekNo, now ?? Date.now())) {
+      return { ok: false, errors: ["Weekly lineups lock Wednesday at 7 p.m. Eastern."], warnings: [] };
+    }
     const result = validateLineup({
       snapshot,
       teamId,
@@ -196,6 +201,13 @@ export const commit = internalMutation({
         const team = await ctx.db.get("teams", args.teamId);
         if (!team) return fail(`Team ${args.teamId} does not exist.`);
 
+        // Draft finalization initializes a league before it enters the season.
+        // Once in season, every later lineup write observes the weekly lock.
+        const initializingDraft = !agentCtx && args.source === "draft_default" &&
+          (await ctx.db.get("leagues", team.leagueId))?.status === "drafting";
+        if (!initializingDraft && await isWeeklyLineupLocked(ctx, team.leagueId, args.weekNo, args.now ?? Date.now())) {
+          return fail("Weekly lineups lock Wednesday at 7 p.m. Eastern.");
+        }
         let warnings: string[] = [];
         if (agentCtx) {
           const snapshot = await payloadForWindow(ctx, agentCtx.windowId);
@@ -207,6 +219,12 @@ export const commit = internalMutation({
             now: new Date(args.now ?? Date.now()),
           });
           if (!validation.ok) return fail(...validation.errors);
+          // Trades may settle after the decision snapshot was frozen.
+          const roster = await ctx.db.query("roster_slots")
+            .withIndex("by_teamId", (q) => q.eq("teamId", args.teamId)).collect();
+          const owned = new Set(roster.map((row) => row.playerId));
+          const stale = args.slots.find((slot) => slot.playerId && !owned.has(slot.playerId));
+          if (stale) return fail("A selected player is no longer on your roster. Refresh the lineup before submitting.");
           warnings = validation.warnings;
         }
 
@@ -257,8 +275,31 @@ export const applySafetyAutopilot = internalMutation({
     const stored = await currentLineup(ctx, args.teamId, args.weekNo);
     const base = stored?.slots?.length ? toPureSlots(stored.slots) : (snapshotTeam.lineup ?? []);
 
+    const snapshotRow = await ctx.db.get("snapshots", args.snapshotId);
+    const window = snapshotRow?.windowId ? await ctx.db.get("windows", snapshotRow.windowId) : null;
+    if (await isWeeklyLineupLocked(ctx, team.leagueId, args.weekNo, args.now ?? Date.now()) && window?.label !== "lineup_weekly") {
+      return { changed: false, slots: stored?.slots ?? [], filledSlots: [], version: stored?.version ?? null };
+    }
+    const roster = await ctx.db.query("roster_slots")
+      .withIndex("by_teamId", (q) => q.eq("teamId", args.teamId)).collect();
+    const rosterPlayerIds = new Set<string>(roster.map((row) => row.playerId));
+    if (window?.label === "lineup_weekly" &&
+      await isWeeklyLineupLocked(ctx, team.leagueId, args.weekNo, args.now ?? Date.now())) {
+      // A trade may settle between close and this background fallback. Its
+      // locked historical starters still belong to this week's scoring lineup.
+      for (const slot of base) {
+        if (slot.playerId && !["BENCH", "BN", "IR", "TAXI"].includes(slot.slot.toUpperCase())) {
+          rosterPlayerIds.add(slot.playerId);
+        }
+      }
+    }
+    const currentSnapshot: SnapshotPayload = {
+      ...snapshot,
+      teams: snapshot.teams.map((entry) => entry.id === args.teamId
+        ? { ...entry, rosterPlayerIds: [...rosterPlayerIds], lineup: base } : entry),
+    };
     const plan = planSafetyAutopilot({
-      snapshot,
+      snapshot: currentSnapshot,
       teamId: args.teamId,
       base,
       now: new Date(args.now ?? Date.now()),

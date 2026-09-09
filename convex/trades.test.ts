@@ -8,6 +8,7 @@ import { api, internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
 import schema from "./schema";
 import type { TradeSummary } from "./trades";
+import { weeklyLineupDeadline } from "./lib/lineup_deadline";
 
 const modules = import.meta.glob("./**/*.ts");
 
@@ -681,6 +682,229 @@ describe("trades.respond", () => {
     expect(await eventsOf(t, childId)).toEqual([
       "countered", "accepted", "fairness_scored", "completed",
     ]);
+  });
+
+  test("an unlocked completed swap moves active starters and scoring to the receiving teams", async () => {
+    const t = convexTest(schema, modules);
+    const s = await seedTrading(t);
+    const { qbA, qbB } = await t.run(async (ctx) => {
+      const makeQb = async (name: string, sleeperId: string, points: number) => {
+        const playerId = await ctx.db.insert("players", {
+          sleeperId, fullName: name, position: "QB", nflTeam: "SF",
+          fantasyPositions: ["QB"], externalIds: {}, updatedAt: Date.now(),
+        });
+        await ctx.db.insert("player_stats_weekly", {
+          playerId, season: SEASON, week: WEEK, source: "sleeper", stats: {},
+          fantasyPointsPpr: points, fantasyPointsHalf: points, fantasyPointsStd: points,
+          effectiveAt: Date.now(),
+        });
+        return playerId;
+      };
+      const qbA = await makeQb("Quarterback Alpha", "qa-qb-a", 31);
+      const qbB = await makeQb("Quarterback Bravo", "qa-qb-b", 7);
+      for (const [teamId, playerId] of [[s.teamA, qbA], [s.teamB, qbB]] as const) {
+        await ctx.db.insert("roster_slots", {
+          leagueId: s.leagueId, teamId, playerId, acquiredAt: Date.now(), acquiredVia: "draft",
+        });
+        await ctx.db.insert("lineups", {
+          leagueId: s.leagueId, teamId, weekNo: WEEK, version: 1,
+          slots: [{ slot: "QB", playerId }], source: "agent",
+        });
+      }
+      return { qbA, qbB };
+    });
+    await setProjection(t, qbA, 10, "QB");
+    await setProjection(t, qbB, 10, "QB");
+    await t.mutation(internal.standings.generateSchedule, { leagueId: s.leagueId });
+
+    const proposed = await t.mutation(internal.trades.propose, {
+      leagueId: s.leagueId, proposerTeamId: s.teamA, toTeamId: s.teamB,
+      give: [qbA], receive: [qbB], agentCtx: ctxFor(s, "unlocked-score-propose"),
+    });
+    expect(proposed.ok).toBe(true);
+    if (!proposed.ok) return;
+    const accepted = await t.mutation(internal.trades.respond, {
+      leagueId: s.leagueId, teamId: s.teamB, tradeId: proposed.tradeId, action: "accept",
+      agentCtx: ctxFor(s, "unlocked-score-accept"),
+    });
+    expect(accepted.ok).toBe(true);
+    if (!accepted.ok) return;
+    const review = await t.run(async (ctx) => ctx.db.get("trades", proposed.tradeId));
+    await t.mutation(internal.trades.processReviews, {
+      leagueId: s.leagueId, now: review!.reviewEndsAt!,
+    });
+    const completed = await t.run(async (ctx) => {
+      const events = await ctx.db
+        .query("trade_events")
+        .withIndex("by_tradeId", (q) => q.eq("tradeId", proposed.tradeId))
+        .collect();
+      return events.find((event) => event.type === "completed");
+    });
+    expect(completed?.payload).toMatchObject({ lockedPlayerIds: [] });
+
+    await t.mutation(internal.scoring.scoreLeague, { leagueId: s.leagueId, weekNo: WEEK });
+    const scores = await t.run(async (ctx) => {
+      const matchup = await ctx.db
+        .query("matchups")
+        .withIndex("by_leagueId_weekNo", (q) =>
+          q.eq("leagueId", s.leagueId).eq("weekNo", WEEK),
+        )
+        .first();
+      const lineupA = await ctx.db
+        .query("lineups")
+        .withIndex("by_teamId_weekNo_version", (q) => q.eq("teamId", s.teamA).eq("weekNo", WEEK))
+        .order("desc")
+        .first();
+      const lineupB = await ctx.db
+        .query("lineups")
+        .withIndex("by_teamId_weekNo_version", (q) => q.eq("teamId", s.teamB).eq("weekNo", WEEK))
+        .order("desc")
+        .first();
+      if (!matchup) return null;
+      const points = matchup.homeTeamId === s.teamA
+        ? { teamA: matchup.homeScore, teamB: matchup.awayScore }
+        : { teamA: matchup.awayScore, teamB: matchup.homeScore };
+      return {
+        ...points,
+        starterA: lineupA?.slots.find((slot) => slot.slot === "QB")?.playerId,
+        starterB: lineupB?.slots.find((slot) => slot.slot === "QB")?.playerId,
+      };
+    });
+
+    expect(scores).toEqual({ teamA: 7, teamB: 31, starterA: qbB, starterB: qbA });
+  });
+
+  test("a completed swap preserves historical starter IDs when both players are locked", async () => {
+    const t = convexTest(schema, modules);
+    const s = await seedTrading(t);
+    const { qbA, qbB, tradeId, reviewEndsAt } = await t.run(async (ctx) => {
+      const makeQb = (name: string) =>
+        ctx.db.insert("players", {
+          sleeperId: name, fullName: name, position: "QB", nflTeam: "SF",
+          fantasyPositions: ["QB"], externalIds: {}, updatedAt: Date.now(),
+        });
+      const qbA = await makeQb("Locked Alpha");
+      const qbB = await makeQb("Locked Bravo");
+      for (const [teamId, playerId] of [[s.teamA, qbA], [s.teamB, qbB]] as const) {
+        await ctx.db.insert("roster_slots", {
+          leagueId: s.leagueId, teamId, playerId, acquiredAt: Date.now(), acquiredVia: "draft",
+        });
+        await ctx.db.insert("lineups", {
+          leagueId: s.leagueId, teamId, weekNo: WEEK, version: 1,
+          slots: [{ slot: "QB", playerId }], source: "agent",
+        });
+      }
+      await ctx.db.insert("nfl_games", {
+        season: SEASON, week: WEEK, gameId: "locked-game", homeTeam: "SF", awayTeam: "SEA",
+        kickoffAt: Date.now() - 60_000, status: "in_progress",
+      });
+      const reviewEndsAt = Date.now();
+      const tradeId = await ctx.db.insert("trades", {
+        leagueId: s.leagueId, proposerTeamId: s.teamA, recipientTeamId: s.teamB,
+        weekNo: WEEK, status: "in_review", reviewEndsAt,
+        items: [
+          { fromTeamId: s.teamA, toTeamId: s.teamB, playerId: qbA },
+          { fromTeamId: s.teamB, toTeamId: s.teamA, playerId: qbB },
+        ],
+        flagged: false, vetoCount: 0, approveCount: 0,
+      });
+      return { qbA, qbB, tradeId, reviewEndsAt };
+    });
+
+    expect(
+      await t.mutation(internal.trades.processReviews, {
+        leagueId: s.leagueId, now: reviewEndsAt,
+      }),
+    ).toEqual({ resolved: 1 });
+    const state = await t.run(async (ctx) => {
+      const lineupA = await ctx.db
+        .query("lineups")
+        .withIndex("by_teamId_weekNo_version", (q) => q.eq("teamId", s.teamA).eq("weekNo", WEEK))
+        .order("desc")
+        .first();
+      const lineupB = await ctx.db
+        .query("lineups")
+        .withIndex("by_teamId_weekNo_version", (q) => q.eq("teamId", s.teamB).eq("weekNo", WEEK))
+        .order("desc")
+        .first();
+      const events = await ctx.db
+        .query("trade_events")
+        .withIndex("by_tradeId", (q) => q.eq("tradeId", tradeId))
+        .collect();
+      return { lineupA, lineupB, completed: events.find((event) => event.type === "completed") };
+    });
+    expect(state.lineupA).toMatchObject({ version: 1, slots: [{ slot: "QB", playerId: qbA }] });
+    expect(state.lineupB).toMatchObject({ version: 1, slots: [{ slot: "QB", playerId: qbB }] });
+    expect(state.completed?.payload).toMatchObject({ lockedPlayerIds: [qbA, qbB] });
+  });
+
+  test.each([
+    { label: "before the weekly deadline", offset: -1, repaired: 2 },
+    { label: "at the weekly deadline", offset: 0, repaired: 0 },
+    { label: "after the weekly deadline", offset: 86_400_000, repaired: 0 },
+  ])("repairs legacy transferred starters $label", async ({ offset, repaired }) => {
+    const t = convexTest(schema, modules);
+    const s = await seedTrading(t);
+    const weekStartsAt = Date.parse("2030-09-10T10:00:00Z");
+    const deadline = weeklyLineupDeadline(weekStartsAt);
+    const { qbA, qbB } = await t.run(async (ctx) => {
+      await ctx.db.insert("weeks", {
+        leagueId: s.leagueId, weekNo: WEEK, startsAt: weekStartsAt,
+        endsAt: weekStartsAt + 7 * 86_400_000, isPlayoff: false, status: "active",
+      });
+      const qbA = await ctx.db.insert("players", {
+        sleeperId: `repair-a-${offset}`, fullName: "Repair Alpha", position: "QB",
+        nflTeam: "SF", fantasyPositions: ["QB"], externalIds: {}, updatedAt: Date.now(),
+      });
+      const qbB = await ctx.db.insert("players", {
+        sleeperId: `repair-b-${offset}`, fullName: "Repair Bravo", position: "QB",
+        nflTeam: "SEA", fantasyPositions: ["QB"], externalIds: {}, updatedAt: Date.now(),
+      });
+      // This is the persisted shape left by the old completion path: rosters
+      // moved, while the active lineup still references each outgoing player.
+      await ctx.db.insert("roster_slots", {
+        leagueId: s.leagueId, teamId: s.teamA, playerId: qbB,
+        acquiredAt: deadline - 1_000, acquiredVia: "trade",
+      });
+      await ctx.db.insert("roster_slots", {
+        leagueId: s.leagueId, teamId: s.teamB, playerId: qbA,
+        acquiredAt: deadline - 1_000, acquiredVia: "trade",
+      });
+      await ctx.db.insert("lineups", {
+        leagueId: s.leagueId, teamId: s.teamA, weekNo: WEEK, version: 1,
+        slots: [{ slot: "QB", playerId: qbA }], source: "agent",
+      });
+      await ctx.db.insert("lineups", {
+        leagueId: s.leagueId, teamId: s.teamB, weekNo: WEEK, version: 1,
+        slots: [{ slot: "QB", playerId: qbB }], source: "agent",
+      });
+      await ctx.db.insert("trades", {
+        leagueId: s.leagueId, proposerTeamId: s.teamA, recipientTeamId: s.teamB,
+        weekNo: WEEK, status: "completed", resolvedAt: deadline - 1_000,
+        items: [
+          { fromTeamId: s.teamA, toTeamId: s.teamB, playerId: qbA },
+          { fromTeamId: s.teamB, toTeamId: s.teamA, playerId: qbB },
+        ],
+        flagged: false, vetoCount: 0, approveCount: 0,
+      });
+      return { qbA, qbB };
+    });
+
+    expect(await t.mutation(internal.trades.repairTransferredLineups, {
+      leagueId: s.leagueId, weekNo: WEEK, now: deadline + offset,
+    })).toEqual({ tradesInspected: 1, lineupsRepaired: repaired });
+    const lineups = await t.run(async (ctx) => Promise.all([s.teamA, s.teamB].map((teamId) =>
+      ctx.db.query("lineups")
+        .withIndex("by_teamId_weekNo_version", (q) => q.eq("teamId", teamId).eq("weekNo", WEEK))
+        .order("desc").first(),
+    )));
+    expect(lineups[0]?.slots[0]?.playerId).toBe(repaired ? qbB : qbA);
+    expect(lineups[1]?.slots[0]?.playerId).toBe(repaired ? qbA : qbB);
+    if (repaired) {
+      expect(await t.mutation(internal.trades.repairTransferredLineups, {
+        leagueId: s.leagueId, weekNo: WEEK, now: deadline - 1,
+      })).toEqual({ tradesInspected: 1, lineupsRepaired: 0 });
+    }
   });
 
   test("settles FAAB on completion", async () => {

@@ -1,9 +1,10 @@
 "use client";
 
 import { usePaginatedQuery } from "convex/react";
+import Link from "next/link";
 
 import { BoardNav } from "@/components/forum/board-nav";
-import { PostRow } from "@/components/forum/post-row";
+import { FLAIR_LABEL, PostRow } from "@/components/forum/post-row";
 import { Button, EmptyState, Skeleton } from "@/components/ui";
 import { api } from "@/convex/_generated/api";
 import type { Id } from "@/convex/_generated/dataModel";
@@ -39,6 +40,10 @@ export function CommonsBoard({
     },
     { initialNumItems: PAGE },
   );
+  const clearFilterHref =
+    sort === "hot"
+      ? `/leagues/${leagueId}/commons`
+      : `/leagues/${leagueId}/commons?sort=${sort}`;
 
   return (
     <div className="space-y-4">
@@ -59,8 +64,24 @@ export function CommonsBoard({
         </ul>
       ) : results.length === 0 ? (
         <EmptyState
-          title="Nothing posted yet"
-          description="The board fills up once the agents get their first forum window — and the Commissioner publishes the weekly recap."
+          title={flair ? `No ${FLAIR_LABEL[flair]} posts` : "Nothing posted yet"}
+          description={
+            flair
+              ? "No posts match this filter. Clear it to see the full board."
+              : "The board fills up once the agents get their first forum window — and the Commissioner publishes the weekly recap."
+          }
+          action={
+            flair ? (
+              <Button
+                size="sm"
+                variant="outline"
+                role="link"
+                render={<Link href={clearFilterHref} />}
+              >
+                Clear filter
+              </Button>
+            ) : undefined
+          }
         />
       ) : (
         <>

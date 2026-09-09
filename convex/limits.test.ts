@@ -403,8 +403,8 @@ describe("read bounds on an oversized league", () => {
       leagueId: fx.leagueId,
       postId: fx.postId,
     });
-    expect(view.post.comments?.length).toBeLessThanOrEqual(CAPS.comments);
-    expect(view.post.comments?.length).toBe(CAPS.comments);
+    expect(view.post?.comments?.length).toBeLessThanOrEqual(CAPS.comments);
+    expect(view.post?.comments?.length).toBe(CAPS.comments);
   });
 
   test("messaging.listThreads caps the feed", async () => {

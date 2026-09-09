@@ -8,14 +8,16 @@
  * (migration plan §2.6): standings come from `team_standings`, spend from
  * `team_week_rollups`, run counts from the denormalised counters on `runs` and
  * `windows`, draft progress from the bounded `draft_picks` range, and live
- * scores from the latest snapshot's `meta` chunk instead of a join over
- * `player_stats_weekly`.
+ * scores from current weekly player stats. Frozen snapshots remain the source
+ * of projections and reproducible agent decisions.
  */
 import { v } from "convex/values";
 
 import type { LineupSlot, SnapshotPlayer } from "../lib/snapshot/types";
 import type { Doc, Id } from "./_generated/dataModel";
 import { query, type QueryCtx } from "./_generated/server";
+import { isWeeklyLineupLocked } from "./lib/lineup_deadline";
+import { currentPlayerPoints, currentScoresForTeams } from "./lib/player_points";
 import { isPrivateAt, revealAtFor } from "./lib/visibility";
 import { requireLeagueRead } from "./lib/auth";
 import { compareViewRows, rankRows } from "./lib/standings_pure";
@@ -228,7 +230,7 @@ async function latestLineup(
     .first();
 }
 
-/** Sum the snapshot's `liveScores` across each team's current starting lineup. */
+/** Sum current player scores across each team's current starting lineup. */
 async function liveScoresByTeam(
   ctx: QueryCtx,
   teamIds: Id<"teams">[],
@@ -241,11 +243,16 @@ async function liveScoresByTeam(
     const lineup = await latestLineup(ctx, teamId, weekNo);
     if (!lineup) continue;
     let total = 0;
+    let scored = false;
     for (const slot of lineup.slots) {
       if (!isStartingSlot(slot.slot)) continue;
-      total += liveScoreFor(liveScores, slot.playerId) ?? 0;
+      const points = liveScoreFor(liveScores, slot.playerId);
+      if (points !== null) {
+        total += points;
+        scored = true;
+      }
     }
-    out.set(teamId, round2(total));
+    if (scored) out.set(teamId, round2(total));
   }
   return out;
 }
@@ -256,7 +263,6 @@ async function buildMatchupCards(
   weekNo: number,
   table: StandingsRow[],
   teamRows: Doc<"teams">[],
-  liveScores: Record<string, number> | null,
 ): Promise<MatchupCard[]> {
   // Bounded: at most 7 matchups in a 14-team week.
   const rows = await ctx.db
@@ -267,6 +273,8 @@ async function buildMatchupCards(
 
   const teamById = new Map(teamRows.map((t) => [t._id as string, t]));
   const standingById = new Map(table.map((row) => [row.teamId, row]));
+  const liveScores = await currentScoresForTeams(ctx, leagueId, weekNo,
+    rows.flatMap((row) => [row.homeTeamId, row.awayTeamId]));
   const liveByTeam = await liveScoresByTeam(
     ctx,
     rows.flatMap((row) => [row.homeTeamId, row.awayTeamId]),
@@ -278,7 +286,7 @@ async function buildMatchupCards(
     const team = teamById.get(teamId);
     const standing = standingById.get(teamId);
     const live = liveByTeam.get(teamId);
-    const useLive = !isFinal && official === 0 && typeof live === "number";
+    const useLive = !isFinal && typeof live === "number";
     return {
       teamId,
       teamName: team?.name ?? "Unknown",
@@ -286,7 +294,7 @@ async function buildMatchupCards(
       avatarTemplate: team?.avatarTemplate,
       avatarUrl: standing?.avatarUrl,
       score: round2(useLive ? live : official),
-      live: useLive,
+      live: !isFinal && (useLive || official !== 0),
       record: standing ? recordText(standing) : "0-0",
     };
   };
@@ -309,14 +317,12 @@ export const matchups = query({
       .query("teams")
       .withIndex("by_leagueId", (q) => q.eq("leagueId", leagueId))
       .collect(); // bounded: ≤ 14 teams
-    const snapshot = await latestMetaChunk(ctx, leagueId);
     return buildMatchupCards(
       ctx,
       leagueId,
       weekNo,
       table,
       teamRows,
-      snapshot?.meta.liveScores ?? null,
     );
   },
 });
@@ -473,6 +479,7 @@ export const matchup = query({
       : null;
     const snapshot = payload ? { payload } : null;
     const table = await standingsFor(ctx, leagueId, league.season);
+    const liveScores = await currentScoresForTeams(ctx, leagueId, weekNo, [row.homeTeamId, row.awayTeamId]);
 
     return {
       leagueId,
@@ -486,7 +493,7 @@ export const matchup = query({
         row.homeScore ?? 0,
         preset,
         snapshot?.payload.players ?? null,
-        snapshot?.payload.liveScores ?? null,
+        liveScores,
         table,
       ),
       away: await buildSide(
@@ -496,7 +503,7 @@ export const matchup = query({
         row.awayScore ?? 0,
         preset,
         snapshot?.payload.players ?? null,
-        snapshot?.payload.liveScores ?? null,
+        liveScores,
         table,
       ),
     };
@@ -513,6 +520,7 @@ export type RosterEntry = {
   sleeperId?: string | null;
   injuryStatus: string | null;
   byeWeek: number | null;
+  lockedForWeek?: boolean;
   acquiredVia: string;
   acquiredAt: number;
   /** From the latest snapshot; null when no snapshot has been taken yet. */
@@ -641,8 +649,6 @@ export const team = query({
     const weekNo = await currentWeekNoFor(ctx, league._id, Date.now());
     const snapshot = await latestPayload(ctx, league._id);
     const players = snapshot?.payload.players ?? null;
-    const liveScores = snapshot?.payload.liveScores ?? null;
-
     // Bounded: one team's roster is at most ~20 rows.
     const rosterRows = await ctx.db
       .query("roster_slots")
@@ -673,7 +679,8 @@ export const team = query({
         acquiredVia: row.acquiredVia,
         acquiredAt: row.acquiredAt,
         projection: projection === null ? null : round2(projection),
-        livePoints: liveScoreFor(liveScores, row.playerId),
+        livePoints: (await currentPlayerPoints(ctx, row.playerId, league.season, weekNo,
+          rules?.scoringPreset ?? "ppr", rules?.tePremium ?? false)),
         kickoffAt: snap?.kickoffAt ?? null,
         opponent: snap?.opponent ?? null,
         slot,
@@ -688,6 +695,28 @@ export const team = query({
     });
 
     const entryByPlayer = new Map(roster.map((entry) => [entry.playerId as string, entry]));
+    const weeklyLocked = await isWeeklyLineupLocked(ctx, league._id, weekNo, now);
+    // A traded starter keeps this week's locked scoring assignment. Ownership
+    // changes immediately, but that historical starter must not render Empty.
+    for (const slot of currentLineup?.slots ?? []) {
+      if (!slot.playerId || !isStartingSlot(slot.slot) || entryByPlayer.has(slot.playerId)) continue;
+      const player = await ctx.db.get("players", slot.playerId);
+      if (!player) continue;
+      const snap = snapshotPlayer(players, slot.playerId);
+      if (!weeklyLocked && !(snap?.kickoffAt && Date.parse(snap.kickoffAt) <= now)) continue;
+      entryByPlayer.set(slot.playerId, {
+        playerId: player._id, fullName: player.fullName, position: player.position,
+        nflTeam: player.nflTeam ?? null, sleeperId: player.sleeperId,
+        injuryStatus: player.injuryStatus ?? null, byeWeek: player.byeWeek ?? null,
+        acquiredVia: "trade", acquiredAt: currentLineup!._creationTime,
+        projection: projectionFor(snap?.projection ?? null, rules?.scoringPreset),
+        livePoints: (await currentPlayerPoints(ctx, player._id, league.season, weekNo,
+          rules?.scoringPreset ?? "ppr", rules?.tePremium ?? false)),
+        kickoffAt: snap?.kickoffAt ?? null, opponent: snap?.opponent ?? null,
+        slot: slot.slot, starting: true, lockedForWeek: true,
+      });
+    }
+
 
     // Build the slot grid from the league's roster shape so empty slots are visible.
     const slotLabels =
@@ -938,7 +967,7 @@ export const home = query({
     const now = Date.now();
     const weekNo = await currentWeekNoFor(ctx, leagueId, now);
 
-    const snapshot = await latestMetaChunk(ctx, leagueId);
+    const snapshot = await latestMetaChunk(ctx, leagueId, weekNo);
     const table = await standingsFor(ctx, leagueId, league.season);
     // Bounded: ≤ 14 teams.
     const teamRows = await ctx.db
@@ -952,7 +981,6 @@ export const home = query({
       weekNo,
       table,
       teamRows,
-      snapshot?.meta.liveScores ?? null,
     );
 
     // ---- latest Commons posts

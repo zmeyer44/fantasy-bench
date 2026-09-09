@@ -889,7 +889,14 @@ function assemble(chunks: Array<Doc<"snapshot_chunks">>): SnapshotPayload | null
 export async function latestSnapshotRow(
   ctx: QueryCtx,
   leagueId: Id<"leagues">,
+  weekNo?: number,
 ): Promise<Doc<"snapshots"> | null> {
+  if (weekNo !== undefined) {
+    return ctx.db.query("snapshots")
+      .withIndex("by_leagueId_weekNo_status_takenAt", (q) =>
+        q.eq("leagueId", leagueId).eq("weekNo", weekNo).eq("status", "ready"),
+      ).order("desc").first();
+  }
   const rows = await ctx.db
     .query("snapshots")
     .withIndex("by_leagueId_takenAt", (q) => q.eq("leagueId", leagueId))
@@ -902,8 +909,9 @@ export async function latestSnapshotRow(
 export async function latestMetaChunk(
   ctx: QueryCtx,
   leagueId: Id<"leagues">,
+  weekNo?: number,
 ): Promise<{ snapshot: Doc<"snapshots">; meta: Omit<SnapshotPayload, "players"> } | null> {
-  const snapshot = await latestSnapshotRow(ctx, leagueId);
+  const snapshot = await latestSnapshotRow(ctx, leagueId, weekNo);
   if (!snapshot) return null;
   const meta = await ctx.db
     .query("snapshot_chunks")

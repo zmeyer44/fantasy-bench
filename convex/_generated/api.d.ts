@@ -9,6 +9,7 @@
  */
 
 import type * as activity from "../activity.js";
+import type * as activity_visibility from "../activity_visibility.js";
 import type * as auth from "../auth.js";
 import type * as avatar_generation from "../avatar_generation.js";
 import type * as commissioner from "../commissioner.js";
@@ -27,18 +28,23 @@ import type * as ledger from "../ledger.js";
 import type * as lib_agent_action from "../lib/agent_action.js";
 import type * as lib_auth from "../lib/auth.js";
 import type * as lib_config_pure from "../lib/config_pure.js";
+import type * as lib_custom_tool_url from "../lib/custom_tool_url.js";
 import type * as lib_defaults from "../lib/defaults.js";
 import type * as lib_draft_pure from "../lib/draft_pure.js";
 import type * as lib_errors from "../lib/errors.js";
 import type * as lib_fairness_pure from "../lib/fairness_pure.js";
+import type * as lib_game_calendar from "../lib/game_calendar.js";
+import type * as lib_lineup_deadline from "../lib/lineup_deadline.js";
 import type * as lib_lineup_pure from "../lib/lineup_pure.js";
 import type * as lib_moderation_pure from "../lib/moderation_pure.js";
+import type * as lib_player_points from "../lib/player_points.js";
 import type * as lib_pricing_pure from "../lib/pricing_pure.js";
 import type * as lib_scoring_pure from "../lib/scoring_pure.js";
 import type * as lib_scoring_table from "../lib/scoring_table.js";
 import type * as lib_season from "../lib/season.js";
 import type * as lib_secrets from "../lib/secrets.js";
 import type * as lib_seed_secret from "../lib/seed_secret.js";
+import type * as lib_snapshot_live from "../lib/snapshot_live.js";
 import type * as lib_social_pure from "../lib/social_pure.js";
 import type * as lib_standings_pure from "../lib/standings_pure.js";
 import type * as lib_templates from "../lib/templates.js";
@@ -48,6 +54,7 @@ import type * as lib_visibility from "../lib/visibility.js";
 import type * as lineups from "../lineups.js";
 import type * as messaging from "../messaging.js";
 import type * as metrics from "../metrics.js";
+import type * as password_reset from "../password_reset.js";
 import type * as providers_espn from "../providers/espn.js";
 import type * as providers_fantasypros from "../providers/fantasypros.js";
 import type * as providers_http from "../providers/http.js";
@@ -99,6 +106,7 @@ import type {
 
 declare const fullApi: ApiFromModules<{
   activity: typeof activity;
+  activity_visibility: typeof activity_visibility;
   auth: typeof auth;
   avatar_generation: typeof avatar_generation;
   commissioner: typeof commissioner;
@@ -117,18 +125,23 @@ declare const fullApi: ApiFromModules<{
   "lib/agent_action": typeof lib_agent_action;
   "lib/auth": typeof lib_auth;
   "lib/config_pure": typeof lib_config_pure;
+  "lib/custom_tool_url": typeof lib_custom_tool_url;
   "lib/defaults": typeof lib_defaults;
   "lib/draft_pure": typeof lib_draft_pure;
   "lib/errors": typeof lib_errors;
   "lib/fairness_pure": typeof lib_fairness_pure;
+  "lib/game_calendar": typeof lib_game_calendar;
+  "lib/lineup_deadline": typeof lib_lineup_deadline;
   "lib/lineup_pure": typeof lib_lineup_pure;
   "lib/moderation_pure": typeof lib_moderation_pure;
+  "lib/player_points": typeof lib_player_points;
   "lib/pricing_pure": typeof lib_pricing_pure;
   "lib/scoring_pure": typeof lib_scoring_pure;
   "lib/scoring_table": typeof lib_scoring_table;
   "lib/season": typeof lib_season;
   "lib/secrets": typeof lib_secrets;
   "lib/seed_secret": typeof lib_seed_secret;
+  "lib/snapshot_live": typeof lib_snapshot_live;
   "lib/social_pure": typeof lib_social_pure;
   "lib/standings_pure": typeof lib_standings_pure;
   "lib/templates": typeof lib_templates;
@@ -138,6 +151,7 @@ declare const fullApi: ApiFromModules<{
   lineups: typeof lineups;
   messaging: typeof messaging;
   metrics: typeof metrics;
+  password_reset: typeof password_reset;
   "providers/espn": typeof providers_espn;
   "providers/fantasypros": typeof providers_fantasypros;
   "providers/http": typeof providers_http;

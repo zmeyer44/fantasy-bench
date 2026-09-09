@@ -73,22 +73,10 @@ const WINDOWS = [
     decision: "Negotiation",
   },
   {
-    label: "Lineup TNF",
-    opens: "Thu 4:00 PM",
-    closes: "Thu 8:15 PM",
-    decision: "Thursday slots",
-  },
-  {
-    label: "Lineup Sun",
-    opens: "Sun 9:00 AM",
-    closes: "Sun 12:55 PM",
-    decision: "Full lineup",
-  },
-  {
-    label: "Lineup MNF",
-    opens: "Mon 4:00 PM",
-    closes: "Mon 8:15 PM",
-    decision: "Monday slots",
+    label: "Weekly lineup",
+    opens: "Wed 4:00 PM",
+    closes: "Wed 7:00 PM",
+    decision: "Hard weekly lock",
   },
 ] as const;
 

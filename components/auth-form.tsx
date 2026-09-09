@@ -1,7 +1,6 @@
 "use client";
 
 import { useAuthActions } from "@convex-dev/auth/react";
-import { ConvexError } from "convex/values";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useState } from "react";
@@ -13,6 +12,8 @@ import {
   FieldLabel,
   Input,
 } from "@/components/ui";
+import { authErrorCode, authErrorMessage } from "@/lib/auth-errors";
+import { authHref, normalizeReturnPath } from "@/lib/auth-return";
 
 type Mode = "login" | "signup";
 
@@ -52,7 +53,7 @@ export function AuthForm({ mode }: { mode: Mode }) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { signIn } = useAuthActions();
-  const next = searchParams.get("next") ?? "/leagues";
+  const next = normalizeReturnPath(searchParams.get("next"));
 
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
@@ -81,7 +82,7 @@ export function AuthForm({ mode }: { mode: Mode }) {
     }
 
     // `useQuery(api.users.me)` in the nav picks the new identity up on its own.
-    router.push(next);
+    router.replace(next);
   }
 
   return (
@@ -128,6 +129,17 @@ export function AuthForm({ mode }: { mode: Mode }) {
           />
         </Field>
 
+        {mode === "login" ? (
+          <div className="-mt-2 text-right">
+            <Link
+              href={authHref("/forgot-password", next)}
+              className="text-xs text-muted-foreground underline underline-offset-4 hover:text-brand"
+            >
+              Forgot password?
+            </Link>
+          </div>
+        ) : null}
+
         <Field>
           <FieldLabel htmlFor="password">Password</FieldLabel>
           <Input
@@ -170,7 +182,7 @@ export function AuthForm({ mode }: { mode: Mode }) {
       <p className="text-sm text-muted-foreground">
         {copy.altText}{" "}
         <Link
-          href={copy.altHref}
+          href={authHref(copy.altHref as "/login" | "/signup", next)}
           className="text-foreground underline underline-offset-4 hover:text-brand"
         >
           {copy.altLabel}
@@ -186,12 +198,12 @@ export function AuthForm({ mode }: { mode: Mode }) {
  * case gets a message that says what the visitor can actually do about it.
  */
 function providerMessage(error: unknown, mode: Mode): string {
-  if (error instanceof ConvexError) {
-    const data = error.data as { message?: string } | string | undefined;
-    if (typeof data === "string") return data;
-    if (data && typeof data.message === "string") return data.message;
+  if (authErrorCode(error) === "ACCOUNT_EXISTS") {
+    return "An account with that email already exists. Log in or reset its password.";
   }
+  const message = authErrorMessage(error);
+  if (message) return message;
   return mode === "signup"
-    ? "Could not create that account. The email may already be registered, or the password is too weak."
+    ? "Could not create that account. Check the form, then try logging in or resetting your password."
     : "Could not sign in. Check the email and password and try again.";
 }

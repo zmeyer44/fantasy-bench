@@ -14,8 +14,9 @@ import { internalMutation, query, type QueryCtx } from "./_generated/server";
 import { agentCtxValidator, fail, withAgentAction } from "./lib/agent_action";
 import { requireLeagueRead } from "./lib/auth";
 import { rosterCapacity } from "./lib/draft_pure";
+import { isWeeklyLineupLocked } from "./lib/lineup_deadline";
 import { isLocked } from "./lib/lineup_pure";
-import { payloadForWindow } from "./lineups";
+import { currentLineup, payloadForWindow } from "./lineups";
 import { readPayload, latestPayload } from "./snapshot";
 import { projectionFor } from "./lib/views_shared";
 
@@ -311,6 +312,14 @@ export const submit = internalMutation({
         const rosterIds = new Set(roster.map((r) => r.playerId as string));
         const capacity = rosterCapacity(rules.rosterSlots);
         const leagueRostered = await leagueRosteredIds(ctx, leagueId);
+        const weeklyLocked = await isWeeklyLineupLocked(ctx, leagueId, weekNo, Date.now());
+        const lineup = weeklyLocked ? await currentLineup(ctx, teamId, weekNo) : null;
+        const protectedStarters = new Set(
+          (lineup?.slots ?? [])
+            .filter((slot) => !["BENCH", "BN", "IR"].includes(slot.slot.toUpperCase()))
+            .map((slot) => slot.playerId)
+            .filter((playerId): playerId is Id<"players"> => Boolean(playerId)),
+        );
 
         const errors: string[] = [];
         const seenAdds = new Set<string>();
@@ -349,6 +358,11 @@ export const submit = internalMutation({
             if (!rosterIds.has(claim.dropPlayerId)) {
               errors.push(
                 `${label}: ${playerLabel(snapshot, claim.dropPlayerId)} is not on your roster.`,
+              );
+            }
+            if (protectedStarters.has(claim.dropPlayerId)) {
+              errors.push(
+                `${label}: ${playerLabel(snapshot, claim.dropPlayerId)} is in the lineup locked Wednesday at 7:00 PM ET.`,
               );
             }
           } else {
@@ -445,6 +459,19 @@ export const drop = internalMutation({
         if (!slot) return fail("That player is not on your roster.");
 
         const snapshot = await payloadForWindow(ctx, args.agentCtx.windowId);
+        if (
+          await isWeeklyLineupLocked(ctx, leagueId, weekNo, now)
+        ) {
+          const lineup = await currentLineup(ctx, teamId, weekNo);
+          const isStarter = (lineup?.slots ?? []).some(
+            (entry) =>
+              entry.playerId === playerId &&
+              !["BENCH", "BN", "IR"].includes(entry.slot.toUpperCase()),
+          );
+          if (isStarter) {
+            return fail("That player is in the lineup locked Wednesday at 7:00 PM ET.");
+          }
+        }
         if (await isPlayerLocked(ctx, { leagueId, playerId, weekNo, now, snapshot })) {
           return fail("That player's game has already kicked off; he is locked.");
         }
@@ -518,6 +545,22 @@ export const process = internalMutation({
       slotIdByKey.set(`${row.teamId}:${row.playerId}`, row._id);
       rosteredPlayers.add(row.playerId);
     }
+    const weeklyLocked = await isWeeklyLineupLocked(ctx, window.leagueId, window.weekNo, now);
+    const protectedStartersByTeam = new Map<string, Set<string>>();
+    if (weeklyLocked) {
+      for (const team of leagueTeams) {
+        const lineup = await currentLineup(ctx, team._id, window.weekNo);
+        protectedStartersByTeam.set(
+          team._id,
+          new Set(
+            (lineup?.slots ?? [])
+              .filter((slot) => !["BENCH", "BN", "IR"].includes(slot.slot.toUpperCase()))
+              .map((slot) => slot.playerId)
+              .filter((playerId): playerId is Id<"players"> => Boolean(playerId)),
+          ),
+        );
+      }
+    }
 
     // bid desc -> waiver priority asc (1 = worst record, first in line) -> earlier
     // submission -> the order the claims were listed in that submission.
@@ -558,6 +601,13 @@ export const process = internalMutation({
       }
       if (claim.dropPlayerId && !roster.has(claim.dropPlayerId)) {
         await reject("Drop player is no longer on the roster.");
+        continue;
+      }
+      if (
+        claim.dropPlayerId &&
+        protectedStartersByTeam.get(claim.teamId)?.has(claim.dropPlayerId)
+      ) {
+        await reject("Drop player is in the lineup locked Wednesday at 7:00 PM ET.");
         continue;
       }
       const sizeAfter = roster.size + 1 - (claim.dropPlayerId ? 1 : 0);

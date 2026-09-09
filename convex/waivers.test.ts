@@ -8,6 +8,7 @@ import { describe, expect, test } from "vitest";
 import type { SnapshotPayload, SnapshotPlayer } from "../lib/snapshot/types";
 import { internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
+import { weeklyLineupDeadline } from "./lib/lineup_deadline";
 import schema from "./schema";
 
 const modules = import.meta.glob("./**/*.ts");
@@ -416,6 +417,34 @@ describe("waivers.drop", () => {
     });
     expect(result.ok === false && result.errors.join(" ")).toContain("already kicked off");
   });
+
+  test("refuses to drop an active starter at the exact Wednesday 7 PM ET deadline", async () => {
+    const t = convexTest(schema, modules);
+    const f = await fixture(t);
+    const weekStartsAt = Date.parse("2026-09-08T10:00:00.000Z");
+    await t.run(async (ctx) => {
+      await ctx.db.insert("weeks", {
+        leagueId: f.leagueId, weekNo: 2, startsAt: weekStartsAt,
+        endsAt: weekStartsAt + 7 * 86_400_000, isPlayoff: false, status: "active",
+      });
+      await ctx.db.insert("lineups", {
+        leagueId: f.leagueId, teamId: f.teamIds[0], weekNo: 2, version: 1,
+        slots: [{ slot: "RB", playerId: f.idOf.qbA }], source: "agent",
+      });
+    });
+    const result = await t.mutation(internal.waivers.drop, {
+      leagueId: f.leagueId,
+      teamId: f.teamIds[0],
+      playerId: f.idOf.qbA,
+      weekNo: 2,
+      agentCtx: ctxFor(f, 0, "weekly-locked-drop"),
+      now: weeklyLineupDeadline(weekStartsAt),
+    });
+    expect(result).toEqual({
+      ok: false,
+      errors: ["That player is in the lineup locked Wednesday at 7:00 PM ET."],
+    });
+  });
 });
 
 describe("waivers.process", () => {
@@ -441,6 +470,51 @@ describe("waivers.process", () => {
       });
     }
   }
+
+  test("a claim cannot drop a starter when processing occurs after the weekly deadline", async () => {
+    const t = convexTest(schema, modules);
+    const f = await fixture(t);
+    const weekStartsAt = Date.parse("2026-09-08T10:00:00.000Z");
+    await t.run(async (ctx) => {
+      await ctx.db.insert("weeks", {
+        leagueId: f.leagueId, weekNo: 2, startsAt: weekStartsAt,
+        endsAt: weekStartsAt + 7 * 86_400_000, isPlayoff: false, status: "active",
+      });
+      await ctx.db.insert("lineups", {
+        leagueId: f.leagueId, teamId: f.teamIds[0], weekNo: 2, version: 1,
+        slots: [{ slot: "RB", playerId: f.idOf.qbA }], source: "agent",
+      });
+      await ctx.db.insert("waiver_claims", {
+        leagueId: f.leagueId, teamId: f.teamIds[0], windowId: f.windowId, weekNo: 2,
+        addPlayerId: f.idOf.fa1, dropPlayerId: f.idOf.qbA, bid: 10, priority: 1,
+        runId: f.runIds[0], status: "pending",
+      });
+    });
+
+    expect(
+      await t.mutation(internal.waivers.process, {
+        windowId: f.windowId,
+        now: weeklyLineupDeadline(weekStartsAt) + 1,
+      }),
+    ).toEqual({ processed: 1, awarded: 0 });
+    const state = await t.run(async (ctx) => ({
+      roster: await ctx.db
+        .query("roster_slots")
+        .withIndex("by_teamId", (q) => q.eq("teamId", f.teamIds[0]))
+        .collect(),
+      claim: await ctx.db
+        .query("waiver_claims")
+        .withIndex("by_windowId_teamId", (q) =>
+          q.eq("windowId", f.windowId).eq("teamId", f.teamIds[0]),
+        )
+        .first(),
+    }));
+    expect(state.roster.map((slot) => slot.playerId)).toEqual([f.idOf.qbA]);
+    expect(state.claim).toMatchObject({
+      status: "invalid",
+      resultReason: "Drop player is in the lineup locked Wednesday at 7:00 PM ET.",
+    });
+  });
 
   test("awards to the highest bid, debits FAAB and moves the roster", async () => {
     const t = convexTest(schema, modules);

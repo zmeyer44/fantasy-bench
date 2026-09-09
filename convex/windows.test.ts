@@ -24,6 +24,7 @@ import {
   templateByLabel,
 } from "./lib/templates";
 import schema from "./schema";
+import { weeklyLineupDeadline } from "./lib/lineup_deadline";
 
 const modules = import.meta.glob("./**/*.ts");
 
@@ -144,29 +145,20 @@ describe("the PRD 5.3 default table", () => {
     expect(new Date(byLabel(windows, "waiver").closesAt).toISOString()).toBe(
       "2026-09-09T07:00:00.000Z",
     );
-    expect(new Date(byLabel(windows, "lineup_tnf").opensAt).toISOString()).toBe(
-      "2026-09-10T20:00:00.000Z",
-    );
-    expect(new Date(byLabel(windows, "lineup_sun_early").closesAt).toISOString()).toBe(
-      "2026-09-13T16:55:00.000Z",
-    );
-    expect(new Date(byLabel(windows, "lineup_mnf").closesAt).toISOString()).toBe(
-      "2026-09-15T00:15:00.000Z",
-    );
+    expect(new Date(byLabel(windows, "lineup_weekly").opensAt).toISOString()).toBe("2026-09-09T20:00:00.000Z");
+    expect(new Date(byLabel(windows, "lineup_weekly").closesAt).toISOString()).toBe("2026-09-09T23:00:00.000Z");
   });
 
-  test("gives every window a submission deadline 10 minutes before close", () => {
+  test("uses the full advertised lineup window and a ten-minute lead for other decisions", () => {
     for (const w of windows) {
-      expect(w.closesAt - w.submissionDeadlineAt).toBe(DEFAULT_SUBMISSION_LEAD_MINUTES * 60_000);
+      expect(w.closesAt - w.submissionDeadlineAt).toBe(w.type === "lineup" ? 0 : DEFAULT_SUBMISSION_LEAD_MINUTES * 60_000);
       expect(w.submissionDeadlineAt).toBeGreaterThan(w.opensAt);
     }
   });
 
-  test("carries the game-day scope each lineup window may touch", () => {
-    expect(byLabel(windows, "lineup_tnf").scope.gameDays).toEqual(["thu"]);
-    expect(byLabel(windows, "lineup_sun_late").scope.gameDays).toEqual(["sun_late", "mon"]);
-    expect(byLabel(windows, "lineup_mnf").scope.gameDays).toEqual(["mon"]);
-    expect(byLabel(windows, "lineup_sun_early").scope.gameDays).toBeUndefined();
+  test("sets the full lineup once before Wednesday games", () => {
+    expect(windows.filter((w) => w.type === "lineup")).toHaveLength(1);
+    expect(byLabel(windows, "lineup_weekly").scope.gameDays).toBeUndefined();
   });
 
   test("splits trade windows into three contiguous rounds", () => {
@@ -192,7 +184,7 @@ describe("the PRD 5.3 default table", () => {
   test("looks a template up by label", () => {
     expect(templateByLabel("waiver")?.type).toBe("waiver");
     expect(templateByLabel("nope")).toBeUndefined();
-    expect(DEFAULT_WINDOW_TEMPLATES).toHaveLength(8);
+    expect(DEFAULT_WINDOW_TEMPLATES).toHaveLength(5);
   });
 });
 
@@ -203,15 +195,9 @@ describe("DST week", () => {
     expect(new Date(byLabel(windows, "waiver").opensAt).toISOString()).toBe(
       "2026-10-27T10:00:00.000Z",
     );
-    expect(new Date(byLabel(windows, "lineup_tnf").opensAt).toISOString()).toBe(
-      "2026-10-29T20:00:00.000Z",
-    );
-    expect(new Date(byLabel(windows, "lineup_sun_early").opensAt).toISOString()).toBe(
-      "2026-11-01T14:00:00.000Z",
-    );
-    expect(new Date(byLabel(windows, "lineup_mnf").opensAt).toISOString()).toBe(
-      "2026-11-02T21:00:00.000Z",
-    );
+    expect(new Date(byLabel(windows, "lineup_weekly").closesAt).toISOString()).toBe("2026-10-28T23:00:00.000Z");
+    const nextWeek = resolveWindowsForWeek(Date.parse("2026-11-03T11:00:00Z"));
+    expect(new Date(byLabel(nextWeek, "lineup_weekly").closesAt).toISOString()).toBe("2026-11-05T00:00:00.000Z");
   });
 });
 
@@ -253,13 +239,13 @@ describe("windows.materializeWindows", () => {
       leagueId: s.leagueId,
       weekNo: 1,
     });
-    expect(first).toEqual({ weekNo: 1, created: 18, existing: 0 });
+    expect(first).toEqual({ weekNo: 1, created: 15, existing: 0 });
 
     const second = await t.mutation(internal.windows.materializeWindows, {
       leagueId: s.leagueId,
       weekNo: 1,
     });
-    expect(second).toEqual({ weekNo: 1, created: 0, existing: 18 });
+    expect(second).toEqual({ weekNo: 1, created: 0, existing: 15 });
 
     const rows = await t.run(async (ctx) =>
       ctx.db
@@ -269,7 +255,7 @@ describe("windows.materializeWindows", () => {
         )
         .collect(),
     );
-    expect(rows).toHaveLength(18);
+    expect(rows).toHaveLength(15);
     expect(rows.every((row) => row.status === "scheduled")).toBe(true);
     expect(rows.every((row) => row.runCount === 0 && row.terminalRunCount === 0)).toBe(true);
   });
@@ -290,7 +276,7 @@ describe("windows.forWeek / windows.schedule", () => {
     await t.mutation(internal.windows.materializeWindows, { leagueId: s.leagueId, weekNo: 1 });
 
     const rows = await t.query(api.windows.forWeek, { leagueId: s.leagueId, weekNo: 1 });
-    expect(rows).toHaveLength(18);
+    expect(rows).toHaveLength(15);
     expect(rows[0].label).toBe("waiver");
     expect(rows[0].labelText).toBe("Waiver");
     expect(rows.map((r) => r.opensAt)).toEqual([...rows.map((r) => r.opensAt)].sort((a, b) => a - b));
@@ -361,7 +347,7 @@ describe("windows.openNow / windows.closeNow (the smoke-test entry points)", () 
     // Nothing materialised yet: `openNow` does it, then opens.
     const opened = await t.mutation(internal.windows.openNow, {
       leagueId: s.leagueId,
-      label: "lineup_sun_early",
+      label: "lineup_weekly",
       weekNo: 1,
     });
     expect(opened.opened).toBe(true);
@@ -369,7 +355,7 @@ describe("windows.openNow / windows.closeNow (the smoke-test entry points)", () 
 
     const window = await t.run(async (ctx) => ctx.db.get("windows", opened.windowId));
     expect(window!.status).toBe("open");
-    expect(window!.label).toBe("lineup_sun_early");
+    expect(window!.label).toBe("lineup_weekly");
     expect(window!.snapshotId).toBe(opened.snapshotId);
 
     const closed = await t.mutation(internal.windows.closeNow, { windowId: opened.windowId });
@@ -387,4 +373,60 @@ describe("windows.openNow / windows.closeNow (the smoke-test entry points)", () 
       t.mutation(internal.windows.openNow, { leagueId: s.leagueId, label: "nope", weekNo: 1 }),
     ).rejects.toThrow(/No window nope/);
   });
+});
+
+
+describe("weekly lineup deadline migration", () => {
+  test("retires scheduled legacy lineups, preserves history and unrelated jobs, and is idempotent", async () => {
+    const t = convexTest(schema, modules);
+    const s = await seedLeague(t);
+    const ids = await t.run(async (ctx) => {
+      const insert = (label: string, status: "scheduled" | "closed", type: "lineup" | "trade") => ctx.db.insert("windows", {
+        leagueId: s.leagueId, weekNo: 1, label, type, roundNo: 1,
+        opensAt: SEPTEMBER_ANCHOR + 3 * 86400000, closesAt: SEPTEMBER_ANCHOR + 4 * 86400000,
+        submissionDeadlineAt: SEPTEMBER_ANCHOR + 4 * 86400000 - 600000,
+        status, scope: {}, runCount: 0, terminalRunCount: 0,
+      });
+      return { legacy: await insert("lineup_tnf", "scheduled", "lineup"),
+        history: await insert("lineup_mnf", "closed", "lineup"),
+        trade: await insert("trade_a", "scheduled", "trade") };
+    });
+    const args = { leagueId: s.leagueId, weekNo: 1, now: SEPTEMBER_ANCHOR };
+    expect(await t.mutation(internal.windows.migrateWeeklyDeadline, args)).toEqual({ retired: 1, created: true });
+    expect(await t.mutation(internal.windows.migrateWeeklyDeadline, args)).toEqual({ retired: 0, created: false });
+    await t.run(async (ctx) => {
+      expect(await ctx.db.get("windows", ids.legacy)).toBeNull();
+      expect((await ctx.db.get("windows", ids.history))?.status).toBe("closed");
+      expect((await ctx.db.get("windows", ids.trade))?.status).toBe("scheduled");
+      const weekly = await ctx.db.query("windows").withIndex("by_leagueId_label_weekNo_roundNo", (q) =>
+        q.eq("leagueId", s.leagueId).eq("label", "lineup_weekly").eq("weekNo", 1).eq("roundNo", 1)).first();
+      expect(weekly?.submissionDeadlineAt).toBe(Date.parse("2026-09-09T23:00:00Z"));
+      expect(weekly?.closesAt).toBe(weekly?.submissionDeadlineAt);
+      expect(weekly?.openJobId).toBeDefined();
+      expect(weekly?.closeJobId).toBeDefined();
+    });
+  });
+
+  test("does not run agents retroactively after this week's deadline", async () => {
+    const t = convexTest(schema, modules);
+    const s = await seedLeague(t);
+    await t.mutation(internal.windows.migrateWeeklyDeadline, {
+      leagueId: s.leagueId, weekNo: 1, now: Date.parse("2026-09-10T01:00:00Z"),
+    });
+    await t.run(async (ctx) => {
+      const weekly = await ctx.db.query("windows").withIndex("by_leagueId_weekNo_type", (q) =>
+        q.eq("leagueId", s.leagueId).eq("weekNo", 1).eq("type", "lineup")).first();
+      expect(weekly?.status).toBe("closed");
+      expect(weekly?.openJobId).toBeUndefined();
+      expect(weekly?.closeJobId).toBeUndefined();
+    });
+  });
+});
+
+
+test("the weekly lock uses the stored week's calendar date across DST", () => {
+  expect(new Date(weeklyLineupDeadline(Date.parse("2026-10-27T10:00:00Z"))).toISOString()).toBe("2026-10-28T23:00:00.000Z");
+  // Legacy fixed-UTC weekly arithmetic produces 05:00 Tuesday after fall-back.
+  expect(new Date(weeklyLineupDeadline(Date.parse("2026-11-03T10:00:00Z"))).toISOString()).toBe("2026-11-05T00:00:00.000Z");
+  expect(new Date(weeklyLineupDeadline(Date.parse("2026-11-03T11:00:00Z"))).toISOString()).toBe("2026-11-05T00:00:00.000Z");
 });

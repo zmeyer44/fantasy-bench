@@ -122,7 +122,7 @@ export default async function ToolDetailPage({
         />
       ) : (
         <ToolDetail
-          key={`${row.name}:${source?._id ?? "defaults"}`}
+          key={row.name}
           leagueId={leagueId}
           teamId={teamId}
           teamName={view.team.name}

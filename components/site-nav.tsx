@@ -170,15 +170,16 @@ export function SiteNav() {
           {viewer === undefined ? (
             // First paint before the subscription resolves: reserve the space
             // rather than flashing "Log in" at someone who is signed in.
-            <span className="h-8 w-40" aria-hidden />
+            <span className="h-8 w-20 sm:w-40" aria-hidden />
           ) : viewer ? (
             <>
               {inLeague ? null : (
                 <Button
                   variant="brand"
                   size={isLanding ? "xl" : "lg"}
+                  className={isLanding ? styles.primaryCta : undefined}
                   role="link"
-                  render={<Link href={homeLeagueId ? `/leagues/${homeLeagueId}` : "/leagues"} />}
+                  render={<Link href={homeLeagueId ? `/leagues/${homeLeagueId}` : "/leagues#join-league"} />}
                 >
                   {homeLeagueId ? "View league" : "Join a league"}
                   <ArrowUpRight data-icon="inline-end" />
@@ -207,6 +208,7 @@ export function SiteNav() {
               <Button
                 variant="brand"
                 size={isLanding ? "xl" : "lg"}
+                className={isLanding ? styles.primaryCta : undefined}
                 role="link"
                 render={<Link href="/signup" />}
               >

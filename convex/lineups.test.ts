@@ -145,6 +145,10 @@ async function fixture(
       });
     }
 
+    for (const playerId of Object.values(idOf)) await ctx.db.insert("roster_slots", {
+      leagueId, teamId, playerId, acquiredAt: NOW, acquiredVia: "draft",
+    });
+
     const players: Record<string, SnapshotPlayer> = {};
     for (const spec of roster) players[idOf[spec.key]] = snapshotPlayer(idOf[spec.key], spec);
 
@@ -642,4 +646,46 @@ describe("lineups.applySafetyAutopilot", () => {
     });
     expect(second.changed).toBe(false);
   });
+});
+
+
+describe("Wednesday weekly lineup deadline", () => {
+  test("accepts a pre-deadline lineup, rejects exactly at 7 p.m. and later, then unlocks next week", async () => {
+    const t = convexTest(schema, modules);
+    const f = await fixture(t);
+    const deadline = Date.parse("2026-09-09T23:00:00Z");
+    await t.run(async (ctx) => {
+      for (const weekNo of [1, 2]) await ctx.db.insert("weeks", {
+        leagueId: f.leagueId, weekNo,
+        startsAt: Date.parse("2026-09-08T10:00:00Z") + (weekNo - 1) * 7 * 86400000,
+        endsAt: Date.parse("2026-09-15T10:00:00Z") + (weekNo - 1) * 7 * 86400000,
+        status: weekNo === 1 ? "active" : "upcoming", isPlayoff: false,
+      });
+    });
+    const args = { teamId: f.teamId, weekNo: 1, source: "agent" as const,
+      slots: [{ slot: "QB", playerId: f.idOf.qb1 }] };
+    expect((await t.mutation(internal.lineups.commit, { ...args, now: deadline - 1 })).ok).toBe(true);
+    for (const now of [deadline, deadline + 86400000]) {
+      const result = await t.mutation(internal.lineups.commit, { ...args, now });
+      expect(result.ok).toBe(false);
+      if (!result.ok) expect(result.errors.join(" ")).toContain("Wednesday at 7 p.m. Eastern");
+    }
+    expect((await t.mutation(internal.lineups.commit, { ...args, weekNo: 2, now: deadline + 6 * 86400000 })).ok).toBe(true);
+  });
+});
+
+
+test("a traded-away player cannot return from a stale decision snapshot", async () => {
+  const t = convexTest(schema, modules);
+  const f = await fixture(t, { lineup: [{ slot: "QB", key: "qb1" }] });
+  await t.run(async (ctx) => {
+    const row = await ctx.db.query("roster_slots").withIndex("by_teamId", (q) => q.eq("teamId", f.teamId))
+      .filter((q) => q.eq(q.field("playerId"), f.idOf.qb1)).first();
+    await ctx.db.delete("roster_slots", row!._id);
+  });
+  const result = await t.mutation(internal.lineups.applySafetyAutopilot, {
+    snapshotId: f.snapshotId, teamId: f.teamId, weekNo: 1, now: NOW,
+  });
+  expect(result.slots.find((slot) => slot.slot === "QB")?.playerId).toBe(f.idOf.qb2);
+  expect(result.slots.some((slot) => slot.playerId === f.idOf.qb1)).toBe(false);
 });

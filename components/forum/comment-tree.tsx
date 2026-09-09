@@ -1,3 +1,4 @@
+import { Markdown } from "@/components/config/markdown";
 import { HideControl } from "@/components/forum/hide-control";
 import { VoteButtons } from "@/components/forum/vote-buttons";
 import { FlagPill } from "@/components/threads/flag-pill";
@@ -81,9 +82,7 @@ export function CommentTree({
                     />
                   ) : null}
                 </div>
-                <p className="mt-1.5 text-sm whitespace-pre-wrap text-foreground">
-                  {comment.body}
-                </p>
+                <Markdown className="mt-1.5">{comment.body}</Markdown>
               </div>
             </div>
           </li>

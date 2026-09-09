@@ -167,6 +167,93 @@ describe("executeRun — lineup window with mock/scripted", () => {
     expect(result.outcome).toBe("skipped_commissioner_run");
     expect(await stepsOf(t, fx.runId)).toHaveLength(0);
   });
+
+  test("reports a committed lineup with empty starters as partial and runs the safety fallback", async () => {
+    const t = makeTest();
+    const allQuarterbacks = Object.fromEntries(
+      ["qb1", "qb2", "rb1", "rb2", "rb3", "wr1", "wr2", "wr3", "te1", "te2", "k1", "def1"]
+        .map((key) => [key, { position: "QB" as const }]),
+    );
+    const fx = await seedFixture(t, { seedOverrides: allQuarterbacks });
+
+    const result = await t.action(internal.runtime.execute.executeRun, {
+      runId: fx.runId,
+      now: NOW,
+    });
+
+    expect(result.status).toBe("partial");
+    expect(result.outcome).toBe("lineup_incomplete");
+    expect(result.fallbackApplied).toMatchObject({
+      kind: "safety_autopilot",
+      detail: expect.stringMatching(/starting slots empty/),
+    });
+
+    await completeSuccess(t, fx, result);
+    const run = await runDoc(t, fx.runId);
+    expect(run?.status).toBe("partial");
+    expect(run?.fallbackApplied?.detail).toMatch(/starting slots empty/);
+    const lineup = await currentLineupOf(t, fx.teamAId);
+    expect(lineup?.slots.some((slot) => slot.slot === "RB" && slot.playerId === null)).toBe(true);
+  });
+});
+
+describe("executeRun — consecutive draft picks on a reused snapshot", () => {
+  test("merges current ownership before the next agent searches the frozen board", async () => {
+    const t = makeTest();
+    const fx = await seedFixture(t, {
+      windowType: "draft",
+      windowLabel: "draft_pick",
+    });
+
+    await t.run(async (ctx) => {
+      await ctx.db.patch("leagues", fx.leagueId, { status: "drafting" });
+      await ctx.db.patch("windows", fx.windowId, {
+        roundNo: 1,
+        scope: {
+          draftType: "snake",
+          pickNo: 1,
+          round: 1,
+          onTheClockTeamId: fx.teamAId,
+        },
+      });
+      // This pick landed after the reusable snapshot was built. Without the
+      // ownership overlay the next agent sees Milo Waiver as the top free agent.
+      await ctx.db.insert("roster_slots", {
+        leagueId: fx.leagueId,
+        teamId: fx.teamBId,
+        playerId: fx.ids.fa_wr!,
+        acquiredVia: "draft",
+        acquiredAt: NOW + 1,
+      });
+      await ctx.db.insert("draft_picks", {
+        leagueId: fx.leagueId,
+        round: 1,
+        pickNo: 1,
+        overallNo: 1,
+        teamId: fx.teamAId,
+        auto: false,
+      });
+    });
+
+    const result = await t.action(internal.runtime.execute.executeRun, {
+      runId: fx.runId,
+      now: NOW + 2,
+    });
+
+    expect(result.status).toBe("succeeded");
+    expect(result.outcome).toBe("draft_action_recorded");
+    const pick = await t.run(async (ctx) =>
+      ctx.db
+        .query("draft_picks")
+        .withIndex("by_leagueId_overallNo", (q) =>
+          q.eq("leagueId", fx.leagueId).eq("overallNo", 1),
+        )
+        .unique(),
+    );
+    expect(pick?.playerId).toBe(fx.ids.fa_rb);
+    expect(pick?.playerId).not.toBe(fx.ids.fa_wr);
+    expect(pick?.madeByRunId).toBe(fx.runId);
+  });
 });
 
 describe("executeRun — resume after a crash", () => {

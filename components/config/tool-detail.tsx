@@ -136,6 +136,7 @@ export function ToolDetail({
   function reset() {
     setEnabled(true);
     setGuidance("");
+    setToast(null);
   }
 
   const group = TOOL_GROUP_LABELS[tool.group];
@@ -155,7 +156,10 @@ export function ToolDetail({
                   aria-label={`Enable ${tool.name}`}
                   checked={enabled}
                   disabled={!canEdit || tool.locked}
-                  onCheckedChange={(checked) => setEnabled(Boolean(checked))}
+                  onCheckedChange={(checked) => {
+                    setEnabled(Boolean(checked));
+                    setToast(null);
+                  }}
                 />
               }
             />
@@ -198,7 +202,10 @@ export function ToolDetail({
                     ? "Call this before every lineup decision, and again if a starter is Questionable."
                     : "Only bid on players who would start for you this week. Keep bids under 30% of FAAB."
                 }
-                onChange={(e) => setGuidance(e.target.value)}
+                onChange={(e) => {
+                  setGuidance(e.target.value);
+                  setToast(null);
+                }}
               />
               {!enabled ? (
                 <FieldDescription>
@@ -375,7 +382,10 @@ export function ToolDetail({
                   value={changeSummary}
                   maxLength={200}
                   placeholder={`Tune ${tool.name}`}
-                  onChange={(e) => setChangeSummary(e.target.value)}
+                  onChange={(e) => {
+                    setChangeSummary(e.target.value);
+                    setToast(null);
+                  }}
                 />
               </Field>
               <div className="flex items-center gap-3">

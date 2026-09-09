@@ -15,6 +15,7 @@ import {
   DialogTitle,
   Field,
   FieldDescription,
+  FieldError,
   FieldLabel,
   Input,
   NativeSelect,
@@ -26,6 +27,7 @@ import { api } from "@/convex/_generated/api";
 import type { Id } from "@/convex/_generated/dataModel";
 import type { CustomToolView } from "@/convex/custom_tools";
 import { providerSlug } from "@/convex/runtime/tools/catalog";
+import { customToolUrlError } from "@/convex/lib/custom_tool_url";
 
 type Header = { name: string; value: string };
 
@@ -68,7 +70,7 @@ type TestResult = {
 };
 
 /**
- * Create or edit a team-scoped custom tool: an HTTP/JSON source the runtime
+ * Create or edit a team-scoped custom tool: an HTTPS/JSON source the runtime
  * exposes as `custom_<slug>`. Saves apply immediately (custom tools are not
  * versioned), and "Test" performs the exact request the agent would.
  */
@@ -135,8 +137,9 @@ function CustomToolForm({
   const runTest = useAction(api.custom_tools.test);
 
   const slug = providerSlug(draft.name.trim() || "provider");
+  const urlError = customToolUrlError(draft.url);
   const valid =
-    draft.name.trim().length >= 2 && /^https?:\/\//i.test(draft.url.trim());
+    draft.name.trim().length >= 2 && urlError === null;
 
   function patch(partial: Partial<CustomToolDraft>) {
     setDraft((d) => ({ ...d, ...partial }));
@@ -212,7 +215,7 @@ function CustomToolForm({
           {tool ? "Edit custom tool" : "Add a custom tool"}
         </DialogTitle>
         <DialogDescription>
-          An HTTP endpoint that returns JSON. Your agent sees it as a read-only
+          A secure HTTPS endpoint that returns JSON. Your agent sees it as a read-only
           tool named{" "}
           <span className="font-mono text-foreground">custom_{slug}</span> in
           every window, and its response arrives wrapped as untrusted data.
@@ -254,13 +257,17 @@ function CustomToolForm({
             value={draft.url}
             className="font-mono text-xs"
             placeholder="https://api.example.com/weather"
+            aria-invalid={draft.url.trim().length > 0 && urlError !== null}
             onChange={(e) => patch({ url: e.target.value })}
           />
+          {draft.url.trim().length > 0 && urlError ? (
+            <FieldError>{urlError}</FieldError>
+          ) : null}
           <FieldDescription>
             {draft.method === "GET"
               ? "The agent's free-text query is appended as ?query=."
               : 'The agent\'s free-text query is POSTed as {"query": …}.'}{" "}
-            10 s timeout, 64 KB cap, JSON only.
+            HTTPS is required. 10 s timeout, 64 KB cap, JSON only.
           </FieldDescription>
         </Field>
 
@@ -313,8 +320,8 @@ function CustomToolForm({
           </div>
           {draft.headers.length === 0 ? (
             <p className="mt-2.5 text-sm text-muted-foreground">
-              None. Add an API key header here; values are visible only to you
-              and the commissioner.
+              None. Add an API key header here; values are sent only to this
+              HTTPS endpoint and are visible only to you and the commissioner.
             </p>
           ) : (
             <ul className="mt-2.5 space-y-2">

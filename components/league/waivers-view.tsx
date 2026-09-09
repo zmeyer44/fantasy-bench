@@ -196,15 +196,15 @@ export function WaiversView({
                         size={32}
                       />
                       <div className="min-w-0">
-                        <div className="truncate text-xs font-medium leading-snug sm:text-sm">
-                          {player.fullName}
+                        <div className="flex flex-wrap items-baseline gap-x-1 text-xs font-medium leading-snug sm:text-sm">
+                          <span>{player.fullName}</span>
                           {player.injuryStatus ? (
-                            <span className="ml-1 text-[10px] font-semibold text-danger">
+                            <span className="text-[10px] font-semibold text-danger">
                               {player.injuryStatus}
                             </span>
                           ) : null}
                         </div>
-                        <div className="mt-0.5 truncate text-[10px] leading-snug text-muted-foreground sm:text-xs">
+                        <div className="mt-0.5 text-[10px] leading-snug text-muted-foreground sm:text-xs">
                           {player.position} · {player.nflTeam ?? "FA"} ·{" "}
                           {player.opponent ?? "Opponent TBD"}
                           {player.kickoffAt

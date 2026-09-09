@@ -294,7 +294,8 @@ describe("forum.get", () => {
     const { post: view, karma } = await t.query(api.forum.get, {
       leagueId: s.leagueId, postId: ids.postId,
     });
-    expect(view.comments?.map((c) => [c.body, c.depth])).toEqual([
+    expect(view).not.toBeNull();
+    expect(view?.comments?.map((c) => [c.body, c.depth])).toEqual([
       ["root", 0],
       ["child", 1],
       ["grandchild", 2],
@@ -302,10 +303,10 @@ describe("forum.get", () => {
       ["orphan", 0],
     ]);
     // Platform-authored rows get the Commissioner byline.
-    expect(view.comments?.find((c) => c.body === "grandchild")?.teamName).toBe(
+    expect(view?.comments?.find((c) => c.body === "grandchild")?.teamName).toBe(
       "Commissioner",
     );
-    expect(view.comments?.[0].teamName).toBe("Bravo");
+    expect(view?.comments?.[0].teamName).toBe("Bravo");
     expect(karma).toEqual({ [s.teamA]: 7, [s.teamB]: 12 });
   });
 
@@ -317,10 +318,11 @@ describe("forum.get", () => {
     const { post: view } = await asCommish.query(api.forum.get, {
       leagueId: s.leagueId, postId: ids.postId,
     });
-    expect(view.comments?.map((c) => c.body)).toEqual([
+    expect(view).not.toBeNull();
+    expect(view?.comments?.map((c) => c.body)).toEqual([
       "root", "child", "grandchild", "hidden", "orphan",
     ]);
-    expect(view.comments?.find((c) => c.body === "orphan")?.depth).toBe(1);
+    expect(view?.comments?.find((c) => c.body === "orphan")?.depth).toBe(1);
   });
 
   test("myVote is carried on comments", async () => {
@@ -337,22 +339,33 @@ describe("forum.get", () => {
     const { post: view } = await asOwner.query(api.forum.get, {
       leagueId: s.leagueId, postId: ids.postId,
     });
-    expect(view.comments?.find((c) => c.id === ids.root)?.myVote).toBe(-1);
-    expect(view.comments?.find((c) => c.id === ids.child)?.myVote).toBe(0);
+    expect(view).not.toBeNull();
+    expect(view?.comments?.find((c) => c.id === ids.root)?.myVote).toBe(-1);
+    expect(view?.comments?.find((c) => c.id === ids.child)?.myVote).toBe(0);
   });
 
-  test("a hidden post is not found unless you are the commissioner", async () => {
+  test("a hidden post becomes unavailable to readers and recovers after unhide", async () => {
     const t = convexTest(schema, modules);
     const s = await seed(t);
     const postId = await post(t, s, { hidden: true });
-    await expect(
-      t.query(api.forum.get, { leagueId: s.leagueId, postId }),
-    ).rejects.toThrow(/Post not found/);
+    expect(await t.query(api.forum.get, { leagueId: s.leagueId, postId })).toEqual({
+      post: null,
+      karma: {},
+    });
 
     const asCommish = t.withIdentity({ subject: `${s.commish}|${s.sessionCommish}` });
     expect(
-      (await asCommish.query(api.forum.get, { leagueId: s.leagueId, postId })).post.hidden,
+      (await asCommish.query(api.forum.get, { leagueId: s.leagueId, postId })).post?.hidden,
     ).toBe(true);
+
+    await asCommish.mutation(api.forum.hide, {
+      leagueId: s.leagueId,
+      targetType: "post",
+      targetId: postId,
+      hidden: false,
+    });
+    expect((await t.query(api.forum.get, { leagueId: s.leagueId, postId })).post?.id)
+      .toBe(postId);
   });
 });
 
@@ -643,8 +656,8 @@ describe("forum.vote", () => {
     expect((await t.run(async (ctx) => ctx.db.get("teams", s.teamA)))?.karma).toBe(9);
 
     const view = await asOwner.query(api.forum.get, { leagueId: s.leagueId, postId });
-    expect(view.post.score).toBe(2);
-    expect(view.post.myVote).toBe(1);
+    expect(view.post?.score).toBe(2);
+    expect(view.post?.myVote).toBe(1);
     expect(view.karma[s.teamA as string]).toBe(9);
   });
 

@@ -142,7 +142,7 @@ function readPrompt(options: LanguageModelV3CallOptions): PromptFacts {
 
 // ------------------------------------------------------------------ the policy
 
-type RosterEntry = {
+export type RosterEntry = {
   playerId: string;
   name: string;
   position: Position;
@@ -177,6 +177,143 @@ function effectivePoints(p: RosterEntry): number {
   const status = (p.injuryStatus ?? "").toLowerCase();
   if (["out", "ir", "inactive", "suspended", "doubtful"].includes(status)) return -1;
   return p.projection;
+}
+
+function rosterShape(team: Record<string, unknown>): Record<string, number> {
+  const raw = team.rosterSlots;
+  if (!raw || typeof raw !== "object") return {};
+  return Object.fromEntries(
+    Object.entries(raw as Record<string, unknown>)
+      .filter(([, count]) => Number.isFinite(Number(count)) && Number(count) > 0)
+      .map(([slot, count]) => [slot, Math.trunc(Number(count))]),
+  );
+}
+
+/** Maximum number of starting slots this set of positions can cover. */
+function startingCoverage(
+  roster: RosterEntry[],
+  slots: Record<string, number>,
+  superflex: boolean,
+): number {
+  const starters = Object.entries(slots).flatMap(([slot, count]) =>
+    ["BENCH", "BN", "IR"].includes(slot.toUpperCase())
+      ? []
+      : Array.from({ length: count }, () => slot),
+  );
+
+  const memo = new Map<string, number>();
+  function assign(slotIndex: number, usedMask: number): number {
+    if (slotIndex >= starters.length) return 0;
+    const key = `${slotIndex}:${usedMask}`;
+    const cached = memo.get(key);
+    if (cached !== undefined) return cached;
+    let best = assign(slotIndex + 1, usedMask);
+    const eligible = eligiblePositions(starters[slotIndex]!, { superflex }) ?? [];
+    for (let playerIndex = 0; playerIndex < roster.length; playerIndex += 1) {
+      const bit = 1 << playerIndex;
+      if ((usedMask & bit) !== 0 || !eligible.includes(roster[playerIndex]!.position)) continue;
+      best = Math.max(best, 1 + assign(slotIndex + 1, usedMask | bit));
+    }
+    memo.set(key, best);
+    return best;
+  }
+
+  return assign(0, 0);
+}
+
+export function chooseWaiverClaims(
+  team: Record<string, unknown>,
+  freeAgents: RosterEntry[],
+): Array<{ addPlayerId: string; dropPlayerId?: string; bid: number }> {
+  const faab = Number(team.faabRemaining ?? 0);
+  const roster = asRoster(team.roster);
+  const droppable = roster
+    .filter((player) => !player.locked)
+    .sort(
+      (a, b) =>
+        effectivePoints(a) - effectivePoints(b) || a.playerId.localeCompare(b.playerId),
+    );
+  const slots = rosterShape(team);
+  const capacity = Object.values(slots).reduce((sum, count) => sum + count, 0);
+  const superflex = Boolean(team.superflex);
+  const usedDrops = new Set<string>();
+  const claims: Array<{ addPlayerId: string; dropPlayerId?: string; bid: number }> = [];
+  let simulated = [...roster];
+  let coverage = startingCoverage(simulated, slots, superflex);
+
+  for (const target of freeAgents) {
+    if (claims.length >= 2) break;
+    let drop: RosterEntry | undefined;
+    if (capacity > 0 && simulated.length >= capacity) {
+      drop = droppable.find((candidate) => {
+        if (usedDrops.has(candidate.playerId)) return false;
+        const next = simulated
+          .filter((player) => player.playerId !== candidate.playerId)
+          .concat(target);
+        return startingCoverage(next, slots, superflex) >= coverage;
+      });
+      if (!drop) continue;
+    }
+
+    const next = drop
+      ? simulated.filter((player) => player.playerId !== drop.playerId).concat(target)
+      : simulated.concat(target);
+    const bid = claims.length === 0 ? Math.min(10, faab) : Math.min(5, Math.max(0, faab - 10));
+    if (bid <= 0) break;
+    claims.push({
+      addPlayerId: target.playerId,
+      ...(drop ? { dropPlayerId: drop.playerId } : {}),
+      bid,
+    });
+    if (drop) usedDrops.add(drop.playerId);
+    simulated = next;
+    coverage = Math.max(coverage, startingCoverage(simulated, slots, superflex));
+  }
+
+  return claims;
+}
+
+/** Prefer a player who fills a currently uncovered starter, then projection order. */
+export function chooseDraftPlayer(
+  team: Record<string, unknown>,
+  freeAgents: RosterEntry[],
+): RosterEntry | undefined {
+  const roster = asRoster(team.roster);
+  const slots = rosterShape(team);
+  const superflex = Boolean(team.superflex);
+  let best = freeAgents[0];
+  let bestCoverage = best
+    ? startingCoverage([...roster, best], slots, superflex)
+    : -1;
+  for (const candidate of freeAgents.slice(1)) {
+    const coverage = startingCoverage([...roster, candidate], slots, superflex);
+    if (coverage > bestCoverage) {
+      best = candidate;
+      bestCoverage = coverage;
+    }
+  }
+  return best;
+}
+
+/** Narrow the final searches when every remaining pick is needed for a fixed-position starter. */
+export function urgentDraftPosition(team: Record<string, unknown>): Position | null {
+  const roster = asRoster(team.roster);
+  const slots = rosterShape(team);
+  const capacity = Object.values(slots).reduce((sum, count) => sum + count, 0);
+  const picksRemaining = Math.max(0, capacity - roster.length);
+  const order: Position[] = ["QB", "RB", "WR", "TE", "K", "DEF"];
+  const missing = order.flatMap((position) =>
+    Array.from(
+      {
+        length: Math.max(
+          0,
+          (slots[position] ?? 0) - roster.filter((player) => player.position === position).length,
+        ),
+      },
+      () => position,
+    ),
+  );
+  return missing.length > 0 && picksRemaining <= missing.length ? missing[0]! : null;
 }
 
 type Slot = { slot: string; playerId: string | null };
@@ -277,19 +414,8 @@ function decide(facts: PromptFacts): Action {
     }
     const search = results.get("search_players") ?? {};
     const freeAgents = asRoster(search.players).filter((p) => p.ownerTeamId == null);
-    const faab = Number(team.faabRemaining ?? 0);
-    const roster = asRoster(team.roster);
-    const droppable = roster
-      .filter((p) => !p.locked)
-      .sort((a, b) => effectivePoints(a) - effectivePoints(b) || a.playerId.localeCompare(b.playerId));
-    const targets = freeAgents.slice(0, 2);
-    if (targets.length > 0 && faab > 0) {
-      const bids = [Math.min(10, faab), Math.min(5, Math.max(0, faab - 10))];
-      const claims = targets.map((target, i) => ({
-        addPlayerId: target.playerId,
-        dropPlayerId: droppable[i]?.playerId,
-        bid: bids[i] ?? 0,
-      }));
+    const claims = chooseWaiverClaims(team, freeAgents);
+    if (claims.length > 0) {
       return {
         toolName: "submit_waiver_claims",
         input: { claims },
@@ -301,16 +427,24 @@ function decide(facts: PromptFacts): Action {
   // 5. Draft windows: take the best player available.
   if (isDraftWindow) {
     if (!done("search_players")) {
+      const position = has("make_draft_pick") ? urgentDraftPosition(team) : null;
       return {
         toolName: "search_players",
-        input: { availability: "free_agent", sort: "projection", limit: 10 },
+        // Drafts need enough depth to find a missing starting position after
+        // the top of the projection board becomes quarterback-heavy.
+        input: {
+          availability: "free_agent",
+          sort: "projection",
+          limit: 50,
+          ...(position ? { position } : {}),
+        },
         text: "Checking the board for the best player available.",
       };
     }
     const board = asRoster((results.get("search_players") ?? {}).players).filter(
       (p) => p.ownerTeamId == null,
     );
-    const best = board[0];
+    const best = has("make_draft_pick") ? chooseDraftPlayer(team, board) : board[0];
     if (best) {
       if (has("nominate_player") && !done("nominate_player") && !has("make_draft_pick")) {
         return {

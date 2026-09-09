@@ -34,6 +34,12 @@ const STEP_PAGE_SIZE = 10;
 /** Usage ledger rows on the first paint; the table has its own "load more". */
 const USAGE_PAGE_SIZE = 30;
 
+function diagnosticSummary(value: string) {
+  const firstLine = value.split("\n", 1)[0] ?? value;
+  const stackStart = firstLine.indexOf(" at ");
+  return (stackStart >= 0 ? firstLine.slice(0, stackStart) : firstLine).trim();
+}
+
 /**
  * The trace viewer (PRD 5.8).
  *
@@ -71,6 +77,11 @@ export function TraceView({
 
   const { run } = detail;
   const loaded = steps.results;
+  const fallbackSummary = run.fallback?.detail
+    ? run.error && run.fallback.detail.includes(diagnosticSummary(run.error))
+      ? "Primary model failed."
+      : diagnosticSummary(run.fallback.detail)
+    : "";
 
   return (
     <div className="space-y-8">
@@ -139,7 +150,7 @@ export function TraceView({
               <span className="font-medium text-warning">
                 Fallback applied: {run.fallback.kind}.
               </span>{" "}
-              {run.fallback.detail ?? ""}
+              {fallbackSummary}
               {run.fallback.fromModelId && run.fallback.toModelId ? (
                 <>
                   {" "}
@@ -157,8 +168,16 @@ export function TraceView({
 
         {run.error ? (
           <Alert variant="destructive" className="border-destructive/40">
-            <AlertDescription className="font-mono text-xs text-destructive">
-              {run.error}
+            <AlertDescription className="text-destructive">
+              <span className="text-sm">{diagnosticSummary(run.error)}</span>
+              <details className="mt-2">
+                <summary className="cursor-pointer font-mono text-xs text-muted-foreground hover:text-foreground">
+                  Technical diagnostics
+                </summary>
+                <pre className="mt-2 max-h-64 overflow-auto whitespace-pre-wrap break-words font-mono text-xs text-destructive">
+                  {run.error}
+                </pre>
+              </details>
             </AlertDescription>
           </Alert>
         ) : null}

@@ -34,6 +34,7 @@ const LEAGUE_GROUP: Leaf[] = [
 ];
 
 const MORE_GROUP: Leaf[] = [
+  { segment: "threads", label: "Negotiations" },
   { segment: "traces", label: "Traces" },
   { segment: "cost", label: "Cost" },
   { segment: "settings", label: "Settings", commissionerOnly: true },

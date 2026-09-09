@@ -1,14 +1,16 @@
 "use client";
 
 import { usePreloadedQuery, type Preloaded } from "convex/react";
+import Link from "next/link";
 
+import { Markdown } from "@/components/config/markdown";
 import { CommentTree } from "@/components/forum/comment-tree";
 import { HideControl } from "@/components/forum/hide-control";
 import { FlairBadge } from "@/components/forum/post-row";
 import { VoteButtons } from "@/components/forum/vote-buttons";
 import { FlagPill } from "@/components/threads/flag-pill";
 import { TraceLink } from "@/components/trades/trace-link";
-import { Badge } from "@/components/ui";
+import { Badge, Button, EmptyState } from "@/components/ui";
 import type { api } from "@/convex/_generated/api";
 import { formatET } from "@/lib/time";
 
@@ -29,6 +31,25 @@ export function PostView({
   isCommissioner: boolean;
 }) {
   const { post } = usePreloadedQuery(preloaded);
+
+  if (!post) {
+    return (
+      <EmptyState
+        title="This post is no longer available"
+        description="It may have been hidden by the commissioner."
+        action={
+          <Button
+            size="sm"
+            variant="outline"
+            role="link"
+            render={<Link href={`/leagues/${leagueId}/commons`} />}
+          >
+            Back to The Commons
+          </Button>
+        }
+      />
+    );
+  }
 
   return (
     <>
@@ -84,9 +105,7 @@ export function PostView({
             ) : null}
           </div>
 
-          <div className="mt-4 text-sm whitespace-pre-wrap text-foreground">
-            {post.body}
-          </div>
+          <Markdown className="mt-4">{post.body}</Markdown>
         </div>
       </article>
 

@@ -7,6 +7,7 @@
  */
 import { v } from "convex/values";
 
+import { DEFAULT_MODEL_ID, findModel } from "../lib/models";
 import { internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
 import {
@@ -27,6 +28,7 @@ import {
   validatePickPosition,
 } from "./lib/draft_pure";
 import { computeOptimalLineup } from "./lib/lineup_pure";
+import { withLiveRosterOwnership } from "./lib/snapshot_live";
 import { round2 } from "./lib/views_shared";
 import { draftType } from "./schema";
 import { PROJECTION_SOURCES, readPayload } from "./snapshot";
@@ -78,12 +80,50 @@ export type DraftBoard = {
   picksMade: number;
   totalPicks: number;
   runningCostUsd: number;
+  auction: {
+    phase: "setup" | "nomination" | "bidding" | "complete";
+    currentLot: {
+      lotNo: number;
+      status: "pending" | "bidding";
+      nominatorTeamId: Id<"teams">;
+      nominatorTeamName: string;
+      nominatorTeamAbbreviation: string;
+      playerId: Id<"players"> | null;
+      playerName: string | null;
+      position: string | null;
+      nflTeam: string | null;
+      openingBid: number;
+      deadlineAt: number | null;
+      nominationRunId: Id<"runs"> | null;
+    } | null;
+    budgets: Array<{
+      teamId: Id<"teams">;
+      teamName: string;
+      abbreviation: string;
+      remaining: number;
+    }>;
+    bidsSealed: true;
+  } | null;
+  startReview: {
+    teamCount: number;
+    rosterSize: number;
+    totalRosterSpots: number;
+    scoringPreset: Doc<"league_rules">["scoringPreset"];
+    superflex: boolean;
+    tePremium: boolean;
+    draftPickSeconds: number;
+    draftBudget: number;
+    unownedTeams: number;
+    modelAssignments: Array<{ modelId: string; teamCount: number; paid: boolean }>;
+  };
 };
 
 export const board = query({
   args: { leagueId: v.id("leagues") },
   handler: async (ctx, { leagueId }): Promise<DraftBoard> => {
     const { league } = await requireLeagueRead(ctx, leagueId);
+    const rules = await leagueRules(ctx, leagueId);
+    if (!rules) throw appError("NOT_FOUND", "League rules not found.");
 
     // Bounded: ≤ 14 teams.
     const teamRows = (
@@ -93,6 +133,19 @@ export const board = query({
         .collect()
     ).sort((a, b) => a.waiverPriority - b.waiverPriority);
     const teamById = new Map(teamRows.map((t) => [t._id as string, t]));
+
+    const modelCounts = new Map<string, number>();
+    for (const team of teamRows) {
+      const config = await ctx.db
+        .query("agent_configs")
+        .withIndex("by_teamId", (q) => q.eq("teamId", team._id))
+        .unique();
+      const version = config?.currentVersionId
+        ? await ctx.db.get("config_versions", config.currentVersionId)
+        : null;
+      const modelId = version?.modelId ?? rules.modelAllowlist[0] ?? DEFAULT_MODEL_ID;
+      modelCounts.set(modelId, (modelCounts.get(modelId) ?? 0) + 1);
+    }
 
     const pickRows = await ctx.db
       .query("draft_picks")
@@ -135,7 +188,9 @@ export const board = query({
     // so the grid still lines up before the order is generated.
     const roundOne = picks.filter((p) => p.round === 1).sort((a, b) => a.pickNo - b.pickNo);
     const slotOrder =
-      roundOne.length > 0 ? roundOne.map((p) => p.teamId) : teamRows.map((t) => t._id);
+      league.draftType === "snake" && roundOne.length > 0
+        ? roundOne.map((p) => p.teamId)
+        : teamRows.map((t) => t._id);
     const boardTeams = slotOrder
       .map((teamId, index) => {
         const team = teamById.get(teamId);
@@ -146,22 +201,30 @@ export const board = query({
       .filter((t): t is NonNullable<typeof t> => t !== null);
     const slotIndexByTeam = new Map(boardTeams.map((t) => [t.id as string, t.slotIndex]));
 
-    const rounds = picks.reduce((max, pick) => Math.max(max, pick.round), 0);
-    const grid: Array<Array<DraftBoardPick | null>> = Array.from({ length: rounds }, () =>
-      new Array<DraftBoardPick | null>(boardTeams.length).fill(null),
-    );
-    for (const pick of picks) {
-      const slot = slotIndexByTeam.get(pick.teamId);
-      if (slot === undefined || pick.round < 1 || pick.round > rounds) continue;
-      grid[pick.round - 1][slot] = pick;
+    const rounds = league.draftType === "snake"
+      ? picks.reduce((max, pick) => Math.max(max, pick.round), 0)
+      : rosterCapacity(rules.rosterSlots);
+    const grid: Array<Array<DraftBoardPick | null>> = league.draftType === "auction"
+      ? []
+      : Array.from({ length: rounds }, () =>
+          new Array<DraftBoardPick | null>(boardTeams.length).fill(null),
+        );
+    if (league.draftType === "snake") {
+      for (const pick of picks) {
+        const slot = slotIndexByTeam.get(pick.teamId);
+        if (slot === undefined || pick.round < 1 || pick.round > rounds) continue;
+        grid[pick.round - 1]![slot] = pick;
+      }
     }
 
     // On the clock = the lowest unmade pick. Its deadline is the open draft window's close.
-    const next = picks.find((pick) => pick.playerId === null) ?? null;
+    const next = league.draftType === "snake"
+      ? picks.find((pick) => pick.playerId === null) ?? null
+      : null;
     let onTheClock: DraftBoard["onTheClock"] = null;
     if (next && league.status === "drafting") {
       const openWindows: Doc<"windows">[] = [];
-      for (const status of ["open", "closing"] as const) {
+      for (const status of ["scheduled", "open", "closing"] as const) {
         openWindows.push(
           ...(await ctx.db
             .query("windows")
@@ -184,6 +247,75 @@ export const board = query({
       };
     }
 
+    let auction: DraftBoard["auction"] = null;
+    if (league.draftType === "auction") {
+      const lots = await ctx.db
+        .query("auction_nominations")
+        .withIndex("by_leagueId_lotNo", (q) => q.eq("leagueId", leagueId))
+        .take(MAX_PICKS);
+      const activeLot = lots
+        .filter((lot) => lot.status === "pending" || lot.status === "bidding")
+        .sort((a, b) => a.lotNo - b.lotNo)[0] ?? null;
+      const activeWindows: Doc<"windows">[] = [];
+      for (const status of ["scheduled", "open", "closing"] as const) {
+        activeWindows.push(
+          ...(await ctx.db
+            .query("windows")
+            .withIndex("by_leagueId_status", (q) => q.eq("leagueId", leagueId).eq("status", status))
+            .take(20)),
+        );
+      }
+      const activeWindow = activeLot
+        ? activeWindows
+            .filter(
+              (window) =>
+                window.type === "draft" &&
+                window.roundNo === activeLot.lotNo &&
+                window.label === (activeLot.status === "pending" ? "auction_nominate" : "auction_bid"),
+            )
+            .sort((a, b) => a.closesAt - b.closesAt)[0] ?? null
+        : null;
+      const player = activeLot?.playerId ? await ctx.db.get("players", activeLot.playerId) : null;
+      const nominator = activeLot ? teamById.get(activeLot.nominatingTeamId) : null;
+      const phase = league.status === "complete" || league.status === "in_season"
+        ? "complete"
+        : activeLot?.status === "bidding"
+          ? "bidding"
+          : activeLot?.status === "pending"
+            ? "nomination"
+            : "setup";
+
+      auction = {
+        phase,
+        currentLot: activeLot && nominator
+          ? {
+              lotNo: activeLot.lotNo,
+              status: activeLot.status as "pending" | "bidding",
+              nominatorTeamId: nominator._id,
+              nominatorTeamName: nominator.name,
+              nominatorTeamAbbreviation: nominator.abbreviation,
+              playerId: activeLot.playerId ?? null,
+              playerName: player?.fullName ?? null,
+              position: player?.position ?? null,
+              nflTeam: player?.nflTeam ?? null,
+              openingBid: activeLot.openingBid,
+              deadlineAt: activeWindow?.closesAt ?? null,
+              nominationRunId: activeLot.runId ?? null,
+            }
+          : null,
+        budgets: teamRows.map((team) => ({
+          teamId: team._id,
+          teamName: team.name,
+          abbreviation: team.abbreviation,
+          remaining: team.draftBudgetRemaining ?? rules.draftBudget,
+        })),
+        bidsSealed: true,
+      };
+    }
+
+    const rosterSize = rosterCapacity(rules.rosterSlots);
+    const totalPicks = league.draftType === "auction" ? rosterSize * teamRows.length : picks.length;
+
     return {
       leagueId,
       draftType: league.draftType,
@@ -195,8 +327,30 @@ export const board = query({
       grid,
       onTheClock,
       picksMade: picks.filter((p) => p.playerId !== null).length,
-      totalPicks: picks.length,
+      totalPicks,
       runningCostUsd: round2(runningCostUsd),
+      auction,
+      startReview: {
+        teamCount: teamRows.length,
+        rosterSize,
+        totalRosterSpots: rosterSize * teamRows.length,
+        scoringPreset: rules.scoringPreset,
+        superflex: rules.superflex,
+        tePremium: rules.tePremium,
+        draftPickSeconds: rules.draftPickSeconds,
+        draftBudget: rules.draftBudget,
+        unownedTeams: teamRows.filter((team) => team.ownerUserId == null).length,
+        modelAssignments: [...modelCounts.entries()]
+          .map(([modelId, teamCount]) => {
+            const model = findModel(modelId);
+            return {
+              modelId,
+              teamCount,
+              paid: !model || model.inputPerM > 0 || model.outputPerM > 0,
+            };
+          })
+          .sort((a, b) => a.modelId.localeCompare(b.modelId)),
+      },
     };
   },
 });
@@ -971,7 +1125,10 @@ export const finalize = internalMutation({
     const league = await ctx.db.get("leagues", args.leagueId);
     if (!league) return { lineups: 0, matchups: 0, weeks: 0 };
 
-    const snapshot = args.snapshotId ? await readPayload(ctx, args.snapshotId) : null;
+    const frozenSnapshot = args.snapshotId ? await readPayload(ctx, args.snapshotId) : null;
+    const snapshot = frozenSnapshot
+      ? withLiveRosterOwnership(frozenSnapshot, await leagueRosterRows(ctx, args.leagueId))
+      : null;
     const teams = await orderedTeams(ctx, args.leagueId);
 
     let lineupCount = 0;

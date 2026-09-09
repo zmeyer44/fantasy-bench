@@ -16,7 +16,8 @@
  *                    delayed-transparency rule `messaging.listThreads` applies.
  *   league_rule_changes → commissioner rule edits (in the unfiltered feed only).
  */
-import { v } from "convex/values";
+import { v, type Value } from "convex/values";
+import type { FieldPaths, FilterBuilder, GenericTableInfo } from "convex/server";
 
 import type { Doc, Id } from "./_generated/dataModel";
 import { query, type QueryCtx } from "./_generated/server";
@@ -27,6 +28,9 @@ import { currentWeekNoFor } from "./weeks";
 
 const DEFAULT_LIMIT = 40;
 const MAX_LIMIT = 100;
+
+const activityCursor = v.object({ at: v.number(), order: v.number(), id: v.string() });
+export type ActivityCursor = { at: number; order: number; id: string };
 
 export const activityFilter = v.union(
   v.literal("all"),
@@ -57,6 +61,8 @@ type Base = {
   /** Stable across refreshes: source table + row id (+ event for trades). */
   id: string;
   at: number;
+  /** Creation-time tie breaker, matching Convex's index order. */
+  order: number;
   weekNo: number | null;
   runId: string | null;
   stepIndex: number | null;
@@ -135,6 +141,7 @@ export type ActivityFeed = {
   /** True when at least one source had more rows than the page shows. */
   hasMore: boolean;
   currentWeek: number;
+  nextCursor: ActivityCursor | null;
 };
 
 export const feed = query({
@@ -142,11 +149,13 @@ export const feed = query({
     leagueId: v.id("leagues"),
     limit: v.optional(v.number()),
     filter: v.optional(activityFilter),
+    before: v.optional(activityCursor),
   },
   handler: async (ctx, args): Promise<ActivityFeed> => {
     const access = await requireLeagueRead(ctx, args.leagueId);
     const leagueId = args.leagueId;
     const limit = Math.min(Math.max(Math.floor(args.limit ?? DEFAULT_LIMIT), 1), MAX_LIMIT);
+    const before = args.before ?? null;
     const filter: ActivityFilter = args.filter ?? "all";
     const wants = (f: Exclude<ActivityFilter, "all">) => filter === "all" || filter === f;
     const now = Date.now();
@@ -155,45 +164,49 @@ export const feed = query({
     const teams = await loadTeams(ctx, leagueId);
     const players = new PlayerCache(ctx);
     const items: ActivityItem[] = [];
-    let hasMore = false;
 
     // ---- roster moves ------------------------------------------------------
     if (wants("moves")) {
       const rows = await ctx.db
         .query("transactions")
-        .withIndex("by_leagueId", (q) => q.eq("leagueId", leagueId))
+        .withIndex("by_leagueId", (q) => before ? q.eq("leagueId", leagueId).lte("_creationTime", before.at) : q.eq("leagueId", leagueId))
+        .filter((q) => q.and(
+          olderThan(q, "_creationTime", "transactions", before),
+          q.neq(q.field("type"), "trade"),
+          q.or(q.neq(q.field("type"), "drop"), q.eq(q.field("details.claimId"), undefined)),
+        ))
         .order("desc")
-        .take(limit);
-      hasMore ||= rows.length === limit;
+        .take(limit + 1);
 
-      // A processed waiver claim writes a drop then an add with the same
-      // `details.claimId`; the feed shows them as one move.
-      const dropsByClaim = new Map<string, Doc<"transactions">>();
-      for (const row of rows) {
-        const claimId = claimIdOf(row);
-        if (row.type === "drop" && claimId) dropsByClaim.set(claimId, row);
-      }
-      const absorbed = new Set<string>();
+      // A processed waiver's paired drop is part of the add event, including
+      // when the two transaction rows would fall on different pages.
       for (const row of rows) {
         const team = teams.get(row.teamId as string);
         if (!team) continue;
         const base = {
           id: `transactions/${row._id}`,
           at: row._creationTime,
+          order: row._creationTime,
           weekNo: row.weekNo ?? null,
           runId: (row.runId as string | undefined) ?? null,
           stepIndex: null,
         };
         if (row.type === "add") {
           const claimId = claimIdOf(row);
-          const drop = claimId ? dropsByClaim.get(claimId) : undefined;
-          if (drop) absorbed.add(drop._id as string);
+          const claimRowId = claimId ? ctx.db.normalizeId("waiver_claims", claimId) : null;
+          const claim = claimRowId ? await ctx.db.get("waiver_claims", claimRowId) : null;
+          // Imported claims may retain legacy IDs. Their drop was written
+          // immediately before the add; keep this fallback bounded to two rows.
+          const adjacent = claimId && !claim ? await ctx.db.query("transactions")
+            .withIndex("by_leagueId", (q) => q.eq("leagueId", leagueId).lte("_creationTime", row._creationTime))
+            .order("desc").take(2) : [];
+          const drop = adjacent.find((entry) => entry.type === "drop" && entry.teamId === row.teamId && claimIdOf(entry) === claimId);
           items.push({
             ...base,
             kind: "add",
             team,
             player: await players.get(row.playerId),
-            dropped: drop ? await players.get(drop.playerId) : null,
+            dropped: await players.get(claim?.leagueId === leagueId ? claim.dropPlayerId : drop?.playerId),
             bid: numberDetail(row, "bid"),
             viaWaiver: row.details?.source === "waiver",
           });
@@ -211,12 +224,13 @@ export const feed = query({
         }
       }
       for (const row of rows) {
-        if (row.type !== "drop" || absorbed.has(row._id as string)) continue;
+        if (row.type !== "drop") continue;
         const team = teams.get(row.teamId as string);
         if (!team) continue;
         items.push({
           id: `transactions/${row._id}`,
           at: row._creationTime,
+          order: row._creationTime,
           weekNo: row.weekNo ?? null,
           runId: (row.runId as string | undefined) ?? null,
           stepIndex: null,
@@ -239,6 +253,7 @@ export const feed = query({
         items.push({
           id: `lineups/${lineup._id}`,
           at: lineup._creationTime,
+          order: lineup._creationTime,
           weekNo: lineup.weekNo,
           runId: (lineup.setByRunId as string | undefined) ?? null,
           stepIndex: null,
@@ -253,12 +268,19 @@ export const feed = query({
 
     // ---- trades ------------------------------------------------------------
     if (wants("trades")) {
-      const rows = await ctx.db
+      const proposed = await ctx.db
         .query("trades")
-        .withIndex("by_leagueId", (q) => q.eq("leagueId", leagueId))
+        .withIndex("by_leagueId", (q) => before ? q.eq("leagueId", leagueId).lte("_creationTime", before.at) : q.eq("leagueId", leagueId))
+        .filter((q) => olderThan(q, "_creationTime", "trades", before, "proposed"))
         .order("desc")
-        .take(limit);
-      hasMore ||= rows.length === limit;
+        .take(limit + 1);
+      const resolved = await ctx.db.query("trades")
+        .withIndex("by_leagueId_resolvedAt", (q) => before
+          ? q.eq("leagueId", leagueId).gt("resolvedAt", 0).lte("resolvedAt", before.at)
+          : q.eq("leagueId", leagueId).gt("resolvedAt", 0))
+        .filter((q) => olderThan(q, "resolvedAt", "trades", before, "resolved"))
+        .order("desc").take(limit + 1);
+      const rows = [...new Map([...proposed, ...resolved].map((row) => [row._id, row])).values()];
       for (const trade of rows) {
         const proposer = teams.get(trade.proposerTeamId as string);
         const recipient = teams.get(trade.recipientTeamId as string);
@@ -275,6 +297,7 @@ export const feed = query({
           if (item.faab) faab += fromProposer ? item.faab : -item.faab;
         }
         const shared = {
+          order: trade._creationTime,
           weekNo: trade.weekNo,
           tradeId: trade._id as string,
           status: trade.status,
@@ -314,15 +337,16 @@ export const feed = query({
     if (wants("commons")) {
       const rows = await ctx.db
         .query("forum_posts")
-        .withIndex("by_leagueId_createdAt", (q) => q.eq("leagueId", leagueId))
+        .withIndex("by_leagueId_createdAt", (q) => before ? q.eq("leagueId", leagueId).lte("createdAt", before.at) : q.eq("leagueId", leagueId))
+        .filter((q) => q.and(q.neq(q.field("hidden"), true), olderThan(q, "createdAt", "forum_posts", before)))
         .order("desc")
-        .take(limit);
-      hasMore ||= rows.length === limit;
+        .take(limit + 1);
       for (const post of rows) {
         if (post.hidden) continue;
         items.push({
           id: `forum_posts/${post._id}`,
           at: post.createdAt,
+          order: post._creationTime,
           weekNo: null,
           runId: (post.runId as string | undefined) ?? null,
           stepIndex: post.stepIndex ?? null,
@@ -341,10 +365,10 @@ export const feed = query({
     if (wants("talk")) {
       const rows = await ctx.db
         .query("messages")
-        .withIndex("by_leagueId_createdAt", (q) => q.eq("leagueId", leagueId))
+        .withIndex("by_leagueId_createdAt", (q) => before ? q.eq("leagueId", leagueId).lte("createdAt", before.at) : q.eq("leagueId", leagueId))
+        .filter((q) => olderThan(q, "createdAt", "messages", before))
         .order("desc")
-        .take(limit);
-      hasMore ||= rows.length === limit;
+        .take(limit + 1);
       if (rows.length > 0) {
         const rules = await ctx.db
           .query("league_rules")
@@ -389,6 +413,7 @@ export const feed = query({
           items.push({
             id: `messages/${message._id}`,
             at: message.createdAt,
+            order: message._creationTime,
             weekNo: null,
             runId: (message.runId as string | undefined) ?? null,
             stepIndex: message.stepIndex ?? null,
@@ -405,32 +430,46 @@ export const feed = query({
 
     // ---- commissioner rule changes (unfiltered feed only) ----------------------
     if (filter === "all") {
-      const rows = await ctx.db
+      const dated = await ctx.db
         .query("league_rule_changes")
-        .withIndex("by_leagueId", (q) => q.eq("leagueId", leagueId))
+        .withIndex("by_leagueId_createdAt", (q) => before
+          ? q.eq("leagueId", leagueId).gt("createdAt", 0).lte("createdAt", before.at)
+          : q.eq("leagueId", leagueId).gt("createdAt", 0))
+        .filter((q) => olderThan(q, "createdAt", "league_rule_changes", before))
         .order("desc")
-        .take(limit);
-      hasMore ||= rows.length === limit;
+        .take(limit + 1);
+      const undated = await ctx.db.query("league_rule_changes")
+        .withIndex("by_leagueId_createdAt", (q) => before
+          ? q.eq("leagueId", leagueId).eq("createdAt", undefined).lte("_creationTime", before.at)
+          : q.eq("leagueId", leagueId).eq("createdAt", undefined))
+        .filter((q) => olderThan(q, "_creationTime", "league_rule_changes", before))
+        .order("desc").take(limit + 1);
+      const rows = [...dated, ...undated];
       for (const change of rows) {
+        const display = await displayChange(ctx, change);
         items.push({
           id: `league_rule_changes/${change._id}`,
           at: change.createdAt ?? change._creationTime,
+          order: change._creationTime,
           weekNo: null,
           runId: null,
           stepIndex: null,
           kind: "rule_change",
-          field: change.field,
-          fromValue: displayValue(change.fromValue),
-          toValue: displayValue(change.toValue),
+          ...display,
           note: change.note ?? null,
         });
       }
     }
 
-    items.sort((a, b) => b.at - a.at);
+    const eligible = items.filter((item) => !before || compareActivity(item, before) > 0);
+    eligible.sort(compareActivity);
+    const page = eligible.slice(0, limit);
+    const hasMore = eligible.length > limit;
+    const last = page.at(-1);
     return {
-      items: items.slice(0, limit),
-      hasMore: hasMore || items.length > limit,
+      items: page,
+      hasMore,
+      nextCursor: hasMore && last ? { at: last.at, order: last.order, id: last.id } : null,
       currentWeek: weekNo,
     };
   },
@@ -439,6 +478,40 @@ export const feed = query({
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
+
+/** Timestamp + stable event ID keeps equal-time events from being skipped between pages. */
+function olderThan<T extends GenericTableInfo>(
+  q: FilterBuilder<T>, field: FieldPaths<T>, source: string, before: ActivityCursor | null, event = "",
+) {
+  if (!before) return true;
+  const [cursorSource, cursorId, cursorEvent = ""] = before.id.split("/");
+  const sameOrder = source === cursorSource
+    ? q.or(q.lt<Value>(q.field("_id"), cursorId), q.and(q.eq<Value>(q.field("_id"), cursorId), event < cursorEvent))
+    : source < cursorSource;
+  const sameTime = q.or(q.lt<Value>(q.field("_creationTime"), before.order), q.and(q.eq<Value>(q.field("_creationTime"), before.order), sameOrder));
+  return q.or(q.lt<Value>(q.field(field), before.at), q.and(q.eq<Value>(q.field(field), before.at), sameTime));
+}
+
+function compareActivity(a: ActivityCursor, b: ActivityCursor) {
+  return b.at - a.at || b.order - a.order || (a.id === b.id ? 0 : a.id < b.id ? 1 : -1);
+}
+
+async function displayChange(ctx: QueryCtx, change: Doc<"league_rule_changes">) {
+  const teamField = change.field.match(/^team\.(.+)\.(owner|name)$/);
+  const ownerName = async (value: unknown) => {
+    if (!value) return "Unassigned";
+    const id = typeof value === "string" ? ctx.db.normalizeId("users", value) : null;
+    const owner = id ? await ctx.db.get("users", id) : null;
+    return owner?.name || "League member";
+  };
+  return {
+    field: teamField
+      ? `${teamField[2] === "owner" ? "the owner" : "the name"} of ${teamField[1]}`
+      : change.field.replace(/([a-z])([A-Z])/g, "$1 $2").replace(/[_.]/g, " ").toLowerCase(),
+    fromValue: teamField?.[2] === "owner" ? await ownerName(change.fromValue) : displayValue(change.fromValue),
+    toValue: teamField?.[2] === "owner" ? await ownerName(change.toValue) : displayValue(change.toValue),
+  };
+}
 
 async function loadTeams(ctx: QueryCtx, leagueId: Id<"leagues">): Promise<Map<string, ActivityTeam>> {
   // Bounded: one league has at most `teamCount` (≤ 14) teams.

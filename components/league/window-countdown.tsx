@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 
 /**
- * "Lineup Sun early opens in 2h 10m ET" — ticks client-side once a minute.
+ * "Weekly lineup opens in 2h 10m ET" — ticks client-side once a minute.
  *
  * The server renders the same string first (via `initial`) so there is no
  * layout shift and spectators with JS off still see a correct-at-render value.

@@ -148,7 +148,7 @@ type LoadedConfig = {
 
 /** Rebuild the in-memory tool state from what earlier attempts already committed. */
 function seedState(
-  priorActions: Array<{ actionType: string; committed: boolean }>,
+  priorActions: Array<{ actionType: string; committed: boolean; lineupWarnings: string[] }>,
   rationale: string | null,
 ): RunToolState {
   const state = emptyRunToolState();
@@ -162,6 +162,10 @@ function seedState(
     switch (action.actionType) {
       case "set_lineup":
         state.lineupCommitted = true;
+        state.lineupWarnings = action.lineupWarnings;
+        state.lineupEmptyStarters = action.lineupWarnings.filter((warning) =>
+          /Slot ".+" is empty and will score 0\./.test(warning),
+        ).length;
         break;
       case "submit_waiver_claims":
         state.waiverClaims += 1;
@@ -779,6 +783,14 @@ export const executeRun = internalAction({
       status = "partial";
       outcome = "no_lineup_set";
       fallbackApplied = { kind: "safety_autopilot", detail: "agent set no lineup" };
+    } else if (window.type === "lineup" && state.lineupEmptyStarters > 0) {
+      status = "partial";
+      outcome = "lineup_incomplete";
+      const noun = state.lineupEmptyStarters === 1 ? "slot" : "slots";
+      fallbackApplied = {
+        kind: "safety_autopilot",
+        detail: `agent left ${state.lineupEmptyStarters} starting ${noun} empty`,
+      };
     } else if (!primaryDone && state.rejected > 0) {
       status = "partial";
       outcome = "all_actions_rejected";

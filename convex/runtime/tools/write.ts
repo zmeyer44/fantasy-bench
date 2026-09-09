@@ -84,6 +84,10 @@ export function buildWriteTools(ctx: ToolContext) {
           });
           if (!committed.ok) return committed;
           ctx.state.lineupCommitted = true;
+          ctx.state.lineupWarnings = validation.warnings;
+          ctx.state.lineupEmptyStarters = validation.warnings.filter((warning) =>
+            /Slot ".+" is empty and will score 0\./.test(warning),
+          ).length;
           return {
             ok: true as const,
             lineupId: committed.lineupId,

@@ -33,7 +33,6 @@ import { createGateway } from "@ai-sdk/gateway";
 import { generateText } from "ai";
 import { v } from "convex/values";
 
-import { findModel } from "../lib/models";
 import { internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
 import {
@@ -41,7 +40,6 @@ import {
   internalMutation,
   internalQuery,
   type ActionCtx,
-  type MutationCtx,
   type QueryCtx,
 } from "./_generated/server";
 import { stepUsage } from "./schema";
@@ -585,6 +583,7 @@ export const weeklyBrief = internalQuery({
           away: nameOf(m.awayTeamId),
           homeScore: m.homeScore ?? 0,
           awayScore: m.awayScore ?? 0,
+          isFinal: m.isFinal,
           final: m.isFinal,
         })),
         standings,
@@ -743,7 +742,7 @@ export const flaggedBrief = internalQuery({
 // ---------------------------------------------------------------------------
 
 type WeeklyData = {
-  matchups: Array<{ home: string; away: string; homeScore: number; awayScore: number }>;
+  matchups: Array<{ home: string; away: string; homeScore: number; awayScore: number; isFinal: boolean }>;
   standings: StandingRow[];
   trades: Array<{ proposer: string; recipient: string; status: string }>;
 };
@@ -760,8 +759,12 @@ function scriptedWeeklyRecap(
     lines.push(`No matchups are on record for week ${weekNo} in ${leagueName}.`);
   } else {
     for (const m of data.matchups) {
-      const winner = m.homeScore >= m.awayScore ? m.home : m.away;
-      lines.push(`- ${m.home} ${m.homeScore} — ${m.awayScore} ${m.away}. ${winner} takes it.`);
+      const tied = m.homeScore === m.awayScore;
+      const leader = m.homeScore > m.awayScore ? m.home : m.away;
+      const outcome = m.isFinal
+        ? tied ? "The matchup ends in a tie." : `${leader} takes it.`
+        : tied ? "The matchup is not final." : `${leader} leads; the matchup is not final.`;
+      lines.push(`- ${m.home} ${m.homeScore} — ${m.awayScore} ${m.away}. ${outcome}`);
     }
   }
   lines.push("");

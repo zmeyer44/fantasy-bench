@@ -12,7 +12,7 @@ import { convexTest } from "convex-test";
 import { describe, expect, test, vi } from "vitest";
 
 import { internal } from "./_generated/api";
-import { BATCH, NEWS_BATCH, PROJECTION_BATCH, isGameDayET, nameKey, planFor } from "./ingest";
+import { BATCH, NEWS_BATCH, PROJECTION_BATCH, nameKey, planFor } from "./ingest";
 import { fromETParts } from "./lib/templates";
 import schema from "./schema";
 
@@ -102,18 +102,6 @@ describe("the ingest plan", () => {
 
   test("rebuilds everything, including the 14.6 MB player feed, on full", () => {
     expect(Object.values(planFor("full")).every(Boolean)).toBe(true);
-  });
-
-  test("the game-day guard is Eastern, and covers the Monday-night overnight tail", () => {
-    // Thursday, Sunday, Monday: games.
-    expect(isGameDayET(fromETParts({ year: 2026, month: 9, day: 10, hour: 20 }))).toBe(true);
-    expect(isGameDayET(fromETParts({ year: 2026, month: 9, day: 13, hour: 13 }))).toBe(true);
-    expect(isGameDayET(fromETParts({ year: 2026, month: 9, day: 14, hour: 20 }))).toBe(true);
-    // Tuesday 01:00 ET is still Monday night's game finishing.
-    expect(isGameDayET(fromETParts({ year: 2026, month: 9, day: 15, hour: 1 }))).toBe(true);
-    // Tuesday morning onwards, and Wednesday, are quiet.
-    expect(isGameDayET(fromETParts({ year: 2026, month: 9, day: 15, hour: 10 }))).toBe(false);
-    expect(isGameDayET(fromETParts({ year: 2026, month: 9, day: 16, hour: 12 }))).toBe(false);
   });
 
   test("batches stay inside the documented per-transaction budgets", () => {
@@ -580,6 +568,12 @@ describe("ingest.tick", () => {
     ).toEqual({ scheduled: false });
 
     const sunday = fromETParts({ year: 2026, month: 9, day: 13, hour: 13 });
+    await t.run(async (ctx) => {
+      await ctx.db.insert("nfl_games", {
+        season: 2026, week: 1, gameId: "ingest-sunday", homeTeam: "BUF", awayTeam: "MIA",
+        kickoffAt: sunday, status: "in_progress",
+      });
+    });
     expect(await t.mutation(internal.ingest.tick, { mode: "gameday", now: sunday })).toEqual({
       scheduled: true,
     });
@@ -606,4 +600,3 @@ describe("ingest.tick", () => {
     });
   });
 });
-

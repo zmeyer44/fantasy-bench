@@ -1,8 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState, type ReactNode } from "react";
-import { useQuery, usePreloadedQuery, type Preloaded } from "convex/react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useConvex, useQueries, useQuery, usePreloadedQuery, type Preloaded } from "convex/react";
+import type { FunctionReturnType } from "convex/server";
 
 import { TeamAvatar } from "@/components/league/identity";
 import { FLAIR_LABEL } from "@/components/forum/post-row";
@@ -12,6 +13,7 @@ import { api } from "@/convex/_generated/api";
 import type { Id } from "@/convex/_generated/dataModel";
 import type {
   ActivityFilter,
+  ActivityCursor,
   ActivityItem,
   ActivityPlayer,
   ActivityTeam,
@@ -30,9 +32,9 @@ const FILTERS: { value: ActivityFilter; label: string }[] = [
 
 /**
  * The league's activity stream: one ruled list, newest first, grouped by
- * Eastern day. The server preloads the first unfiltered page; a filter or
- * "Show more" hands the subscription to `useQuery` with new arguments, keeping
- * the last resolved page on screen while the next one loads.
+ * Eastern day. The server preloads the unfiltered page, and selected filters
+ * subscribe to their own first page. Older pages use stable event
+ * cursors so new arrivals cannot shift an offset and skip history.
  */
 export function ActivityFeed({
   leagueId,
@@ -42,25 +44,86 @@ export function ActivityFeed({
   preloaded: Preloaded<typeof api.activity.feed>;
 }) {
   const [filter, setFilter] = useState<ActivityFilter>("all");
-  const [limit, setLimit] = useState(PAGE);
+  const convex = useConvex();
+  const generation = useRef(0);
+  const [history, setHistory] = useState<{ items: ActivityItem[]; cursor: ActivityCursor | null; loaded: boolean }>({ items: [], cursor: null, loaded: false });
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const now = useNow();
 
   const initial = usePreloadedQuery(preloaded);
-  const custom = filter !== "all" || limit > PAGE;
+  const custom = filter !== "all";
   const live = useQuery(
     api.activity.feed,
-    custom ? { leagueId: leagueId as Id<"leagues">, limit, filter } : "skip",
+    custom ? { leagueId: leagueId as Id<"leagues">, limit: PAGE, filter } : "skip",
   );
   const resolved = custom ? live : initial;
-  // Keep the last page on screen while a filter or a bigger page loads
-  // (state adjusted during render, per React's "storing information from
-  // previous renders" guidance — no effect needed).
-  const [shown, setShown] = useState(initial);
-  if (resolved && resolved !== shown) setShown(resolved);
-  const feed = resolved ?? shown;
+  const head = resolved?.items ?? [];
+  const headIds = head.map((item) => item.id).join("|");
+  const [observedHeadIds, setObservedHeadIds] = useState(headIds);
+  if (headIds !== observedHeadIds) {
+    setObservedHeadIds(headIds);
+    if (history.loaded && head.length > 0) {
+      setHistory((previous) => ({
+        ...previous,
+        items: [...new Map([...previous.items, ...head].map((item) => [item.id, item])).values()],
+      }));
+    }
+  }
+  const last = head.at(-1);
+  // Only retain cached entries older than the live head. Deleted/hidden entries
+  // inside the live range disappear, while newly arriving events don't erase
+  // the entries that were pushed out of its first page.
+  const older = useMemo(() => last ? history.items.filter((item) => compareActivity(item, last) > 0) : [], [history.items, last]);
+  // useQueries subscribes by request identity; keep it stable between renders.
+  const visibilityQueries = useMemo(() => {
+    const sensitiveIds = older.filter((item) => item.kind === "post" || item.kind === "message").map((item) => item.id);
+    return Object.fromEntries(Array.from({ length: Math.ceil(sensitiveIds.length / 100) }, (_, index) => [
+      String(index),
+      { query: api.activity_visibility.current, args: { leagueId: leagueId as Id<"leagues">, ids: sensitiveIds.slice(index * 100, (index + 1) * 100) } },
+    ]));
+  }, [leagueId, older]);
+  const visibilityResults = useQueries(visibilityQueries);
+  const visibility = new Map<string, FunctionReturnType<typeof api.activity_visibility.current>[number]>();
+  for (const result of Object.values(visibilityResults)) {
+    if (result instanceof Error) throw result;
+    for (const item of (result ?? []) as FunctionReturnType<typeof api.activity_visibility.current>) visibility.set(item.id, item);
+  }
+  // Sensitive history remains subscribed to visibility even outside the live
+  // head: moderation and loss of thread access must redact previously read rows.
+  const visibleOlder = older.flatMap<ActivityItem>((item) => {
+    if (item.kind !== "post" && item.kind !== "message") return [item];
+    const current = visibility.get(item.id);
+    if (!current?.visible) return [];
+    return [item.kind === "message" ? { ...item, body: current.body } : item];
+  });
+  const items = [...new Map([...visibleOlder, ...head].map((item) => [item.id, item])).values()]
+    .sort(compareActivity);
+  const feed = { items, hasMore: history.loaded ? history.cursor !== null : resolved?.hasMore === true };
   const loading = resolved === undefined;
 
   const groups = groupByDay(feed.items);
+
+  async function loadMore() {
+    const before = history.loaded ? history.cursor : resolved?.nextCursor;
+    if (!before || loadingMore) return;
+    const requestGeneration = generation.current;
+    setLoadingMore(true);
+    setLoadError(null);
+    try {
+      const page = await convex.query(api.activity.feed, { leagueId: leagueId as Id<"leagues">, filter, limit: PAGE, before });
+      if (generation.current !== requestGeneration) return;
+      setHistory((previous) => ({
+        items: [...new Map([...previous.items, ...head, ...page.items].map((item) => [item.id, item])).values()],
+        cursor: page.nextCursor,
+        loaded: true,
+      }));
+    } catch {
+      if (generation.current === requestGeneration) setLoadError("Couldn’t load older activity. Please try again.");
+    } finally {
+      if (generation.current === requestGeneration) setLoadingMore(false);
+    }
+  }
 
   return (
     <section aria-label="League activity" className="min-w-0">
@@ -86,7 +149,10 @@ export function ActivityFeed({
                 aria-selected={active}
                 onClick={() => {
                   setFilter(f.value);
-                  setLimit(PAGE);
+                  generation.current += 1;
+                  setHistory({ items: [], cursor: null, loaded: false });
+                  setLoadingMore(false);
+                  setLoadError(null);
                 }}
                 className={cn(
                   "eyebrow rounded-md px-2 py-1.5 transition-colors hover:text-foreground",
@@ -104,7 +170,7 @@ export function ActivityFeed({
         className={cn("transition-opacity", loading && "opacity-60")}
         aria-busy={loading}
       >
-        {feed.items.length === 0 ? (
+        {feed.items.length === 0 && !loading ? (
           <EmptyState
             className="mt-4"
             title={
@@ -145,13 +211,14 @@ export function ActivityFeed({
           <Button
             variant="outline"
             size="sm"
-            disabled={loading}
-            onClick={() => setLimit((n) => Math.min(n + PAGE, 100))}
+            disabled={loading || loadingMore}
+            onClick={loadMore}
           >
-            {loading ? "Loading…" : "Show more"}
+            {loading || loadingMore ? "Loading…" : "Show more"}
           </Button>
         </div>
       ) : null}
+      {loadError ? <p role="alert" className="mt-3 text-center text-sm text-danger">{loadError}</p> : null}
     </section>
   );
 }
@@ -159,6 +226,10 @@ export function ActivityFeed({
 // ---------------------------------------------------------------------------
 // Rows
 // ---------------------------------------------------------------------------
+
+function compareActivity(a: ActivityItem, b: ActivityItem) {
+  return b.at - a.at || b.order - a.order || (a.id === b.id ? 0 : a.id < b.id ? 1 : -1);
+}
 
 function ActivityRow({
   leagueId,

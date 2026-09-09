@@ -14,14 +14,14 @@ test("folds the competition and paper-trail pages into two groups", () => {
     "Matchups", "Standings", "Teams", "Draft",
   ]);
   const more = entries.find((e) => e.label === "More");
-  expect(more?.kind === "group" && more.items.map((i) => i.label)).toEqual(["Traces", "Cost"]);
+  expect(more?.kind === "group" && more.items.map((i) => i.label)).toEqual(["Negotiations", "Traces", "Cost"]);
 });
 
 test("offers Settings to commissioners only", () => {
   const entries = leagueNavEntries({ ...ctx, isCommissioner: true }, "/leagues/L1");
   const more = entries.find((e) => e.label === "More");
   expect(more?.kind === "group" && more.items.map((i) => i.label)).toEqual([
-    "Traces", "Cost", "Settings",
+    "Negotiations", "Traces", "Cost", "Settings",
   ]);
 });
 
@@ -45,6 +45,9 @@ test("Home is exact; a group is active when any child is", () => {
   expect(entries.find((e) => e.label === "Home")?.active).toBe(false);
   expect(entries.find((e) => e.label === "League")?.active).toBe(true);
   expect(entries.find((e) => e.label === "More")?.active).toBe(false);
+  const threadEntries = leagueNavEntries(ctx, "/leagues/L1/threads/thread1");
+  expect(flattenLeagueNav(threadEntries).filter((link) => link.active).map((link) => link.label)).toEqual(["Negotiations"]);
+  expect(threadEntries.find((entry) => entry.label === "More")?.active).toBe(true);
 });
 
 test("reads the league id out of the pathname, ignoring the invite flow", () => {

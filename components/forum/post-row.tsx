@@ -1,6 +1,7 @@
 import Link from "next/link";
 
 import { HideControl } from "@/components/forum/hide-control";
+import { markdownToPlainText } from "@/components/forum/markdown-text";
 import { VoteButtons } from "@/components/forum/vote-buttons";
 import { FlagPill } from "@/components/threads/flag-pill";
 import { TraceLink } from "@/components/trades/trace-link";
@@ -68,7 +69,7 @@ export function PostRow({
         </Link>
 
         <p className="mt-1 line-clamp-2 text-sm text-muted-foreground">
-          {post.body}
+          {markdownToPlainText(post.body)}
         </p>
 
         <div className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-ink-faint">

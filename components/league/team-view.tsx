@@ -114,12 +114,12 @@ export function TeamView({
               title={`Week ${page.weekNo} lineup`}
               meta={
                 page.lineupSource
-                  ? `Set by ${page.lineupSource.replace("_", " ")}${
+                  ? `Hard deadline Wed 7:00 PM ET · Set by ${page.lineupSource.replace("_", " ")}${
                       page.snapshotTakenAt
                         ? ` · projections as of ${formatET(page.snapshotTakenAt, "MMM d HH:mm")} ET`
                         : ""
                     }`
-                  : "No lineup set for this week yet."
+                  : "Hard deadline Wed 7:00 PM ET · No lineup set for this week yet."
               }
               action={
                 page.lineupSetByRunId ? (
@@ -551,6 +551,11 @@ function SlotTable({
                       ? ` · ${formatET(row.entry.kickoffAt, "EEE h:mm a")} ET`
                       : ""}
                   </div>
+                  {row.entry.lockedForWeek ? (
+                    <div className="mt-0.5 text-[10px] font-medium text-warning">
+                      Locked for this week · traded
+                    </div>
+                  ) : null}
                 </div>
               </>
             ) : (

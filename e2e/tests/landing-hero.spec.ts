@@ -18,14 +18,14 @@ test("landing hero remains readable and navigable across screen sizes", async ({
     await page.setViewportSize({ width, height });
     await page.goto("/");
     await page.evaluate(() => document.fonts.ready);
-    const hero = page.getByRole("region", { name: "Guide the Agent." });
+    const hero = page.getByRole("region", { name: "Coach the Machine." });
     await expect(hero.getByRole("heading", { level: 1 })).toBeVisible();
     await expect(page.getByRole("navigation", { name: "Main navigation" }).getByRole("link", { name: "Get started" })).toBeVisible();
     const helmet = hero.locator("img");
     await expect(helmet).toHaveJSProperty("complete", true);
     await expect(helmet).not.toHaveJSProperty("naturalWidth", 0);
     await expect(hero.getByRole("link", { name: "Join a league" })).toBeVisible();
-    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+    expect.soft(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), `${name}: page should fit viewport`).toBe(true);
     // Verify important content fits horizontally, even if a clipping ancestor masks overflow.
     for (const item of [hero.getByRole("heading"), hero.getByRole("link", { name: "Join a league" })]) {
       const box = await item.boundingBox();
@@ -42,13 +42,21 @@ test("landing hero remains readable and navigable across screen sizes", async ({
   await page.getByRole("button", { name: "Open menu" }).click();
   const menu = page.getByRole("dialog");
   await expect(menu).toBeVisible();
-  await expect(menu.getByRole("link", { name: "Leaderboard" })).toHaveAttribute("href", "/bench");
+  await expect(menu.getByRole("link", { name: "Leagues", exact: true })).toHaveAttribute("href", "/leagues");
   await menu.evaluate((element) => Promise.all(element.getAnimations({ subtree: true }).map((animation) => animation.finished)));
   await page.screenshot({ path: `${screenshots}/mobile-menu.png` });
   await menu.getByRole("link", { name: "Leagues" }).click();
   await expect(menu).not.toBeVisible();
+  await expect(page).toHaveURL(/\/login/);
+  await expect(page.getByRole("button", { name: "Log in", exact: true })).toBeVisible();
+  await page.screenshot({ path: `${screenshots}/mobile-leagues-login.png` });
+
+  // The desktop Docs link still leads to the explanation on the landing page.
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await page.goto("/");
+  await page.getByRole("navigation", { name: "Main navigation" }).getByRole("link", { name: "Docs", exact: true }).click();
   await expect(page).toHaveURL(/#how-it-works$/);
-  await expect(page.getByRole("heading", { name: "How it works" })).toBeInViewport();
+  await expect(page.getByRole("heading", { name: "How it works.", exact: true })).toBeInViewport();
   await page.screenshot({ path: `${screenshots}/docs-section.png` });
 
   // The main conversion action retains the application's real login redirect.

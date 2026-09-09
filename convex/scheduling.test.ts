@@ -15,10 +15,10 @@
 import { convexTest } from "convex-test";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 
-import { internal } from "./_generated/api";
+import { api, internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
+import { GAME_WINDOW_TAIL_MS } from "./lib/game_calendar";
 import { fromETParts } from "./lib/templates";
-import { isGameDayET } from "./season";
 import schema from "./schema";
 
 const modules = import.meta.glob("./**/*.ts");
@@ -29,8 +29,11 @@ const modules = import.meta.glob("./**/*.ts");
  * Inferring the type from a concrete call keeps them checked against the real
  * data model.
  */
+let finishInProgress: (() => Promise<void>) | undefined;
 function harness() {
-  return convexTest(schema, modules);
+  const t = convexTest(schema, modules);
+  finishInProgress = () => t.finishInProgressScheduledFunctions();
+  return t;
 }
 type TestHarness = ReturnType<typeof harness>;
 
@@ -254,11 +257,15 @@ async function runsFor(t: TestHarness, windowId: Id<"windows">) {
 }
 
 beforeEach(() => {
+  vi.useFakeTimers();
+  finishInProgress = undefined;
   vi.stubEnv("RUN_DISPATCH", "skip");
   vi.stubEnv("COMMISSIONER_MODEL_ID", "mock/scripted");
 });
 
-afterEach(() => {
+afterEach(async () => {
+  await finishInProgress?.();
+  vi.clearAllTimers();
   vi.unstubAllEnvs();
   vi.useRealTimers();
 });
@@ -273,7 +280,7 @@ describe("scheduleWindowJobs", () => {
       leagueId: s.leagueId,
       weekNo: 1,
     });
-    expect(result.created).toBe(18);
+    expect(result.created).toBe(15);
 
     const rows = await t.run(async (ctx) =>
       ctx.db
@@ -288,9 +295,9 @@ describe("scheduleWindowJobs", () => {
 
     const scheduled = await jobs(t);
     // Two jobs per window and nothing else.
-    expect(scheduled).toHaveLength(36);
+    expect(scheduled).toHaveLength(30);
     const opens = scheduled.filter((j) => j.name === "windows:open");
-    expect(opens).toHaveLength(18);
+    expect(opens).toHaveLength(15);
     // Each job fires at its window's instant.
     const waiver = rows.find((r) => r.label === "waiver")!;
     const waiverOpen = scheduled.find((j) => j._id === waiver.openJobId)!;
@@ -807,10 +814,18 @@ describe("a window's whole life, driven only by its scheduled jobs", () => {
     expect((await windowRow(t, windowId))!.status).toBe("scheduled");
     expect(await runsFor(t, windowId)).toHaveLength(0);
 
-    // One second per iteration, so the jobs fire in clock order: `vi.runAllTimers`
-    // would fire the +40 s close in the same turn as the +10 s open, which is
-    // not a thing that can happen on a real deployment.
-    await t.finishAllScheduledFunctions(() => vi.advanceTimersByTime(1_000), 200);
+    // Let snapshot construction and dispatch finish at the opening clock.
+    // Pumping whole seconds while cold modules load can otherwise manufacture
+    // a timeout by advancing through the close before dispatch gets CPU time.
+    await vi.advanceTimersByTimeAsync(10_000);
+    await t.finishInProgressScheduledFunctions();
+    for (let attempt = 0; attempt < 100 && (await runsFor(t, windowId)).length < s.teamIds.length; attempt++) {
+      await vi.advanceTimersByTimeAsync(100);
+      await t.finishInProgressScheduledFunctions();
+    }
+    expect(await runsFor(t, windowId)).toHaveLength(s.teamIds.length);
+    await vi.advanceTimersByTimeAsync(30_000);
+    await t.finishAllScheduledFunctions(() => vi.advanceTimersByTime(1), 200);
 
     const row = await windowRow(t, windowId);
     expect(row!.status).toBe("closed");
@@ -869,7 +884,7 @@ describe("windows.rescheduleForLeague", () => {
       await ctx.db.patch("league_rules", rules!._id, {
         windowOverrides: {
           waiver: { opensTime: "07:30" },
-          lineup_mnf: { enabled: false },
+          trade_b: { enabled: false },
         },
       });
     });
@@ -879,7 +894,7 @@ describe("windows.rescheduleForLeague", () => {
       weekNo: 1,
       now: NOW,
     });
-    expect(result.removed).toBe(1); // lineup_mnf, disabled and never opened
+    expect(result.removed).toBe(3); // all three trade_b rounds, disabled and never opened
     expect(result.rescheduled).toBeGreaterThan(0);
 
     const after = await t.run(async (ctx) =>
@@ -901,11 +916,11 @@ describe("windows.rescheduleForLeague", () => {
         ctx.db
           .query("windows")
           .withIndex("by_leagueId_label_weekNo_roundNo", (q) =>
-            q.eq("leagueId", s.leagueId).eq("label", "lineup_mnf").eq("weekNo", 1).eq("roundNo", 1),
+            q.eq("leagueId", s.leagueId).eq("label", "trade_b").eq("weekNo", 1),
           )
-          .unique(),
+          .collect(),
       ),
-    ).toBeNull();
+    ).toHaveLength(0);
   });
 
   test("never moves the clock out from under a window that already opened", async () => {
@@ -965,6 +980,12 @@ describe("season.tickAll", () => {
     await seed(t, { status: "drafting" });
 
     const sunday = fromETParts({ year: 2026, month: 9, day: 13, hour: 13 });
+    await t.run(async (ctx) => {
+      await ctx.db.insert("nfl_games", {
+        season: SEASON, week: 1, gameId: "tick-sunday", homeTeam: "BUF", awayTeam: "MIA",
+        kickoffAt: sunday, status: "in_progress",
+      });
+    });
     expect(await t.mutation(internal.season.tickAll, { now: sunday })).toEqual({
       leagues: 2,
       skipped: false,
@@ -972,10 +993,21 @@ describe("season.tickAll", () => {
     expect((await jobs(t)).filter((j) => j.name === "season:scoreOne")).toHaveLength(2);
   });
 
-  test("the guard agrees with the ingest cron's", () => {
-    const thursdayNight = fromETParts({ year: 2026, month: 9, day: 10, hour: 20 });
-    expect(isGameDayET(thursdayNight)).toBe(true);
-    expect(isGameDayET(fromETParts({ year: 2026, month: 9, day: 12, hour: 12 }))).toBe(false);
+  test("continues scoring through overnight finalization, then stops", async () => {
+    const t = harness();
+    const kickoffAt = fromETParts({ year: 2026, month: 9, day: 10, hour: 20 });
+    await t.run(async (ctx) => {
+      await ctx.db.insert("nfl_games", {
+        season: SEASON, week: 1, gameId: "overnight", homeTeam: "KC", awayTeam: "DEN",
+        kickoffAt, status: "final",
+      });
+    });
+    expect((await t.mutation(internal.season.tickAll, {
+      now: kickoffAt + GAME_WINDOW_TAIL_MS,
+    })).skipped).toBe(false);
+    expect(await t.mutation(internal.season.tickAll, {
+      now: kickoffAt + GAME_WINDOW_TAIL_MS + 1,
+    })).toEqual({ leagues: 0, skipped: true });
   });
 
   test("scores the active week and hands a finalized week to the commissioner once", async () => {
@@ -1227,6 +1259,21 @@ describe("an auction draft", () => {
     expect(nomination.scope.phase).toBe("nominate");
     expect(nomination.scope.nominationTeamId).toBeDefined();
 
+    const nominationBoard = await t.query(api.draft.board, { leagueId: s.leagueId });
+    expect(nominationBoard.auction).toMatchObject({
+      phase: "nomination",
+      bidsSealed: true,
+      currentLot: {
+        lotNo: 1,
+        status: "pending",
+        nominatorTeamId: nomination.scope.nominationTeamId,
+        playerId: null,
+        deadlineAt: nomination.closesAt,
+      },
+    });
+    expect(nominationBoard.picksMade).toBe(0);
+    expect(nominationBoard.totalPicks).toBe(8);
+
     // Nobody nominated: the platform nominates the best available at $1.
     const result = await t.mutation(internal.draft_progression.onPickWindowClosed, {
       windowId: nomination._id,
@@ -1248,6 +1295,19 @@ describe("an auction draft", () => {
     expect(bidWindow).toBeDefined();
     expect(bidWindow!.scope.lotNo).toBe(1);
     expect(bidWindow!.scope.phase).toBe("bid");
+
+    const biddingBoard = await t.query(api.draft.board, { leagueId: s.leagueId });
+    expect(biddingBoard.auction).toMatchObject({
+      phase: "bidding",
+      bidsSealed: true,
+      currentLot: {
+        lotNo: 1,
+        status: "bidding",
+        playerId: lot!.playerId,
+        openingBid: 1,
+        deadlineAt: bidWindow!.closesAt,
+      },
+    });
   });
 
   test("closing the bidding window resolves the lot and rotates the nomination", async () => {

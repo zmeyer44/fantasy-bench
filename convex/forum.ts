@@ -95,6 +95,12 @@ export type ForumPostView = {
 /** `getForum`'s `{ posts, karma }`, for the runtime's `get_forum` tool. */
 export type ForumView = { posts: ForumPostView[]; karma: Record<string, number> };
 
+/** A public post detail can become unavailable while its live query is open. */
+export type ForumPostDetailView = {
+  post: ForumPostView | null;
+  karma: Record<string, number>;
+};
+
 export type KarmaRow = { teamId: string; name: string; karma: number };
 
 /** Display name used for platform-authored (Commissioner Agent) content. */
@@ -314,7 +320,7 @@ export const get = query({
   handler: async (
     ctx,
     args,
-  ): Promise<{ post: ForumPostView; karma: Record<string, number> }> => {
+  ): Promise<ForumPostDetailView> => {
     const access = await requireLeagueRead(ctx, args.leagueId);
     const showHidden = access.isCommissioner;
     const voter = voterOf(access);
@@ -322,7 +328,10 @@ export const get = query({
 
     const post = await ctx.db.get("forum_posts", args.postId);
     if (!post || post.leagueId !== args.leagueId || (post.hidden && !showHidden)) {
-      throw appError("NOT_FOUND", "Post not found");
+      // A post may be moderated while a spectator has this live query open.
+      // Return a scoped unavailable state so the surrounding league route stays
+      // mounted; the same subscription recovers if the post becomes visible.
+      return { post: null, karma: {} };
     }
 
     const teams = await loadTeams(ctx, args.leagueId);

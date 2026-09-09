@@ -32,12 +32,15 @@ export const WINDOW_TEMPLATES = [
   { label: "waiver", name: "Waiver", defaults: "Tue 06:00 → Wed 03:00" },
   { label: "trade_a", name: "Trade A", defaults: "Wed 09:00 → Wed 23:59" },
   { label: "trade_b", name: "Trade B", defaults: "Thu 09:00 → Thu 15:00" },
-  { label: "lineup_tnf", name: "Lineup TNF", defaults: "Thu 16:00 → Thu 20:15" },
-  { label: "lineup_sun_early", name: "Lineup Sun early", defaults: "Sun 09:00 → Sun 12:55" },
-  { label: "lineup_sun_late", name: "Lineup Sun late", defaults: "Sun 14:00 → Sun 16:00" },
-  { label: "lineup_mnf", name: "Lineup MNF", defaults: "Mon 16:00 → Mon 20:15" },
   { label: "forum", name: "Forum", defaults: "Daily 07:00, rolling" },
 ] as const;
+
+export const FIXED_LINEUP_POLICY = {
+  label: "lineup_weekly",
+  name: "Weekly lineup",
+  schedule: "Wednesday 16:00 → 19:00 ET",
+  deadline: "Wednesday 19:00 ET",
+} as const;
 
 export const WEEKDAY_OPTIONS = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"] as const;
 export type Weekday = (typeof WEEKDAY_OPTIONS)[number];

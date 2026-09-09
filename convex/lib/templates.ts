@@ -231,9 +231,8 @@ export const DEFAULT_TRADE_ROUNDS = 3;
 /**
  * The PRD §5.3 default table.
  *
- * Lineup scopes name the `dayBucket`s a run may touch: the Thursday window may
- * only move players in Thursday games, the Sunday-late window only late and
- * Monday games. `lineup_sun_early` has no `gameDays` — it is the full lineup.
+ * The full weekly lineup is due Wednesday at 19:00 Eastern. The submission
+ * cutoff equals close, so agents have the entire advertised window.
  */
 export const DEFAULT_WINDOW_TEMPLATES: readonly WindowTemplate[] = [
   {
@@ -266,44 +265,14 @@ export const DEFAULT_WINDOW_TEMPLATES: readonly WindowTemplate[] = [
     rounds: DEFAULT_TRADE_ROUNDS,
   },
   {
-    label: "lineup_tnf",
+    label: "lineup_weekly",
     type: "lineup",
-    opensDay: "thu",
+    opensDay: "wed",
     opensTime: "16:00",
-    closesDay: "thu",
-    closesTime: "20:15",
-    submissionLeadMinutes: DEFAULT_SUBMISSION_LEAD_MINUTES,
-    scope: { gameDays: ["thu"] },
-  },
-  {
-    label: "lineup_sun_early",
-    type: "lineup",
-    opensDay: "sun",
-    opensTime: "09:00",
-    closesDay: "sun",
-    closesTime: "12:55",
-    submissionLeadMinutes: DEFAULT_SUBMISSION_LEAD_MINUTES,
+    closesDay: "wed",
+    closesTime: "19:00",
+    submissionLeadMinutes: 0,
     scope: {},
-  },
-  {
-    label: "lineup_sun_late",
-    type: "lineup",
-    opensDay: "sun",
-    opensTime: "14:00",
-    closesDay: "sun",
-    closesTime: "16:00",
-    submissionLeadMinutes: DEFAULT_SUBMISSION_LEAD_MINUTES,
-    scope: { gameDays: ["sun_late", "mon"] },
-  },
-  {
-    label: "lineup_mnf",
-    type: "lineup",
-    opensDay: "mon",
-    opensTime: "16:00",
-    closesDay: "mon",
-    closesTime: "20:15",
-    submissionLeadMinutes: DEFAULT_SUBMISSION_LEAD_MINUTES,
-    scope: { gameDays: ["mon"] },
   },
   {
     // Rolling daily forum window: opens 07:00 ET, runs until the next morning,
@@ -367,6 +336,8 @@ function applyOverride(
   template: WindowTemplate,
   overrides: WindowOverrides | null | undefined,
 ): WindowTemplate {
+  // The weekly roster deadline is a product rule, not a commissioner override.
+  if (template.label === "lineup_weekly") return template;
   const override = overrides?.[template.label];
   if (!override) return template;
   return {

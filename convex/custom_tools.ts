@@ -18,6 +18,7 @@ import type { Doc, Id } from "./_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "./_generated/server";
 import { action, internalQuery, mutation, query } from "./_generated/server";
 import { requireLeagueRead, requireOwnerOrCommissioner } from "./lib/auth";
+import { customToolUrlError } from "./lib/custom_tool_url";
 import { appError } from "./lib/errors";
 import { isPrivateAt, revealAtFor } from "./lib/visibility";
 import { callProvider, customToolDescription, providerSlug } from "./runtime/tools/custom";
@@ -110,21 +111,17 @@ function validate(input: {
   if (input.url.length > MAX_CUSTOM_TOOL_URL_CHARS) {
     throw appError("BAD_REQUEST", "That URL is too long.");
   }
-  let parsed: URL;
-  try {
-    parsed = new URL(input.url.trim());
-  } catch {
-    throw appError("BAD_REQUEST", "Enter a full URL, including https://.");
-  }
-  if (parsed.protocol !== "https:" && parsed.protocol !== "http:") {
-    throw appError("BAD_REQUEST", "Custom tools must use http(s).");
-  }
+  const urlError = customToolUrlError(input.url);
+  if (urlError) throw appError("BAD_REQUEST", urlError);
   if (input.headers.length > MAX_CUSTOM_TOOL_HEADERS) {
     throw appError("BAD_REQUEST", `At most ${MAX_CUSTOM_TOOL_HEADERS} headers.`);
   }
   for (const header of input.headers) {
     if (!/^[A-Za-z0-9-]{1,64}$/.test(header.name)) {
       throw appError("BAD_REQUEST", `"${header.name}" is not a valid header name.`);
+    }
+    if (/[\r\n]/.test(header.value)) {
+      throw appError("BAD_REQUEST", `"${header.name}" contains an invalid header value.`);
     }
   }
 }

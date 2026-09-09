@@ -22,7 +22,8 @@ import {
   type MutationCtx,
   type QueryCtx,
 } from "./_generated/server";
-import { computeFantasyPoints, isStartingSlot, round2, storedPointsFor } from "./lib/scoring_pure";
+import { isStartingSlot, round2 } from "./lib/scoring_pure";
+import { currentPlayerPoints } from "./lib/player_points";
 import { bracketForSeeds, compareStandings, streakOf, winnerOf } from "./lib/standings_pure";
 import { matchupsForWeek, orderedTeams } from "./standings";
 
@@ -75,20 +76,8 @@ async function pointsFor(
   ctx: QueryCtx,
   args: { playerId: Id<"players">; season: number; week: number; ctxL: LeagueContext },
 ): Promise<number> {
-  const row = await ctx.db
-    .query("player_stats_weekly")
-    .withIndex("by_playerId_season_week", (q) =>
-      q.eq("playerId", args.playerId).eq("season", args.season).eq("week", args.week),
-    )
-    .order("desc")
-    .first();
-  if (!row) return 0;
-  if (!args.ctxL.tePremium) return storedPointsFor(args.ctxL.preset, row);
-  const player = await ctx.db.get("players", args.playerId);
-  return computeFantasyPoints(row.stats, args.ctxL.preset, {
-    position: player?.position ?? null,
-    tePremium: true,
-  });
+  return (await currentPlayerPoints(ctx, args.playerId, args.season, args.week,
+    args.ctxL.preset, args.ctxL.tePremium)) ?? 0;
 }
 
 /** Latest lineup version for a team-week, or null. */

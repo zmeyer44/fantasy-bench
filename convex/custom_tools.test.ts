@@ -123,6 +123,33 @@ describe("custom_tools", () => {
     expect(
       await errorCode(owner.session.mutation(api.custom_tools.create, { leagueId, teamId, ...DRAFT, name: "Bad", url: "ftp://x" })),
     ).toBe("BAD_REQUEST");
+    expect(
+      await errorCode(owner.session.mutation(api.custom_tools.create, {
+        leagueId,
+        teamId,
+        ...DRAFT,
+        name: "Plain HTTP",
+        url: "http://api.example.com/weather",
+      })),
+    ).toBe("BAD_REQUEST");
+    expect(
+      await errorCode(owner.session.mutation(api.custom_tools.create, {
+        leagueId,
+        teamId,
+        ...DRAFT,
+        name: "Embedded credentials",
+        url: "https://user:secret@api.example.com/weather",
+      })),
+    ).toBe("BAD_REQUEST");
+    expect(
+      await errorCode(owner.session.mutation(api.custom_tools.create, {
+        leagueId,
+        teamId,
+        ...DRAFT,
+        name: "Header newline",
+        headers: [{ name: "Authorization", value: "Bearer safe\r\nX-Injected: yes" }],
+      })),
+    ).toBe("BAD_REQUEST");
 
     expect(await errorCode(other.session.mutation(api.custom_tools.setEnabled, { toolId, enabled: false }))).toBe("FORBIDDEN");
     await owner.session.mutation(api.custom_tools.setEnabled, { toolId, enabled: false });

@@ -243,6 +243,12 @@ export default defineSchema({
     .index("email", ["email"])
     .index("phone", ["phone"]),
 
+  /** Internal resend cooldown for password recovery, keyed by normalized email. */
+  password_reset_attempts: defineTable({
+    normalizedEmail: v.string(),
+    lastRequestedAt: v.number(),
+  }).index("by_normalizedEmail", ["normalizedEmail"]),
+
   // ---- league core --------------------------------------------------------
 
   leagues: defineTable({
@@ -329,7 +335,8 @@ export default defineSchema({
     note: v.optional(v.string()),
     /** Postgres `created_at`, preserved by the seed (change log orders by it). */
     createdAt: v.optional(v.number()),
-  }).index("by_leagueId", ["leagueId"]),
+  }).index("by_leagueId", ["leagueId"])
+    .index("by_leagueId_createdAt", ["leagueId", "createdAt"]),
 
   league_members: defineTable({
     leagueId: v.id("leagues"),
@@ -475,7 +482,8 @@ export default defineSchema({
     awayScore: v.optional(v.number()),
   })
     .index("by_gameId", ["gameId"])
-    .index("by_season_week", ["season", "week"]),
+    .index("by_season_week", ["season", "week"])
+    .index("by_kickoffAt", ["kickoffAt"]),
 
   player_stats_weekly: defineTable({
     playerId: v.id("players"),
@@ -1043,6 +1051,7 @@ export default defineSchema({
     .index("by_leagueId_status", ["leagueId", "status"])
     .index("by_leagueId_weekNo", ["leagueId", "weekNo"])
     .index("by_proposerTeamId_status", ["proposerTeamId", "status"])
+    .index("by_leagueId_resolvedAt", ["leagueId", "resolvedAt"])
     .index("by_recipientTeamId_status", ["recipientTeamId", "status"])
     .index("by_threadId", ["threadId"])
     .index("by_windowId_status", ["windowId", "status"])

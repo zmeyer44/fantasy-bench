@@ -37,7 +37,9 @@ export function DraftLive({
             {board.scheduledAt
               ? `Scheduled ${formatET(board.scheduledAt, "EEE MMM d, HH:mm")} ET.`
               : "No draft time set."}{" "}
-            Every pick links to the run that made it.
+            {board.draftType === "auction"
+              ? "Every resolved lot links to the run behind the winning bid."
+              : "Every pick links to the run that made it."}
           </>
         }
         actions={
@@ -51,7 +53,11 @@ export function DraftLive({
               <Badge variant="outline">{board.status.replace("_", " ")}</Badge>
             )}
             {isCommissioner && board.status === "setup" ? (
-              <StartDraftButton leagueId={leagueId} />
+              <StartDraftButton
+                leagueId={leagueId}
+                draftType={board.draftType}
+                review={board.startReview}
+              />
             ) : null}
           </div>
         }

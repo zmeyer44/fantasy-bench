@@ -10,6 +10,7 @@ import { describe, expect, test } from "vitest";
 
 import { api } from "./_generated/api";
 import schema from "./schema";
+import type { ActivityCursor, ActivityItem } from "./activity";
 
 const modules = import.meta.glob("./**/*.ts");
 
@@ -226,6 +227,56 @@ async function seed(t: ReturnType<typeof convexTest>) {
 }
 
 describe("activity.feed", () => {
+  test("pages beyond one hundred equal-time posts without skips, duplicates, or hidden rows", async () => {
+    const t = convexTest(schema, modules);
+    const s = await seed(t);
+    await t.run(async (ctx) => {
+      for (let index = 0; index < 147; index += 1) {
+        await ctx.db.insert("forum_posts", {
+          leagueId: s.leagueId, teamId: s.alpha, title: `Post ${index}`, body: "Activity pagination fixture",
+          flair: "analysis", score: 0, commentCount: 0, hidden: index >= 137, createdAt: NOW,
+        });
+      }
+    });
+    const seen: ActivityItem[] = [];
+    let before: ActivityCursor | undefined;
+    for (let pageNo = 0; pageNo < 10; pageNo += 1) {
+      const page = await t.query(api.activity.feed, { leagueId: s.leagueId, filter: "commons", limit: 40, ...(before ? { before } : {}) });
+      seen.push(...page.items);
+      if (!page.hasMore) break;
+      expect(page.nextCursor).not.toBeNull();
+      before = page.nextCursor!;
+      if (pageNo === 0) {
+        await t.run((ctx) => ctx.db.insert("forum_posts", {
+          leagueId: s.leagueId, title: "New arrival", body: "Arrived during paging", flair: "analysis",
+          score: 0, commentCount: 0, hidden: false, createdAt: NOW + 1,
+        }));
+      }
+    }
+    expect(seen).toHaveLength(138); // 137 new visible rows plus the original Hot take.
+    expect(new Set(seen.map((item) => item.id)).size).toBe(138);
+    expect(seen.some((item) => item.kind === "post" && item.title === "New arrival")).toBe(false);
+    const refreshed = await t.query(api.activity.feed, { leagueId: s.leagueId, filter: "commons" });
+    expect(refreshed.items[0]).toMatchObject({ title: "New arrival" });
+  });
+
+  test("one-event pages preserve paired waiver drops and commissioner ownership names", async () => {
+    const t = convexTest(schema, modules);
+    const s = await seed(t);
+    await t.run(async (ctx) => {
+      await ctx.db.patch("users", s.userId, { name: "Alex Owner" });
+      await ctx.db.insert("league_rule_changes", { leagueId: s.leagueId, field: "team.Alpha.owner", toValue: s.userId });
+    });
+    const all = await t.query(api.activity.feed, { leagueId: s.leagueId });
+    expect(all.items.find((item) => item.kind === "rule_change" && item.field.includes("owner")))
+      .toMatchObject({ field: "the owner of Alpha", fromValue: "Unassigned", toValue: "Alex Owner" });
+    const first = await t.query(api.activity.feed, { leagueId: s.leagueId, filter: "moves", limit: 1 });
+    expect(first.items[0]).toMatchObject({ kind: "drop", team: { name: "Bravo" } });
+    const next = await t.query(api.activity.feed, { leagueId: s.leagueId, filter: "moves", limit: 1, before: first.nextCursor! });
+    expect(next.items[0]).toMatchObject({ kind: "add", dropped: { name: "Rick Runner" } });
+    expect(next.hasMore).toBe(false);
+    expect(next.nextCursor).toBeNull();
+  });
   test("merges every source newest first and collapses a waiver claim into one move", async () => {
     const t = convexTest(schema, modules);
     const s = await seed(t);

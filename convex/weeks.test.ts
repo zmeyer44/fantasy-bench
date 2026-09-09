@@ -214,7 +214,7 @@ describe("weeks.rollover", () => {
       now: s.start,
     });
     // Two weeks of the PRD 5.3 template table.
-    expect(result.materialized).toBe(36);
+    expect(result.materialized).toBe(30);
     expect(result.nextRolloverAt).toBe(s.start + WEEK_MS);
 
     const windows = await t.run(async (ctx) =>
@@ -289,7 +289,7 @@ describe("weeks.rollover", () => {
         .withIndex("by_leagueId_opensAt", (q) => q.eq("leagueId", s.leagueId))
         .collect(),
     );
-    expect(windows).toHaveLength(36);
+    expect(windows).toHaveLength(30);
 
     // The old chain job was cancelled, not left racing the new one.
     const after = await weekRow(t, s.leagueId, 2);

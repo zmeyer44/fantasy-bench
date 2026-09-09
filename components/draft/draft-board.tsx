@@ -33,6 +33,10 @@ export function DraftBoardView({
   leagueId: string;
   board: DraftBoardData;
 }) {
+  if (board.draftType === "auction" && board.auction) {
+    return <AuctionBoardView leagueId={leagueId} board={board} />;
+  }
+
   const madePicks = board.picks
     .filter((pick) => pick.playerId !== null)
     .reverse();
@@ -60,7 +64,7 @@ export function DraftBoardView({
                     : ""
                 }`
               : board.status === "complete" ||
-                  board.picksMade === board.totalPicks
+                  (board.totalPicks > 0 && board.picksMade === board.totalPicks)
                 ? "Draft complete"
                 : "Not started"
           }
@@ -204,6 +208,162 @@ export function DraftBoardView({
                 </details>
               ) : null}
             </>
+          )}
+        </div>
+      </section>
+    </div>
+  );
+}
+
+function AuctionBoardView({ leagueId, board }: { leagueId: string; board: DraftBoardData }) {
+  const auction = board.auction!;
+  const lot = auction.currentLot;
+  const results = [...board.picks].reverse();
+  const phaseLabel =
+    auction.phase === "nomination"
+      ? "Nomination"
+      : auction.phase === "bidding"
+        ? "Sealed bidding"
+        : auction.phase === "complete"
+          ? "Complete"
+          : "Not started";
+
+  return (
+    <div className="space-y-10">
+      <StatStrip className="sm:grid-cols-3">
+        <Stat
+          label="Current lot"
+          tone={auction.phase === "nomination" || auction.phase === "bidding" ? "brand" : "default"}
+          value={<span className="block text-lg">{lot ? `Lot ${lot.lotNo}` : "—"}</span>}
+          detail={
+            lot
+              ? `${phaseLabel}${lot.deadlineAt ? ` · until ${formatET(lot.deadlineAt, "HH:mm:ss")} ET` : ""}`
+              : auction.phase === "complete"
+                ? "Auction complete"
+                : "Awaiting commissioner"
+          }
+        />
+        <Stat
+          label="Rostered"
+          value={<span className="block text-lg">{`${board.picksMade} / ${board.totalPicks}`}</span>}
+          detail={`${board.startReview.rosterSize} players per team`}
+        />
+        <Stat
+          label="Running cost"
+          value={<span className="block text-lg">${board.runningCostUsd.toFixed(4)}</span>}
+          detail="Winning draft runs"
+        />
+      </StatStrip>
+
+      <section>
+        <SectionRule title="Live lot" meta={phaseLabel} />
+        <div className="mt-4 border border-border bg-card/30 p-5">
+          {lot ? (
+            <div className="grid gap-5 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-start">
+              <div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <Badge variant={lot.status === "bidding" ? "success" : "outline"}>
+                    {lot.status === "bidding" ? "Bidding" : "Awaiting nomination"}
+                  </Badge>
+                  <span className="font-mono text-[10px] uppercase tracking-wider text-ink-faint">
+                    Lot {lot.lotNo}
+                  </span>
+                </div>
+                {lot.playerName ? (
+                  <div className="mt-4 flex items-center gap-3">
+                    <TeamLogo team={lot.nflTeam} size={28} />
+                    <div>
+                      <p className="font-heading text-lg text-foreground">{lot.playerName}</p>
+                      <p className="font-mono text-[10px] text-ink-faint">
+                        {lot.position}{lot.nflTeam ? ` · ${lot.nflTeam}` : ""} · opens at ${lot.openingBid}
+                      </p>
+                    </div>
+                  </div>
+                ) : (
+                  <p className="mt-4 text-sm text-muted-foreground">
+                    {lot.nominatorTeamName} is choosing the player for this lot.
+                  </p>
+                )}
+              </div>
+              <div className="min-w-44 border-l border-border pl-4">
+                <p className="font-mono text-[10px] uppercase tracking-wider text-ink-faint">Nominator</p>
+                <Link
+                  href={`/leagues/${leagueId}/teams/${lot.nominatorTeamId}`}
+                  className="mt-1 block text-sm text-foreground hover:text-brand"
+                >
+                  {lot.nominatorTeamName} · {lot.nominatorTeamAbbreviation}
+                </Link>
+                {lot.deadlineAt ? (
+                  <p className="mt-3 text-xs text-muted-foreground">
+                    Phase closes {formatET(lot.deadlineAt, "HH:mm:ss")} ET
+                  </p>
+                ) : null}
+                {lot.nominationRunId ? (
+                  <Link
+                    href={`/leagues/${leagueId}/traces/${lot.nominationRunId}`}
+                    className="mt-3 block font-mono text-[10px] text-muted-foreground hover:text-brand"
+                  >
+                    nomination trace →
+                  </Link>
+                ) : null}
+              </div>
+            </div>
+          ) : (
+            <EmptyState
+              title={auction.phase === "complete" ? "Auction complete" : "No active lot"}
+              description={
+                auction.phase === "complete"
+                  ? "Every roster spot has been awarded."
+                  : "The first nomination opens when the commissioner starts the draft."
+              }
+            />
+          )}
+        </div>
+        {auction.phase === "bidding" ? (
+          <p className="mt-3 text-xs text-muted-foreground">
+            Agent bids are sealed. Bid amounts and participation remain hidden until this lot resolves.
+          </p>
+        ) : null}
+      </section>
+
+      <section>
+        <SectionRule title="Budgets" meta="Remaining draft dollars" />
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Team</TableHead>
+              <TableHead className="text-right">Remaining</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {auction.budgets.map((budget) => (
+              <TableRow key={budget.teamId}>
+                <TableCell>
+                  <Link
+                    href={`/leagues/${leagueId}/teams/${budget.teamId}`}
+                    className="text-foreground hover:text-brand"
+                  >
+                    {budget.teamName} <span className="font-mono text-[10px] text-ink-faint">{budget.abbreviation}</span>
+                  </Link>
+                </TableCell>
+                <TableCell className="text-right font-mono tabular-nums">${budget.remaining}</TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </section>
+
+      <section>
+        <SectionRule title="Results" meta="Newest resolved lot first" />
+        <div className="mt-4">
+          {results.length === 0 ? (
+            <p className="text-sm text-muted-foreground">No lots resolved yet.</p>
+          ) : (
+            <ul className="divide-y divide-border">
+              {results.map((pick) => (
+                <PickRow key={pick.id} leagueId={leagueId} pick={pick} />
+              ))}
+            </ul>
           )}
         </div>
       </section>

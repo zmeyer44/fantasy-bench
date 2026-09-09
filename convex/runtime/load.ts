@@ -27,6 +27,7 @@ import {
 import type { Doc, Id } from "../_generated/dataModel";
 import { internalQuery, type QueryCtx } from "../_generated/server";
 import { catalogPrice, type ResolvedModelPrice } from "../lib/pricing_pure";
+import { withLiveRosterOwnership } from "../lib/snapshot_live";
 import { readPayload } from "../snapshot";
 
 /** Custom providers in scope for one run; a league has a handful at most. */
@@ -35,6 +36,8 @@ const MAX_CUSTOM_PROVIDERS = 50;
 const HISTORY_SCAN = 40;
 /** Actions replayed into the tool state when a retried attempt resumes. */
 const MAX_PRIOR_ACTIONS = 200;
+/** Maximum roster rows in one league (20 teams × 16 slots, with headroom). */
+const MAX_ROSTER_ROWS = 400;
 /** Hard ceiling on steps replayed on resume; `maxSteps` is always well under it. */
 export const MAX_RESUME_STEPS = 64;
 
@@ -66,7 +69,7 @@ export type RunContext = {
    * rebuild its in-memory tool state instead of concluding the agent never
    * acted. Bounded by `MAX_PRIOR_ACTIONS`.
    */
-  priorActions: Array<{ actionType: string; committed: boolean }>;
+  priorActions: Array<{ actionType: string; committed: boolean; lineupWarnings: string[] }>;
 };
 
 async function skillsFor(
@@ -127,7 +130,14 @@ export const runContext = internalQuery({
       }
     }
 
-    const snapshot = window.snapshotId ? await readPayload(ctx, window.snapshotId) : null;
+    let snapshot = window.snapshotId ? await readPayload(ctx, window.snapshotId) : null;
+    if (snapshot && window.type === "draft") {
+      const rosterRows = await ctx.db
+        .query("roster_slots")
+        .withIndex("by_leagueId_playerId", (q) => q.eq("leagueId", run.leagueId))
+        .take(MAX_ROSTER_ROWS);
+      snapshot = withLiveRosterOwnership(snapshot, rosterRows);
+    }
     const digestRow = window.snapshotId
       ? await ctx.db
           .query("snapshot_digests")
@@ -173,7 +183,18 @@ export const runContext = internalQuery({
         .query("run_actions")
         .withIndex("by_runId_stepIndex", (q) => q.eq("runId", runId))
         .take(MAX_PRIOR_ACTIONS)
-    ).map((row) => ({ actionType: row.actionType, committed: row.committedAt != null }));
+    ).map((row) => {
+      const result = row.result && typeof row.result === "object"
+        ? (row.result as { warnings?: unknown })
+        : null;
+      return {
+        actionType: row.actionType,
+        committed: row.committedAt != null,
+        lineupWarnings: Array.isArray(result?.warnings)
+          ? result.warnings.filter((warning): warning is string => typeof warning === "string")
+          : [],
+      };
+    });
 
     return {
       run,

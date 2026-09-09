@@ -170,6 +170,12 @@ async function populate(t: ReturnType<typeof convexTest>, s: Empty) {
       externalIds: {},
       updatedAt: NOW,
     });
+    for (const [playerId, points] of [[qb, 18.5], [rb, 4]] as const) {
+      await ctx.db.insert("player_stats_weekly", {
+        playerId, season: SEASON, week: 1, source: "test", stats: {},
+        fantasyPointsPpr: points, fantasyPointsHalf: points, fantasyPointsStd: points, effectiveAt: NOW - 3600000,
+      });
+    }
     for (const playerId of [qb, rb]) {
       await ctx.db.insert("roster_slots", {
         leagueId: s.leagueId,
@@ -656,5 +662,32 @@ describe("waivers.results", () => {
     expect(view.weeksWithClaims).toEqual([2, 1]);
     expect(view.faab.find((row) => row.teamId === p.alpha)?.spent).toBe(12);
     expect(view.window?.status).toBe("closed");
+  });
+});
+
+
+describe("current stats supersede frozen decision scores", () => {
+  test.each([20, 0])("uses a current %s-point stat line in every live view", async (points) => {
+    const t = convexTest(schema, modules);
+    const s = await emptyLeague(t);
+    const p = await populate(t, s);
+    await t.run(async (ctx) => {
+      await ctx.db.insert("player_stats_weekly", {
+        playerId: p.qb, season: SEASON, week: 1, source: "test",
+        stats: { pass_yd: points * 25 }, fantasyPointsPpr: points,
+        fantasyPointsHalf: points, fantasyPointsStd: points, effectiveAt: NOW,
+      });
+    });
+    const cards = await t.query(api.views.matchups, { leagueId: s.leagueId, weekNo: 1 });
+    const detail = await t.query(api.views.matchup, { leagueId: s.leagueId, weekNo: 1, matchupId: p.matchupId });
+    const team = await t.query(api.views.team, { teamId: p.alpha });
+    const home = await t.query(api.views.home, { leagueId: s.leagueId });
+    expect(cards[0].home.score).toBe(points);
+    expect(detail?.home.liveTotal).toBe(points);
+    expect(detail?.home.slots.find((slot) => slot.playerId === p.qb)?.points).toBe(points);
+    expect(team?.liveTotal).toBe(points);
+    expect(home.matchups[0].home.score).toBe(points);
+    await t.run(async (ctx) => { await ctx.db.patch("matchups", p.matchupId, { isFinal: true, homeScore: 33 }); });
+    expect((await t.query(api.views.matchups, { leagueId: s.leagueId, weekNo: 1 }))[0].home.score).toBe(33);
   });
 });

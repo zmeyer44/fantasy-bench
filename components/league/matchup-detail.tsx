@@ -37,8 +37,8 @@ export function MatchupContent({
   page: MatchupPage;
 }) {
   const hasLive = [...page.away.slots, ...page.home.slots].some(
-    (slot) => slot.points !== null,
-  );
+    (slot) => slot.starting && slot.points !== null,
+  ) || page.away.officialScore !== 0 || page.home.officialScore !== 0;
   const score = (side: Side) =>
     page.isFinal
       ? side.officialScore
@@ -296,16 +296,13 @@ function PlayerCell({
               >
                 {slot.playerName}
               </div>
-              <div className="mt-0.5 truncate text-[10px] leading-snug text-muted-foreground sm:text-[11px]">
+              <div className="mt-0.5 text-[10px] leading-relaxed text-muted-foreground [overflow-wrap:anywhere] sm:text-[11px]">
                 {slot.position} · {slot.nflTeam ?? "FA"}
                 {slot.injuryStatus ? (
-                  <span className="ml-1 font-semibold text-danger">{slot.injuryStatus}</span>
+                  <span className="block font-semibold text-danger">{slot.injuryStatus}</span>
                 ) : null}
-                {" · "}
-                {slot.opponent ?? "Opponent TBD"}
-                {slot.kickoffAt
-                  ? ` · ${formatET(slot.kickoffAt, "EEE h:mm a")} ET`
-                  : ""}
+                <span className="block">{slot.opponent ? `vs ${slot.opponent}` : "Opponent TBD"}</span>
+                {slot.kickoffAt ? <span className="block">{formatET(slot.kickoffAt, "EEE h:mm a")} ET</span> : null}
               </div>
             </div>
           </div>

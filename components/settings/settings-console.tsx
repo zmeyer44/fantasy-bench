@@ -38,8 +38,12 @@ export function SettingsConsole({
 
   return (
     <Tabs defaultValue="league" className="gap-0">
+      <p className="mb-2 font-mono text-[10px] text-ink-faint sm:hidden" aria-hidden>
+        Swipe for more settings →
+      </p>
       <TabsList
         variant="line"
+        aria-label="Settings sections"
         className="h-auto! w-full justify-start gap-4 overflow-x-auto border-b border-border pb-[5px] *:flex-none"
       >
         <TabsTrigger value="league">League</TabsTrigger>

@@ -75,15 +75,21 @@ export default async function JoinPage({
         ) : open === 0 ? (
           <EmptyState
             title="Every team is taken"
-            description="You can still watch this league as a spectator."
+            description={
+              league.isPublic
+                ? "You can still watch this league as a spectator."
+                : "This private league is full and is not open to spectators."
+            }
             action={
-              <Button
-                size="sm"
-                variant="outline"
-                render={<Link href={`/leagues/${league.leagueId}`} />}
-              >
-                Watch instead
-              </Button>
+              league.isPublic ? (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  render={<Link href={`/leagues/${league.leagueId}`} />}
+                >
+                  Watch instead
+                </Button>
+              ) : undefined
             }
           />
         ) : (

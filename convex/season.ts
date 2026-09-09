@@ -8,32 +8,18 @@
  * arrive from a provider on their own schedule, so somebody has to look.
  *
  * `crons.ts` calls `tickAll` every 15 minutes; the game-day guard lives here, in
- * a mutation, rather than in the cron schedule, because cron times are UTC and
- * the NFL calendar is Eastern.
+ * a mutation, rather than in the cron schedule, because the source of truth is
+ * the indexed NFL schedule rather than a fixed set of weekdays.
  */
 import { v } from "convex/values";
 
 import { internal } from "./_generated/api";
 import { internalMutation } from "./_generated/server";
-import { toETParts } from "./lib/templates";
+import { gameActivityBounds } from "./lib/game_calendar";
 import { currentWeekNoFor } from "./weeks";
 
 /** One page of in-season leagues per tick. */
 const MAX_LEAGUES_PER_TICK = 200;
-
-/**
- * True on an NFL game day, in Eastern time.
- *
- * Thursday, Sunday and Monday carry games; the Tuesday overnight tail (before
- * 06:00 ET, which is also the league week boundary) catches the Monday-night
- * finish that finalizes the week. Every other hour of the week has nothing to
- * score, so the tick returns immediately rather than paging every league.
- */
-export function isGameDayET(now: number): boolean {
-  const et = toETParts(now);
-  if (et.weekday === 4 || et.weekday === 0 || et.weekday === 1) return true;
-  return et.weekday === 2 && et.hour < 6;
-}
 
 /**
  * Fan out one scoring mutation per in-season league.
@@ -47,7 +33,16 @@ export const tickAll = internalMutation({
   returns: v.object({ leagues: v.number(), skipped: v.boolean() }),
   handler: async (ctx, args) => {
     const now = args.now ?? Date.now();
-    if (!args.force && !isGameDayET(now)) return { leagues: 0, skipped: true };
+    if (!args.force) {
+      const { from, through } = gameActivityBounds(now);
+      const scheduledGame = await ctx.db
+        .query("nfl_games")
+        .withIndex("by_kickoffAt", (q) =>
+          q.gte("kickoffAt", from).lte("kickoffAt", through),
+        )
+        .first();
+      if (!scheduledGame) return { leagues: 0, skipped: true };
+    }
 
     const leagues = await ctx.db
       .query("leagues")

@@ -29,8 +29,8 @@ import {
   internalQuery,
   type MutationCtx,
 } from "./_generated/server";
+import { gameActivityBounds } from "./lib/game_calendar";
 import { computeAllPresets } from "./lib/scoring_pure";
-import { toETParts } from "./lib/templates";
 import * as espn from "./providers/espn";
 import { providerLog } from "./providers/http";
 import * as nflverse from "./providers/nflverse";
@@ -689,7 +689,8 @@ export type IngestPlan = {
  * clock):
  *
  *  - `regular` (every 15 min): projections move, news moves. Nothing else does.
- *  - `gameday` (every 5 min, Thu/Sun/Mon ET): live stats, live game status, news.
+ *  - `gameday` (every 5 min near a scheduled kickoff): live stats, live game
+ *    status, news.
  *  - `full` (daily): the whole universe, including the 14.6 MB player feed.
  */
 export function planFor(mode: IngestMode): IngestPlan {
@@ -722,16 +723,6 @@ export function planFor(mode: IngestMode): IngestPlan {
         ownership: false,
       };
   }
-}
-
-/**
- * True on an NFL game day, in Eastern time — the guard the 5-minute cron applies
- * before doing any work (cron schedules are UTC; the NFL calendar is not).
- */
-export function isGameDayET(now: number): boolean {
-  const et = toETParts(now);
-  if (et.weekday === 4 || et.weekday === 0 || et.weekday === 1) return true;
-  return et.weekday === 2 && et.hour < 6;
 }
 
 // ------------------------------------------------------------------- pull
@@ -956,7 +947,7 @@ function range(from: number, to: number): number[] {
 /**
  * The cron entry point.
  *
- * A mutation, not the action, so the Eastern game-day guard is evaluated
+ * A mutation, not the action, so the indexed game-calendar guard is evaluated
  * transactionally and the action is only scheduled when there is work to do.
  *
  * `INGEST_DISABLED=1` (`npx convex env set INGEST_DISABLED 1`) mutes every
@@ -970,7 +961,16 @@ export const tick = internalMutation({
   handler: async (ctx, args) => {
     const now = args.now ?? Date.now();
     if (process.env.INGEST_DISABLED === "1") return { scheduled: false };
-    if (args.mode === "gameday" && !isGameDayET(now)) return { scheduled: false };
+    if (args.mode === "gameday") {
+      const { from, through } = gameActivityBounds(now);
+      const scheduledGame = await ctx.db
+        .query("nfl_games")
+        .withIndex("by_kickoffAt", (q) =>
+          q.gte("kickoffAt", from).lte("kickoffAt", through),
+        )
+        .first();
+      if (!scheduledGame) return { scheduled: false };
+    }
     await ctx.scheduler.runAfter(0, internal.ingest.pull, { mode: args.mode });
     return { scheduled: true };
   },
