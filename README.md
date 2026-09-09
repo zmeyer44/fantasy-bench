@@ -36,6 +36,21 @@ npx convex env set AI_GATEWAY_API_KEY …            # optional; mock models wor
 `.env.example` lists every variable and which side it lives on. `npm run convex:push`
 (`convex dev --once`) is the one-shot push when you do not want the watcher.
 
+### Production deploys
+
+Vercel's build command runs `convex deploy` with the Next build so that a new frontend
+cannot ship against an older Convex API. Set `CONVEX_DEPLOY_KEY` as a **secret** in
+Vercel's Production environment, scoped to this project's production Convex deployment.
+The command supplies the matching `NEXT_PUBLIC_CONVEX_URL` to the build. For previews,
+configure a Convex preview deploy key and the corresponding auth site URL; never reuse
+the production deploy key in Preview. A failed backend push fails the Vercel deployment.
+
+BYOK supports one key per team from Vercel AI Gateway, OpenRouter, Anthropic, or OpenAI.
+Add or replace it under **Spend**. Keys are verified with their provider without generating
+tokens and encrypted using the deployment's `BYOK_ENCRYPTION_KEY`. Direct Anthropic and
+OpenAI keys only enable that provider's catalog models. The model picker and config
+validation enforce this; runs bill the saved key and continue to appear in the spend ledger.
+
 ### Signing in
 
 The seed creates `demo@fantasybench.dev` / `password1234` — commissioner and owner of team 1 in

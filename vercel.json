@@ -1,5 +1,5 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "framework": "nextjs",
-  "buildCommand": "next build --webpack"
+  "buildCommand": "npx convex deploy --cmd 'next build --webpack' --cmd-url-env-var-name NEXT_PUBLIC_CONVEX_URL"
 }

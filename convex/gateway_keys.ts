@@ -1,5 +1,5 @@
 /**
- * Bring-your-own keys (one per team): a Vercel AI Gateway key or an OpenRouter key.
+ * Bring-your-own keys (one per team): Vercel AI Gateway, OpenRouter, Anthropic or OpenAI.
  *
  * The commissioner's spend caps protect the league's shared key. An owner who
  * wants to spend more can register their own key: their agent's runs are then
@@ -36,6 +36,7 @@ import {
 } from "../lib/key-providers";
 import { requireLeagueRead, requireOwnerOrCommissioner } from "./lib/auth";
 import { appError } from "./lib/errors";
+import { keyProviderValidator } from "./schema";
 import { encryptSecret, keyTail, secretsConfigured } from "./lib/secrets";
 
 const MIN_KEY_CHARS = 16;
@@ -43,7 +44,7 @@ const MAX_KEY_CHARS = 512;
 
 const OPENROUTER_KEY_ENDPOINT = "https://openrouter.ai/api/v1/key";
 
-const keyProviderValidator = v.union(v.literal("vercel"), v.literal("openrouter"));
+
 
 export type GatewayKeyStatus = {
   /** True when the team runs on its owner's own key. Visible to the whole league. */
@@ -178,28 +179,43 @@ export async function verifyGatewayKey(apiKey: string): Promise<{ ok: true } | {
  * usage) and costs nothing. A bad key answers 401. The model list is public
  * there too, so it is no probe either.
  */
-export async function verifyOpenRouterKey(apiKey: string): Promise<{ ok: true } | { ok: false; error: string }> {
+export function verifyOpenRouterKey(apiKey: string): Promise<KeyVerification> {
+  return verifyAuthenticatedEndpoint(OPENROUTER_KEY_ENDPOINT, { Authorization: `Bearer ${apiKey}` });
+}
+
+type KeyVerification = { ok: true } | { ok: false; error: string };
+
+/** Authenticated account/model reads validate credentials without generating billable tokens. */
+async function verifyAuthenticatedEndpoint(url: string, headers: Record<string, string>): Promise<KeyVerification> {
   try {
-    const response = await fetch(OPENROUTER_KEY_ENDPOINT, {
-      headers: { Authorization: `Bearer ${apiKey}` },
-    });
+    const response = await fetch(url, { headers, signal: AbortSignal.timeout(15_000) });
     if (response.ok) return { ok: true };
-    let detail = `HTTP ${response.status}`;
-    try {
-      const body = (await response.json()) as { error?: { message?: string } };
-      if (body?.error?.message) detail = `${detail}: ${body.error.message}`;
-    } catch {
-      // A non-JSON error body is fine; the status code is the message.
-    }
-    return { ok: false, error: detail.slice(0, 300) };
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    return { ok: false, error: message.slice(0, 300) };
+    // Never echo a provider response: OpenAI error messages can include the supplied key.
+    const detail = response.status === 401
+      ? "Invalid or expired API key."
+      : response.status === 403
+        ? "This key does not have permission to verify access. Check its API permissions."
+        : response.status === 429
+          ? "Verification is rate limited. Try again shortly."
+          : "Verification is unavailable. Check your account and try again.";
+    return { ok: false, error: `${detail} (HTTP ${response.status})` };
+  } catch {
+    return { ok: false, error: "Could not reach the provider to verify the key. Try again shortly." };
   }
 }
 
-export function verifyKey(provider: KeyProvider, apiKey: string) {
-  return provider === "openrouter" ? verifyOpenRouterKey(apiKey) : verifyGatewayKey(apiKey);
+export function verifyKey(provider: KeyProvider, apiKey: string): Promise<KeyVerification> {
+  switch (provider) {
+    case "openrouter": return verifyOpenRouterKey(apiKey);
+    case "anthropic": return verifyAuthenticatedEndpoint("https://api.anthropic.com/v1/models?limit=1", {
+      "x-api-key": apiKey,
+      "anthropic-version": "2023-06-01",
+    });
+    case "openai": return verifyAuthenticatedEndpoint("https://api.openai.com/v1/models", {
+      Authorization: `Bearer ${apiKey}`,
+    });
+    case "vercel": return verifyGatewayKey(apiKey);
+  }
 }
 
 /**
@@ -246,7 +262,7 @@ export const set = action({
     const mayskip = skipVerification === true && process.env.BYOK_ALLOW_UNVERIFIED === "1";
     const verified = mayskip ? { ok: true as const } : await verifyKey(provider, key);
     if (!verified.ok) {
-      throw appError("BAD_REQUEST", `${vendor.name} rejected that key: ${verified.error}`);
+      throw appError("BAD_REQUEST", `${vendor.name}: ${verified.error}`);
     }
     const sealed = await encryptSecret(key);
     await ctx.runMutation(internal.gateway_keys.store, {

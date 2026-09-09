@@ -1,8 +1,12 @@
 /**
- * Model resolution across the two bring-your-own-key vendors, and the cost
+ * Model resolution across the bring-your-own-key vendors, and the cost
  * figure each reports.
  */
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { generateText } from "ai";
+import { modelAvailableOnKeyProvider } from "../../lib/models";
+
+afterEach(() => vi.unstubAllGlobals());
 
 import { readGatewayCostUsd, resolveModel, type ResolveModelOptions } from "./model";
 
@@ -20,6 +24,45 @@ describe("resolveModel", () => {
     const model = resolved("zai/glm-5.3", { apiKey: KEY, keyProvider: "openrouter" });
     expect(model.modelId).toBe("z-ai/glm-5.3");
     expect(model.provider).toMatch(/openrouter/);
+  });
+
+  it.each([
+    ["anthropic", "anthropic/claude-opus-5", "claude-opus-5", "anthropic.messages"],
+    ["anthropic", "anthropic/claude-fable-5.1", "claude-fable-5-1", "anthropic.messages"],
+    ["openai", "openai/gpt-6-astra", "gpt-6-astra", "openai.responses"],
+    ["openai", "openai/gpt-5.6-terra", "gpt-5.6-terra", "openai.responses"],
+  ] as const)("routes %s keys directly for %s", (keyProvider, catalogId, nativeId, provider) => {
+    expect(resolved(catalogId, { apiKey: "test-owner-key", keyProvider })).toEqual({ modelId: nativeId, provider });
+    expect(modelAvailableOnKeyProvider(catalogId, keyProvider)).toBe(true);
+  });
+
+  it.each(["anthropic", "openai"] as const)("refuses another vendor's model on a %s key", (keyProvider) => {
+    expect(modelAvailableOnKeyProvider("google/gemini-3.8-flash", keyProvider)).toBe(false);
+    expect(modelAvailableOnKeyProvider("unknown/model", keyProvider)).toBe(false);
+    expect(() => resolveModel("google/gemini-3.8-flash", { apiKey: KEY, keyProvider })).toThrow(/not available through/);
+    expect(resolved("mock/scripted", { apiKey: KEY, keyProvider }).modelId).toBe("mock/scripted");
+  });
+
+  it.each([
+    ["anthropic", "anthropic/claude-fable-5.1", "https://api.anthropic.com/v1/messages", "claude-fable-5-1"],
+    ["openai", "openai/gpt-6-astra", "https://api.openai.com/v1/responses", "gpt-6-astra"],
+  ] as const)("sends the owner's %s key and reasoning setting to its native API", async (keyProvider, modelId, url, nativeId) => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response("{}", { status: 503 }));
+    vi.stubGlobal("fetch", fetchMock);
+    await expect(generateText({ model: resolveModel(modelId, { apiKey: "owner-secret", keyProvider }), prompt: "hello", reasoning: "high", maxRetries: 0 })).rejects.toThrow();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const [actualUrl, request] = fetchMock.mock.calls[0];
+    expect(actualUrl).toBe(url);
+    const headers = new Headers(request.headers);
+    expect(headers.get(keyProvider === "anthropic" ? "x-api-key" : "authorization")).toBe(keyProvider === "anthropic" ? "owner-secret" : "Bearer owner-secret");
+    const body = JSON.parse(request.body);
+    expect(body.model).toBe(nativeId);
+    if (keyProvider === "anthropic") {
+      expect(body.output_config.effort).toBe("high");
+      expect(body.thinking.type).toBe("adaptive");
+    } else {
+      expect(body.reasoning.effort).toBe("high");
+    }
   });
 
   it("keeps the gateway id on a Vercel key and on the league key", () => {

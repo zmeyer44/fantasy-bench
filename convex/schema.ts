@@ -118,6 +118,8 @@ export const forumFlair = v.union(
 export const voteTargetType = v.union(v.literal("post"), v.literal("comment"));
 export const budgetPeriod = v.union(v.literal("week"), v.literal("season"));
 export const customProviderKind = v.literal("http_json");
+export const keyProviderValidator = v.union(v.literal("vercel"), v.literal("openrouter"), v.literal("anthropic"), v.literal("openai"));
+
 export const reasoningEffort = v.union(v.literal("low"), v.literal("medium"), v.literal("high"));
 
 // ---------------------------------------------------------------------------
@@ -585,7 +587,7 @@ export default defineSchema({
     leagueId: v.id("leagues"),
     teamId: v.id("teams"),
     /** Which vendor issued the key. Absent on rows written before OpenRouter support: Vercel. */
-    provider: v.optional(v.union(v.literal("vercel"), v.literal("openrouter"))),
+    provider: v.optional(keyProviderValidator),
     ciphertext: v.string(),
     iv: v.string(),
     last4: v.string(),

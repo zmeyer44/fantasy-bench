@@ -593,6 +593,20 @@ describe("configs.save — validation against league rules", () => {
     expect(version?.modelId).toBe("anthropic/claude-fable-5.1");
   });
 
+  it.each([
+    ["anthropic", "anthropic/claude-fable-5.1", "openai/gpt-6-astra"],
+    ["openai", "openai/gpt-6-astra", "anthropic/claude-fable-5.1"],
+  ] as const)("a %s key permits its own models and rejects the other vendor", async (provider, allowed, blocked) => {
+    at(TUE_10_ET);
+    const { t, owner, leagueId, teamId } = await writeFixture();
+    await t.run(async (ctx) => {
+      await ctx.db.insert("team_gateway_keys", { leagueId, teamId, provider, ciphertext: "ciphertext", iv: "iv", last4: "cdef", addedByUserId: owner.userId, createdAt: Date.now() });
+    });
+    await expectIssue(owner.session.mutation(api.configs.save, { ...BASE, leagueId, teamId, modelId: blocked }), "modelId", /not available through/);
+    const saved = await owner.session.mutation(api.configs.save, { ...BASE, leagueId, teamId, modelId: allowed });
+    expect((await t.run(ctx => ctx.db.get("config_versions", saved.versionId)))?.modelId).toBe(allowed);
+  });
+
   it("rejects a model OpenRouter does not serve while the team's key is an OpenRouter key", async () => {
     at(TUE_10_ET);
     const { t, owner, leagueId, teamId } = await writeFixture();

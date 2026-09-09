@@ -6,9 +6,9 @@
  * a new entry here, a verification probe in `convex/gateway_keys.ts`, a client
  * factory in `convex/runtime/model.ts`, and per-model ids in `lib/models.ts`.
  */
-export type KeyProvider = "vercel" | "openrouter";
+export type KeyProvider = "vercel" | "openrouter" | "anthropic" | "openai";
 
-export const KEY_PROVIDERS: readonly KeyProvider[] = ["vercel", "openrouter"];
+export const KEY_PROVIDERS: readonly KeyProvider[] = ["vercel", "openrouter", "anthropic", "openai"];
 
 /** Rows without a `provider` predate OpenRouter support and are Vercel keys. */
 export const DEFAULT_KEY_PROVIDER: KeyProvider = "vercel";
@@ -44,6 +44,22 @@ export const KEY_PROVIDER_INFO: Record<KeyProvider, KeyProviderInfo> = {
     keyPrefix: "sk-or-",
     consoleUrl: "https://openrouter.ai/keys",
   },
+  anthropic: {
+    id: "anthropic",
+    label: "Anthropic",
+    name: "Anthropic",
+    placeholder: "sk-ant-…",
+    keyPrefix: "sk-ant-",
+    consoleUrl: "https://platform.claude.com/settings/keys",
+  },
+  openai: {
+    id: "openai",
+    label: "OpenAI",
+    name: "OpenAI",
+    placeholder: "sk-proj-…",
+    keyPrefix: "sk-",
+    consoleUrl: "https://platform.openai.com/api-keys",
+  },
 };
 
 /** The provider of a stored key row; rows without one predate OpenRouter support. */
@@ -61,7 +77,9 @@ export function isKeyProvider(value: unknown): value is KeyProvider {
  * OpenRouter slot (or vice versa) before we bother the vendor with it.
  */
 export function keyProviderFromPrefix(apiKey: string): KeyProvider | null {
-  for (const info of Object.values(KEY_PROVIDER_INFO)) {
+  // OpenAI's generic sk- prefix overlaps both Anthropic and OpenRouter.
+  const providers = Object.values(KEY_PROVIDER_INFO).sort((a, b) => b.keyPrefix.length - a.keyPrefix.length);
+  for (const info of providers) {
     if (apiKey.startsWith(info.keyPrefix)) return info.id;
   }
   return null;

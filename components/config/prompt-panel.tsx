@@ -1,6 +1,7 @@
 "use client";
 
 import { ArrowDown, ArrowUp, ChevronDown, X } from "lucide-react";
+import Link from "next/link";
 import { useState } from "react";
 
 import { MarkdownEditor } from "@/components/editor/markdown-editor";
@@ -31,7 +32,8 @@ export function PromptPanel({
   savingNote,
   onSkillsChange,
   onAttachSkill,
-  onAuthorSkill,
+  authorSkillHref,
+  onLeaveToAuthor,
   onSubmit,
 }: {
   contextMd: string;
@@ -47,7 +49,10 @@ export function PromptPanel({
   savingNote: boolean;
   onSkillsChange: (skills: AttachedSkill[]) => void;
   onAttachSkill: () => void;
-  onAuthorSkill: () => void;
+  /** Full-page composer — skills are markdown documents, not one-line fields. */
+  authorSkillHref: string;
+  /** Stash the draft attachments before the page navigates away. */
+  onLeaveToAuthor: () => void;
   onSubmit: () => void;
 }) {
   const [platformOpen, setPlatformOpen] = useState(false);
@@ -188,10 +193,10 @@ export function PromptPanel({
                 Attach from library
               </Button>
               <Button
-                type="button"
                 size="sm"
                 variant="outline"
-                onClick={onAuthorSkill}
+                render={<Link href={authorSkillHref} />}
+                onClick={onLeaveToAuthor}
               >
                 Author new
               </Button>

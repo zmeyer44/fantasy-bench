@@ -143,7 +143,7 @@ Rules:
 - **Spend caps and bring-your-own-key.** `league_rules.weeklyUsdCapPerTeam` (absent = $2.00 default,
   null = none; `effectiveWeeklyUsdCap`) joins the weekly token cap and the league USD hard cap in
   `ledger.remainingBudget`; the executor refuses to start a run whose team is at its cap and aborts a
-  step that would cross it. A team may register its own key, from Vercel AI Gateway or OpenRouter
+  step that would cross it. A team may register its own key, from Vercel AI Gateway, OpenRouter, Anthropic or OpenAI
   (`convex/gateway_keys.ts`, vendors in `lib/key-providers.ts`, AES-GCM at rest via
   `convex/lib/secrets.ts` and `BYOK_ENCRYPTION_KEY`; `team_gateway_keys.provider`, absent = Vercel):
   the run action decrypts it, resolves the model on a client for that key, skips every cap, and
@@ -151,7 +151,9 @@ Rules:
   OpenRouter key `resolveModel` translates the catalog id to `openRouterModelId` (`lib/models.ts`);
   a model OpenRouter does not serve is refused by `configs.save` and, failing that, by the executor
   before any spend, so the fallback model runs instead. OpenRouter's own cost figure lands in
-  `usage_events.gatewayCostUsd` like the gateway's.
+  `usage_events.gatewayCostUsd` like the gateway's. Direct Anthropic/OpenAI keys resolve to
+  `directModelId` through `@ai-sdk/anthropic` / `@ai-sdk/openai`, and reject other vendors' models.
+  Their costs use the catalog price calculation when no provider cost is returned.
 - Every step writes its `run_steps` row and its `usage_events` row (and the rollups) before the next
   step, so a run resumes from `lastPersistedStep` after a retry.
 - Models are addressed by gateway id (e.g. `anthropic/claude-opus-5`), always pinned, never an

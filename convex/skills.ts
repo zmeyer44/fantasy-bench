@@ -20,6 +20,12 @@ import { mutation, query } from "./_generated/server";
 import { optionalUser, requireUser } from "./lib/auth";
 import { appError } from "./lib/errors";
 import { slugifySkill } from "./lib/season";
+import {
+  MAX_SKILL_BODY_CHARS,
+  MAX_SKILL_DESCRIPTION_CHARS,
+  MAX_SKILL_NAME_CHARS,
+  MIN_SKILL_NAME_CHARS,
+} from "./lib/skills_pure";
 import { skillDoc } from "./lib/validators";
 import { skillVisibility } from "./schema";
 
@@ -189,10 +195,11 @@ export const get = query({
 
 // ----------------------------------------------------------------- write paths
 
-export const MAX_SKILL_BODY_CHARS = 20_000;
-export const MAX_SKILL_NAME_CHARS = 80;
-export const MAX_SKILL_DESCRIPTION_CHARS = 280;
-const MIN_SKILL_NAME_CHARS = 3;
+export {
+  MAX_SKILL_BODY_CHARS,
+  MAX_SKILL_DESCRIPTION_CHARS,
+  MAX_SKILL_NAME_CHARS,
+} from "./lib/skills_pure";
 
 /** `SkillValidationError` → BAD_REQUEST. */
 function validateBody(bodyMd: string): void {

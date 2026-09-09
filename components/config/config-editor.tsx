@@ -31,11 +31,12 @@ import { formatET } from "@/lib/time";
 
 import { ModelPanel } from "./model-panel";
 import { PromptPanel } from "./prompt-panel";
+import { AttachSkillDialog, type AttachedSkill } from "./skill-picker";
 import {
-  AttachSkillDialog,
-  AuthorSkillDialog,
-  type AttachedSkill,
-} from "./skill-picker";
+  skillStashKey,
+  stashDraftSkills,
+  takeStashedSkills,
+} from "./skill-stash";
 import { Toast, type ToastTone } from "./toast";
 import { toolCounts } from "./tool-model";
 import { ToolsPanel } from "./tools-panel";
@@ -97,7 +98,6 @@ export function ConfigEditor(props: ConfigEditorProps) {
   const [changeSummary, setChangeSummary] = useState("");
 
   const [attachOpen, setAttachOpen] = useState(false);
-  const [authorOpen, setAuthorOpen] = useState(false);
   const [toast, setToast] = useState<{
     message: string;
     tone: ToastTone;
@@ -156,6 +156,17 @@ export function ConfigEditor(props: ConfigEditorProps) {
 
   const overLimit = contextMd.length > rules.contextCharLimit;
   const draftKey = `context:${leagueId}:${teamId}`;
+  const stashKey = skillStashKey(leagueId, teamId);
+
+  // Authoring a skill happens on its own page; the attachments on the draft
+  // come back through the stash. Deferred so the first paint still matches the
+  // server — sessionStorage is client-only.
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      setSkills((current) => takeStashedSkills(stashKey, current) ?? current);
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [stashKey]);
 
   // What the last save (or first paint) looked like, so the bar goes quiet again after saving.
   const [baseline, setBaseline] = useState(() => ({
@@ -325,7 +336,8 @@ export function ConfigEditor(props: ConfigEditorProps) {
             savingNote={savingNote}
             onSkillsChange={setSkills}
             onAttachSkill={() => setAttachOpen(true)}
-            onAuthorSkill={() => setAuthorOpen(true)}
+            authorSkillHref={`/leagues/${props.leagueId}/teams/${props.teamId}/config/skills/new`}
+            onLeaveToAuthor={() => stashDraftSkills(stashKey, skills)}
             onSubmit={() => void submitVersion()}
           />
         </TabsContent>
@@ -424,11 +436,6 @@ export function ConfigEditor(props: ConfigEditorProps) {
         onClose={() => setAttachOpen(false)}
         attachedIds={skillIds}
         onAttach={attach}
-      />
-      <AuthorSkillDialog
-        open={authorOpen}
-        onClose={() => setAuthorOpen(false)}
-        onCreated={attach}
       />
       <Toast
         message={toast?.message ?? null}

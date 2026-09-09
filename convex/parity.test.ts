@@ -3163,6 +3163,7 @@ describe("commissioner.* (was commissioner.*)", () => {
       ...additiveColumn("commissioner.settings.catalog[0].requiresOwnKey"),
       // …and its id on OpenRouter, for teams whose own key is an OpenRouter key.
       ...additiveColumn("commissioner.settings.catalog[0].openRouterModelId"),
+      ...additiveColumn("commissioner.settings.catalog[0].directModelId"),
     ]);
 
     // DEVIATION (Phase 2, documented): the old `commissioner.settings` *minted* a

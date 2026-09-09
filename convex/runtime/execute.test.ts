@@ -437,12 +437,12 @@ describe("executeRun — team spend cap and bring-your-own-key", () => {
     expect(platform).toMatch(/weekly spend cap: \$0\.00/);
   });
 
-  test("a team on its own OpenRouter key runs the same way", async () => {
+  test.each(["openrouter", "anthropic", "openai"] as const)("a team on its own %s key runs the same way", async (teamKeyProvider) => {
     const t = makeTest();
     const fx = await seedFixture(t, {
       weeklyUsdCapPerTeam: 0,
       teamKey: "sk-or-v1-0123456789abcdef0123456789abcdef",
-      teamKeyProvider: "openrouter",
+      teamKeyProvider,
     });
     const result = await t.action(internal.runtime.execute.executeRun, { runId: fx.runId, now: NOW });
     expect(result.status).toBe("succeeded");

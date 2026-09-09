@@ -46,11 +46,14 @@ export type ModelCatalogEntry = {
    * another model (the editor and `configs.save` both say so).
    */
   openRouterModelId: string | null;
+  /** Native API id for direct Anthropic/OpenAI keys; absent for other vendors. */
+  directModelId?: string;
 };
 
 export const MODEL_CATALOG: readonly ModelCatalogEntry[] = [
   {
     modelId: "openai/gpt-5.6-terra",
+    directModelId: "gpt-5.6-terra",
     openRouterModelId: "openai/gpt-5.6-terra",
     provider: "openai",
     displayName: "GPT-5.6 Terra",
@@ -64,6 +67,7 @@ export const MODEL_CATALOG: readonly ModelCatalogEntry[] = [
   },
   {
     modelId: "anthropic/claude-opus-5",
+    directModelId: "claude-opus-5",
     openRouterModelId: "anthropic/claude-opus-5",
     provider: "anthropic",
     displayName: "Claude Opus 5",
@@ -77,6 +81,7 @@ export const MODEL_CATALOG: readonly ModelCatalogEntry[] = [
   },
   {
     modelId: "anthropic/claude-fable-5.1",
+    directModelId: "claude-fable-5-1",
     openRouterModelId: "anthropic/claude-fable-5.1",
     provider: "anthropic",
     displayName: "Claude Fable 5.1",
@@ -90,6 +95,7 @@ export const MODEL_CATALOG: readonly ModelCatalogEntry[] = [
   },
   {
     modelId: "openai/gpt-6-astra",
+    directModelId: "gpt-6-astra",
     openRouterModelId: "openai/gpt-6-astra",
     provider: "openai",
     displayName: "GPT-6 Astra",
@@ -103,6 +109,7 @@ export const MODEL_CATALOG: readonly ModelCatalogEntry[] = [
   },
   {
     modelId: "openai/gpt-5.6-sol",
+    directModelId: "gpt-5.6-sol",
     openRouterModelId: "openai/gpt-5.6-sol",
     provider: "openai",
     displayName: "GPT-5.6 Sol",
@@ -263,6 +270,11 @@ export function openRouterModelIdFor(modelId: string): string | null {
   return findModel(modelId)?.openRouterModelId ?? null;
 }
 
+export function directModelIdFor(modelId: string, provider: "anthropic" | "openai"): string | null {
+  const model = findModel(modelId);
+  return model?.provider === provider ? model.directModelId ?? null : null;
+}
+
 /**
  * Whether a team whose own key comes from `keyProvider` can run this model.
  * Every catalog model runs on a Vercel AI Gateway key; OpenRouter serves most
@@ -271,6 +283,7 @@ export function openRouterModelIdFor(modelId: string): string | null {
 export function modelAvailableOnKeyProvider(modelId: string, keyProvider: KeyProvider): boolean {
   if (modelId.startsWith("mock/")) return true;
   if (keyProvider === "openrouter") return openRouterModelIdFor(modelId) !== null;
+  if (keyProvider === "anthropic" || keyProvider === "openai") return directModelIdFor(modelId, keyProvider) !== null;
   return true;
 }
 

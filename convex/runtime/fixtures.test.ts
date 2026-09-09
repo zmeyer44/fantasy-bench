@@ -220,7 +220,7 @@ export type FixtureOptions = {
   /** Register an encrypted gateway key for team A (bring-your-own-key). */
   teamKey?: string;
   /** Which vendor issued `teamKey`; omitted = a legacy row with no provider (Vercel). */
-  teamKeyProvider?: "vercel" | "openrouter";
+  teamKeyProvider?: "vercel" | "openrouter" | "anthropic" | "openai";
   runWallclockSeconds?: number;
   runStatus?: Doc<"runs">["status"];
   /** Skip the mock model price row (so the ledger falls back to the catalog). */

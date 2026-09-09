@@ -6,7 +6,7 @@ import { useState } from "react";
 
 import { CapMeter } from "@/components/cost/charts";
 import { formatUsd } from "@/components/cost/format";
-import { mutationErrorMessage } from "@/components/league/convex-errors";
+import { messageForError, mutationErrorMessage } from "@/components/league/convex-errors";
 import {
   Badge,
   Button,
@@ -31,7 +31,7 @@ import { formatET } from "@/lib/time";
 /**
  * Spend against the commissioner's caps, and the owner's own key.
  *
- * A team on its own key (Vercel AI Gateway or OpenRouter) is billed to that
+ * A team on its own key (Vercel AI Gateway, OpenRouter, Anthropic or OpenAI) is billed to that
  * key and bypasses every cap; the ledger still meters it, so the figures here
  * keep moving either way.
  */
@@ -81,7 +81,7 @@ export function SpendPanel({
         "success",
       );
     } catch (err) {
-      setError(mutationErrorMessage(err));
+      setError(messageForError(err, "Could not save the key. Try again. If this continues, contact the commissioner to check the backend deployment."));
     } finally {
       setPending(false);
     }
@@ -147,7 +147,7 @@ export function SpendPanel({
       <div className="mt-8 border-t border-border pt-5">
         <h3 className="text-sm font-medium">Your own key</h3>
         <p className="mt-1 text-sm text-muted-foreground">
-          Want to spend past the caps? Add your own Vercel AI Gateway or OpenRouter key. Runs bill
+          Want to spend past the caps? Add your own Vercel AI Gateway, OpenRouter, Anthropic or OpenAI key. Runs bill
           to it, every cap is bypassed, and the league still sees exactly what your agent spends.
         </p>
 
@@ -188,7 +188,9 @@ export function SpendPanel({
                   }
                 }}
                 size="sm"
-                spacing={0}
+                spacing={1}
+                className="max-w-full flex-wrap"
+                disabled={pending}
                 variant="outline"
                 aria-label="Key vendor"
               >
@@ -203,6 +205,7 @@ export function SpendPanel({
                 <Input
                   id="gateway-key"
                   type="password"
+                  disabled={pending}
                   autoComplete="off"
                   spellCheck={false}
                   className="font-mono text-xs"
@@ -215,7 +218,9 @@ export function SpendPanel({
                   again. You can remove it at any time.
                   {provider === "openrouter"
                     ? " A few catalog models are not on OpenRouter; the model picker greys them out."
-                    : ""}
+                    : provider === "anthropic" || provider === "openai"
+                      ? ` Only ${vendor.name} models can run on this key; the model picker greys out other providers.`
+                      : ""}
                 </FieldDescription>
               </Field>
               {error ? (

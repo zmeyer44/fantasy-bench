@@ -3,7 +3,8 @@
  * the league can see, and the ledger's team spend cap.
  */
 import { convexTest } from "convex-test";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { keyProviderFromPrefix } from "../lib/key-providers";
 
 import { api, internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
@@ -57,6 +58,8 @@ async function fixture() {
   await other.session.mutation(api.leagues.join, { leagueId });
   return { t, commish, owner, other, leagueId, teamId: teamIds[0] as Id<"teams"> };
 }
+
+afterEach(() => { vi.unstubAllGlobals(); vi.unstubAllEnvs(); });
 
 const KEY = "vck_live_0123456789abcdefghijklmnop";
 
@@ -206,6 +209,63 @@ describe("gateway_keys — OpenRouter", () => {
     });
     expect((await owner.session.query(api.gateway_keys.status, { leagueId, teamId })).provider).toBe("vercel");
     expect((await t.query(internal.gateway_keys.forTeam, { teamId }))?.provider).toBe("vercel");
+  });
+});
+
+const VERIFIED_PROVIDERS = [
+  { provider: "openrouter", key: OPENROUTER_KEY, url: "https://openrouter.ai/api/v1/key", headers: { Authorization: `Bearer ${OPENROUTER_KEY}` } },
+  { provider: "anthropic", key: "sk-ant-api03-0123456789abcdef", url: "https://api.anthropic.com/v1/models?limit=1", headers: { "x-api-key": "sk-ant-api03-0123456789abcdef", "anthropic-version": "2023-06-01" } },
+  { provider: "openai", key: "sk-proj-0123456789abcdef", url: "https://api.openai.com/v1/models", headers: { Authorization: "Bearer sk-proj-0123456789abcdef" } },
+] as const;
+
+describe("verified BYOK saves", () => {
+  it.each(VERIFIED_PROVIDERS)("verifies, encrypts and stores a $provider key", async ({ provider, key, url, headers }) => {
+    const { t, owner, other, leagueId, teamId } = await fixture();
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({ data: [] }), { status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
+    // A client cannot bypass verification on deployments that have not opted in.
+    vi.stubEnv("BYOK_ALLOW_UNVERIFIED", "0");
+    const result = await owner.session.action(api.gateway_keys.set, { teamId, apiKey: `  ${key}  `, provider, skipVerification: true });
+    expect(result).toEqual({ provider, last4: "cdef", verified: true });
+    expect(fetchMock).toHaveBeenCalledExactlyOnceWith(url, { headers, signal: expect.any(AbortSignal) });
+    const stored = await t.query(internal.gateway_keys.forTeam, { teamId });
+    expect(stored?.provider).toBe(provider);
+    expect(JSON.stringify(stored)).not.toContain(key);
+    expect(await decryptSecret(stored!)).toBe(key);
+    expect(await other.session.query(api.gateway_keys.status, { leagueId, teamId })).toMatchObject({ hasKey: true, provider, last4: null, verifiedAt: null });
+    expect((await owner.session.query(api.gateway_keys.status, { leagueId, teamId })).verifiedAt).toEqual(expect.any(Number));
+    await owner.session.mutation(api.gateway_keys.remove, { teamId });
+    expect(await t.query(internal.gateway_keys.forTeam, { teamId })).toBeNull();
+  });
+
+  it.each(VERIFIED_PROVIDERS)("keeps the previous key when $provider rejects a replacement and never echoes the secret", async ({ provider, key }) => {
+    const { t, owner, teamId } = await fixture();
+    await owner.session.action(api.gateway_keys.set, { teamId, apiKey: KEY, skipVerification: true });
+    const before = await t.query(internal.gateway_keys.forTeam, { teamId });
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(JSON.stringify({ error: { message: `Invalid API key: ${key}` } }), { status: 401 })));
+    const error = await owner.session.action(api.gateway_keys.set, { teamId, apiKey: key, provider }).catch(e => e);
+    expect(error.data).toMatchObject({ code: "BAD_REQUEST", message: expect.stringContaining("Invalid or expired API key") });
+    expect(JSON.stringify(error.data)).not.toContain(key);
+    expect(await t.query(internal.gateway_keys.forTeam, { teamId })).toEqual(before);
+  });
+
+  it("reports network failures without storing a key or leaking error details", async () => {
+    const { t, owner, teamId } = await fixture();
+    vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error(`Network error ${OPENROUTER_KEY}`)));
+    await expect(owner.session.action(api.gateway_keys.set, { teamId, apiKey: OPENROUTER_KEY, provider: "openrouter" })).rejects.toThrow(/Could not reach the provider/);
+    expect(await t.query(internal.gateway_keys.forTeam, { teamId })).toBeNull();
+  });
+
+  it("recognizes overlapping sk- prefixes and rejects a direct key in the wrong slot before fetching", async () => {
+    const { owner, teamId } = await fixture();
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+    for (const { provider, key } of VERIFIED_PROVIDERS) {
+      expect(keyProviderFromPrefix(key)).toBe(provider);
+      await expect(owner.session.action(api.gateway_keys.set, { teamId, apiKey: key, provider: "vercel" })).rejects.toThrow(/looks like/);
+    }
+    expect(keyProviderFromPrefix("sk-legacy0123456789")).toBe("openai");
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 });
 

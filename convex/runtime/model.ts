@@ -22,11 +22,13 @@
  * pre-step estimate and the ledger's recorded cost can never disagree.
  */
 import { createGateway } from "@ai-sdk/gateway";
+import { createAnthropic } from "@ai-sdk/anthropic";
+import { createOpenAI } from "@ai-sdk/openai";
 import { createOpenRouter } from "@openrouter/ai-sdk-provider";
 import type { LanguageModel } from "ai";
 
-import type { KeyProvider } from "../../lib/key-providers";
-import { findModel, openRouterModelIdFor } from "../../lib/models";
+import { KEY_PROVIDER_INFO, type KeyProvider } from "../../lib/key-providers";
+import { directModelIdFor, findModel, openRouterModelIdFor } from "../../lib/models";
 import { createMockModel, MOCK_MODEL_IDS } from "./mock_model";
 
 export function isMockModelId(modelId: string): boolean {
@@ -110,6 +112,16 @@ export function resolveModel(modelId: string, options: ResolveModelOptions = {})
   }
   if (options.apiKey && options.keyProvider === "openrouter") {
     return openRouterModel(id, options.apiKey, options.reasoningEffort ?? null);
+  }
+  if (options.apiKey && (options.keyProvider === "anthropic" || options.keyProvider === "openai")) {
+    const provider = options.keyProvider;
+    const nativeId = directModelIdFor(id, provider);
+    if (!nativeId) {
+      throw new Error(`resolveModel: ${id} is not available through ${KEY_PROVIDER_INFO[provider].name}; pick a supported model or replace the key under Spend.`);
+    }
+    return provider === "anthropic"
+      ? createAnthropic({ apiKey: options.apiKey })(nativeId)
+      : createOpenAI({ apiKey: options.apiKey }).responses(nativeId);
   }
   if (options.apiKey) return createGateway({ apiKey: options.apiKey })(id);
   return getGateway()(id);
