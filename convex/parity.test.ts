@@ -3159,6 +3159,8 @@ describe("commissioner.* (was commissioner.*)", () => {
       ...additiveColumn("commissioner.settings.teams"),
       // Catalog entries now say whether the gateway accepts `temperature`.
       ...additiveColumn("commissioner.settings.catalog[0].supportsTemperature"),
+      // …and whether it only runs on a team's own gateway key.
+      ...additiveColumn("commissioner.settings.catalog[0].requiresOwnKey"),
     ]);
 
     // DEVIATION (Phase 2, documented): the old `commissioner.settings` *minted* a

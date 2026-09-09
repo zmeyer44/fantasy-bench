@@ -239,7 +239,7 @@ describe("configs.versions", () => {
 
     expect(first.createdByName).toBeNull();
     expect(first.isCurrent).toBe(false);
-    expect(first.modelDisplayName).toBe("Claude Opus 5");
+    expect(first.modelDisplayName).toBe("GPT-5.6 Terra");
   });
 
   it("redacts a cooling version's content in the history for everyone else", async () => {
@@ -305,7 +305,7 @@ describe("configs.version + configs.diff", () => {
     expect(diff.model).toMatchObject({
       field: "modelId",
       label: "Model",
-      from: "Claude Opus 5",
+      from: "GPT-5.6 Terra",
       to: "GPT-5.6 Sol",
       changed: true,
     });
@@ -361,7 +361,7 @@ describe("configs.lockStatus + configs.estimate", () => {
       leagueId,
       contextMd,
       skillIds: [skillId, skillId],
-      modelId: "anthropic/claude-opus-5",
+      modelId: "openai/gpt-5.6-terra",
     });
 
     const body = "# Injury aware\n\nBody text for Injury aware.";
@@ -374,10 +374,10 @@ describe("configs.lockStatus + configs.estimate", () => {
     expect(estimate.breakdown.assumedSteps).toBe(ASSUMED_STEPS);
     expect(estimate.breakdown.assumedOutputTokensPerStep).toBe(ASSUMED_OUTPUT_TOKENS_PER_STEP);
     expect(estimate.breakdown.modelKnown).toBe(true);
-    expect(estimate.breakdown.inputPerM).toBe(5);
-    expect(estimate.breakdown.outputPerM).toBe(25);
+    expect(estimate.breakdown.inputPerM).toBe(2);
+    expect(estimate.breakdown.outputPerM).toBe(12);
 
-    const perStep = (expectedTokens * 5) / 1e6 + (ASSUMED_OUTPUT_TOKENS_PER_STEP * 25) / 1e6;
+    const perStep = (expectedTokens * 2) / 1e6 + (ASSUMED_OUTPUT_TOKENS_PER_STEP * 12) / 1e6;
     expect(estimate.estimatedCostPerRunUsd).toBeCloseTo(perStep * ASSUMED_STEPS, 8);
   });
 
@@ -432,7 +432,7 @@ function at(instant: Date) {
 
 const BASE = {
   contextMd: "# My agent\n\nStart the best players.",
-  modelId: "anthropic/claude-opus-5",
+  modelId: "openai/gpt-5.6-terra",
   harness: {
     maxSteps: 12,
     tokenBudget: 60_000,
@@ -570,6 +570,29 @@ describe("configs.save — validation against league rules", () => {
     );
   });
 
+  it("rejects a model that only runs on the owner's own key until one is on file", async () => {
+    at(TUE_10_ET);
+    const { t, owner, leagueId, teamId } = await writeFixture();
+    const gated = { ...BASE, leagueId, teamId, modelId: "anthropic/claude-fable-5.1" };
+    await expectIssue(owner.session.mutation(api.configs.save, gated), "modelId", /requires your own gateway key/);
+
+    await t.run(async (ctx) => {
+      await ctx.db.insert("team_gateway_keys", {
+        leagueId,
+        teamId,
+        ciphertext: "ciphertext",
+        iv: "iv",
+        last4: "mnop",
+        addedByUserId: owner.userId,
+        createdAt: Date.now(),
+      });
+    });
+    const saved = await owner.session.mutation(api.configs.save, gated);
+    expect(saved.versionNo).toBeGreaterThan(0);
+    const version = await t.run((ctx) => ctx.db.get("config_versions", saved.versionId));
+    expect(version?.modelId).toBe("anthropic/claude-fable-5.1");
+  });
+
   it("rejects max steps above the league cap and above the platform ceiling", async () => {
     at(TUE_10_ET);
     const { t, owner, leagueId, teamId } = await writeFixture();
@@ -631,7 +654,7 @@ describe("configs.save — validation against league rules", () => {
     at(TUE_10_ET);
     const { t, owner, leagueId, teamId } = await writeFixture();
     await setRules(t, leagueId, {
-      modelAllowlist: ["mock/scripted", "anthropic/claude-opus-5"],
+      modelAllowlist: ["mock/scripted", "openai/gpt-5.6-terra"],
     });
     await expectIssue(
       owner.session.mutation(api.configs.save, {

@@ -22,7 +22,7 @@ type T = ReturnType<typeof newTest>;
 
 const NOW = Date.now();
 const SEASON = 2026;
-const SONNET = "anthropic/claude-opus-5";
+const SONNET = "openai/gpt-5.6-terra";
 const HAIKU = "google/gemini-3.8-flash";
 
 const RULES = {
@@ -241,7 +241,7 @@ describe("ledger.leagueDashboard", () => {
 
     expect(dash.byModel.map((row) => [row.modelId, row.usd, row.displayName])).toEqual([
       [HAIKU, 4, "Gemini 3.8 Flash"],
-      [SONNET, 3, "Claude Opus 5"],
+      [SONNET, 3, "GPT-5.6 Terra"],
     ]);
 
     // Trend excludes week 0, and is week-ordered.
@@ -357,14 +357,14 @@ describe("ledger.benchmark / ledger.modelPrices", () => {
     await seed(t);
     const before = await t.query(api.ledger.modelPrices, {});
     const sonnet = before.find((row) => row.modelId === SONNET)!;
-    expect(sonnet.inputPerM).toBe(5);
+    expect(sonnet.inputPerM).toBe(2);
     expect(sonnet.effectiveFrom).toBeNull();
 
     await t.run(async (ctx) => {
       await ctx.db.insert("model_prices", {
         modelId: SONNET,
-        provider: "anthropic",
-        displayName: "Claude Opus 5",
+        provider: "openai",
+        displayName: "GPT-5.6 Terra",
         inputPerM: 4,
         outputPerM: 20,
         supportsReasoning: true,
@@ -372,8 +372,8 @@ describe("ledger.benchmark / ledger.modelPrices", () => {
       });
       await ctx.db.insert("model_prices", {
         modelId: SONNET,
-        provider: "anthropic",
-        displayName: "Claude Opus 5",
+        provider: "openai",
+        displayName: "GPT-5.6 Terra",
         inputPerM: 99,
         outputPerM: 99,
         supportsReasoning: true,
@@ -609,14 +609,14 @@ describe("ledger.recordStep", () => {
     const t = convexTest(schema, modules);
     const s = await seedRuntime(t);
 
-    // SONNET has no `model_prices` row here: the catalog ($5/$25) is used.
+    // SONNET has no `model_prices` row here: the catalog ($2/$12) is used.
     const catalog = await t.mutation(internal.ledger.recordStep, {
       runId: s.runA2,
       stepIndex: 0,
       modelId: SONNET,
       usage: usage(1_000_000, 0),
     });
-    expect(catalog.computedCostUsd).toBeCloseTo(5, 6);
+    expect(catalog.computedCostUsd).toBeCloseTo(2, 6);
 
     // A model in neither place prices at zero rather than throwing.
     const unknown = await t.mutation(internal.ledger.recordStep, {

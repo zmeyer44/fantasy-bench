@@ -243,7 +243,7 @@ async function tableCount(table: string): Promise<number> {
  * Force every current config version onto `mock/scripted`.
  *
  * `scripts/loadtest-seed.ts` spreads teams across `mock/scripted`,
- * `anthropic/claude-opus-5` and `openai/gpt-5.6-sol`, and the load-test
+ * `openai/gpt-5.6-terra` and `openai/gpt-5.6-sol`, and the load-test
  * deployment has no `AI_GATEWAY_API_KEY` — 400 of the 600 runs would fail in
  * `resolveModel` and the test would measure the failure path instead of
  * throughput. `seed.patchBatch` is the SEED_SECRET-guarded way to fix that

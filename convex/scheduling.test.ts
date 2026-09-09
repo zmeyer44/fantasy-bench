@@ -513,7 +513,7 @@ describe("windows.dispatch", () => {
         leagueId: s.leagueId,
         teamId: s.teamIds[0],
         versionNo: 1,
-        modelId: "openai/gpt-6-astra",
+        modelId: "moonshotai/kimi-k3",
         contextMd: "Be good.",
         skillIds: [],
         harness: {
@@ -534,7 +534,7 @@ describe("windows.dispatch", () => {
 
     const runs = await runsFor(t, windowId);
     const configured = runs.find((r) => r.teamId === s.teamIds[0])!;
-    expect(configured.modelId).toBe("openai/gpt-6-astra");
+    expect(configured.modelId).toBe("moonshotai/kimi-k3");
     expect(configured.configVersionId).toBe(versionId);
     expect(runs.filter((r) => r.modelId === "google/gemini-3.8-flash")).toHaveLength(2);
   });

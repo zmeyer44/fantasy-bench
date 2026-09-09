@@ -42,6 +42,7 @@ import {
   DEFAULT_FALLBACK_MODEL_ID,
   DEFAULT_MODEL_ALLOWLIST,
   DEFAULT_MODEL_ID,
+  leagueDefaultModelId,
 } from "@/lib/models";
 
 type Ctx = QueryCtx | MutationCtx;
@@ -473,7 +474,7 @@ async function buildLeague(
       ctx,
       teamId,
       leagueId,
-      modelAllowlist[0] ?? DEFAULT_MODEL_ID,
+      leagueDefaultModelId(modelAllowlist),
     );
   }
 
@@ -630,7 +631,7 @@ export const createDefaultAgentConfig = internalMutation({
     const team = await ctx.db.get("teams", teamId);
     if (!team) throw appError("NOT_FOUND", "Team not found.");
     const rules = await rulesOf(ctx, team.leagueId);
-    const fallback = rules?.modelAllowlist[0] ?? DEFAULT_MODEL_ID;
+    const fallback = leagueDefaultModelId(rules?.modelAllowlist);
     return createAgentConfig(ctx, teamId, team.leagueId, modelId ?? fallback);
   },
 });

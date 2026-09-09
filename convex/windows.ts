@@ -12,7 +12,7 @@
  */
 import { v } from "convex/values";
 
-import { DEFAULT_MODEL_ID } from "../lib/models";
+import { leagueDefaultModelId } from "../lib/models";
 import { internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
 import {
@@ -290,7 +290,7 @@ async function assignmentsFor(
   teamIds: Id<"teams">[],
 ): Promise<Array<{ teamId: Id<"teams">; modelId: string; configVersionId?: Id<"config_versions"> }>> {
   const rules = await rulesOf(ctx, leagueId);
-  const leagueDefault = rules?.modelAllowlist?.[0] ?? DEFAULT_MODEL_ID;
+  const leagueDefault = leagueDefaultModelId(rules?.modelAllowlist);
   const out: Array<{
     teamId: Id<"teams">;
     modelId: string;

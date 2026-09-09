@@ -47,7 +47,7 @@ import {
   type ToolOverride,
 } from "./runtime/tools/catalog";
 import { reasoningEffort, toolOverride } from "./schema";
-import { DEFAULT_MODEL_ID, findModel } from "@/lib/models";
+import { findModel, leagueDefaultModelId } from "@/lib/models";
 import { isWithinEditWindow } from "@/lib/time";
 
 type Ctx = QueryCtx | MutationCtx;
@@ -453,6 +453,15 @@ function validationError(issues: ConfigIssue[]): ConvexError<{
 }
 
 /** The team's `agent_configs` row, created on first write if a team predates it. */
+/** Whether the team runs on its owner's own gateway key (`gateway_keys`). */
+async function teamHasOwnKey(ctx: QueryCtx | MutationCtx, teamId: Id<"teams">): Promise<boolean> {
+  const row = await ctx.db
+    .query("team_gateway_keys")
+    .withIndex("by_teamId", (q) => q.eq("teamId", teamId))
+    .unique();
+  return row !== null;
+}
+
 async function ensureConfig(
   ctx: MutationCtx,
   team: Doc<"teams">,
@@ -595,6 +604,7 @@ export const save = mutation({
       skillIds,
       rules,
       noteWasAppended: note.length > 0,
+      hasOwnKey: await teamHasOwnKey(ctx, access.team._id),
     });
 
     const toolOverrides = normalizeToolOverrides(args.toolOverrides ?? []);
@@ -656,7 +666,7 @@ export const saveToolOverride = mutation({
     const baseId = config.pendingVersionId ?? config.currentVersionId;
     const base = baseId ? await ctx.db.get("config_versions", baseId) : null;
     const contextMd = base?.contextMd ?? DEFAULT_AGENT_CONTEXT;
-    const modelId = base?.modelId ?? rules?.modelAllowlist?.[0] ?? DEFAULT_MODEL_ID;
+    const modelId = base?.modelId ?? leagueDefaultModelId(rules?.modelAllowlist);
     const harness = base ? parseHarness(base.harness) : DEFAULT_HARNESS;
     const skillIds = base?.skillIds ?? [];
 
@@ -671,6 +681,7 @@ export const saveToolOverride = mutation({
       skillIds,
       rules,
       noteWasAppended: false,
+      hasOwnKey: await teamHasOwnKey(ctx, access.team._id),
     });
     issues.push(...validateToolOverrides(toolOverrides));
     if (issues.length > 0) throw validationError(issues);

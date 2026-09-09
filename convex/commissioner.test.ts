@@ -102,12 +102,12 @@ describe("commissioner.settings — shape", () => {
     expect(settings.invite).toEqual({ code: null, url: null });
     expect(settings.changes).toHaveLength(1);
     expect(settings.changes[0]).toMatchObject({ field: "scoringPreset", userName: "Commish" });
-    expect(settings.catalog.some((entry) => entry.modelId === "anthropic/claude-opus-5")).toBe(
+    expect(settings.catalog.some((entry) => entry.modelId === "openai/gpt-5.6-terra")).toBe(
       true,
     );
     // Every team starts on the first model of the allowlist.
     expect(settings.modelsInUse).toEqual([
-      { modelId: "anthropic/claude-opus-5", teamCount: teamIds.length },
+      { modelId: "openai/gpt-5.6-terra", teamCount: teamIds.length },
     ]);
     // A league in `setup` with no rulesLockedAt is unlocked.
     expect(settings.locked).toBe(false);
@@ -131,7 +131,7 @@ describe("commissioner.settings — shape", () => {
     expect(seated.ownerEmail).toBe("owner@fantasybench.dev");
     expect(seated.abbreviation.length).toBeGreaterThan(0);
     // Every team starts on the first model of the allowlist, at version 1.
-    expect(seated.modelId).toBe("anthropic/claude-opus-5");
+    expect(seated.modelId).toBe("openai/gpt-5.6-terra");
     expect(seated.configVersionNo).toBe(1);
 
     const unowned = teams.filter((team) => team.ownerUserId === null);
@@ -155,8 +155,8 @@ describe("commissioner.settings — shape", () => {
 
     const settings = await commish.session.query(api.commissioner.settings, { leagueId });
     expect(settings.modelsInUse).toEqual([
-      { modelId: "anthropic/claude-opus-5", teamCount: teamIds.length - 1 },
       { modelId: "openai/gpt-5.6-sol", teamCount: 1 },
+      { modelId: "openai/gpt-5.6-terra", teamCount: teamIds.length - 1 },
     ]);
     expect(settings.locked).toBe(true);
     expect(settings.invite.code).toBe("JOIN1234");
@@ -382,13 +382,13 @@ describe("commissioner mutations — authorization", () => {
         () =>
           t.mutation(api.commissioner.replaceDeprecatedModel, {
             leagueId,
-            fromModelId: "anthropic/claude-opus-5",
+            fromModelId: "openai/gpt-5.6-terra",
             toModelId: "google/gemini-3.8-flash",
           }),
         () =>
           owner.session.mutation(api.commissioner.replaceDeprecatedModel, {
             leagueId,
-            fromModelId: "anthropic/claude-opus-5",
+            fromModelId: "openai/gpt-5.6-terra",
             toModelId: "google/gemini-3.8-flash",
           }),
       ],
@@ -526,9 +526,9 @@ describe("commissioner.setModelAllowlist — pinned ids only", () => {
     const { t, commish, leagueId } = await fixture();
     const rules = await commish.session.mutation(api.commissioner.setModelAllowlist, {
       leagueId,
-      modelIds: ["anthropic/claude-opus-5", "anthropic/claude-opus-5", "mock/scripted"],
+      modelIds: ["openai/gpt-5.6-terra", "openai/gpt-5.6-terra", "mock/scripted"],
     });
-    expect(rules.modelAllowlist).toEqual(["anthropic/claude-opus-5", "mock/scripted"]);
+    expect(rules.modelAllowlist).toEqual(["openai/gpt-5.6-terra", "mock/scripted"]);
     expect((await changes(t, leagueId)).some((row) => row.field === "rules.modelAllowlist")).toBe(
       true,
     );
@@ -585,6 +585,27 @@ describe("commissioner.setBudgets / setEditLock / setWindowOverrides / setFallba
       injectionPolicy: "prohibited",
     });
     expect(injection.injectionPolicy).toBe("prohibited");
+  });
+
+  it("refuses a fallback or replacement model that only runs on a team's own key", async () => {
+    const { commish, leagueId } = await fixture();
+    expect(
+      await errorCode(
+        commish.session.mutation(api.commissioner.setFallbacks, {
+          leagueId,
+          fallbackModelId: "anthropic/claude-fable-5.1",
+        }),
+      ),
+    ).toBe("BAD_REQUEST");
+    expect(
+      await errorCode(
+        commish.session.mutation(api.commissioner.replaceDeprecatedModel, {
+          leagueId,
+          fromModelId: "openai/gpt-5.6-terra",
+          toModelId: "openai/gpt-6-astra",
+        }),
+      ),
+    ).toBe("BAD_REQUEST");
   });
 
   it("refuses an unpinned fallback model", async () => {
@@ -906,7 +927,7 @@ describe("commissioner.replaceDeprecatedModel", () => {
         return (error as { data?: { message?: string } }).data?.message ?? String(error);
       }
     };
-    expect(await message("anthropic/claude-opus-5", "anthropic/claude-sonnet-latest")).toMatch(
+    expect(await message("openai/gpt-5.6-terra", "anthropic/claude-sonnet-latest")).toMatch(
       /alias|pinned/i,
     );
     expect(await message("mock/scripted", "mock/scripted")).toMatch(/different replacement/i);

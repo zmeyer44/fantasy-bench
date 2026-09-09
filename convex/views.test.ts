@@ -145,7 +145,7 @@ async function populate(t: ReturnType<typeof convexTest>, s: Empty) {
       leagueId: s.leagueId,
       versionNo: 3,
       contextMd: "context",
-      modelId: "anthropic/claude-opus-5",
+      modelId: "openai/gpt-5.6-terra",
       harness: { maxSteps: 12, tokenBudget: 50_000, temperature: 0.4, deliberateMode: false },
       skillIds: [],
       changeSummary: "tuned",
@@ -392,7 +392,7 @@ describe("views.home", () => {
     expect(home.viewer).toEqual({ isMember: true, isCommissioner: true, teamId: p.alpha });
     expect(home.standings.map((row) => row.teamName)).toEqual(["Alpha", "Bravo"]);
     expect(home.standings[0].rank).toBe(1);
-    expect(home.standings[0].modelId).toBe("anthropic/claude-opus-5");
+    expect(home.standings[0].modelId).toBe("openai/gpt-5.6-terra");
     expect(home.standings[0].configVersionNo).toBe(3);
 
     // Live scores: Alpha starts the QB (18.5), benches the RB; Bravo has no lineup.
@@ -455,7 +455,7 @@ describe("views.standings / views.teams", () => {
     const cards = await t.query(api.views.teams, { leagueId: s.leagueId });
     expect(cards.map((card) => card.record)).toEqual(["2-0", "1-1"]);
     expect(cards[0].id).toBe(p.alpha);
-    expect(cards[0].modelLabel).toBe("Claude Opus 5");
+    expect(cards[0].modelLabel).toBe("GPT-5.6 Terra");
     expect(cards[1].modelLabel).toBe("—");
   });
 });
@@ -485,7 +485,7 @@ describe("views.team", () => {
     expect(page!.projectedTotal).toBe(21);
     expect(page!.liveTotal).toBe(18.5);
     expect(page!.lineupSource).toBe("agent");
-    expect(page!.config).toMatchObject({ versionNo: 3, modelLabel: "Claude Opus 5" });
+    expect(page!.config).toMatchObject({ versionNo: 3, modelLabel: "GPT-5.6 Terra" });
     expect(page!.cost).toEqual({
       seasonUsd: 2,
       weekUsd: 1.25,
@@ -574,7 +574,7 @@ describe("draft.board", () => {
         leagueId: s.leagueId,
         windowId,
         teamId: p.alpha,
-        modelId: "anthropic/claude-opus-5",
+        modelId: "openai/gpt-5.6-terra",
         kind: "team",
         status: "succeeded",
         windowType: "draft",

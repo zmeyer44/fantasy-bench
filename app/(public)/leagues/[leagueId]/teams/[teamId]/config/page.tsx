@@ -14,7 +14,7 @@ import { api } from "@/convex/_generated/api";
 import type { Id } from "@/convex/_generated/dataModel";
 import { DEFAULT_AGENT_CONTEXT, DEFAULT_HARNESS } from "@/convex/lib/defaults";
 import { fetchAuthQuery } from "@/lib/convex/server";
-import { DEFAULT_MODEL_ID } from "@/lib/models";
+import { leagueDefaultModelId } from "@/lib/models";
 import { formatET } from "@/lib/time";
 
 /**
@@ -144,10 +144,7 @@ export default async function ConfigPage({
           weekNo={currentWeekNo ?? 1}
           initial={{
             contextMd: source?.contextMd ?? DEFAULT_AGENT_CONTEXT,
-            modelId:
-              source?.modelId ??
-              view.rules?.modelAllowlist?.[0] ??
-              DEFAULT_MODEL_ID,
+            modelId: source?.modelId ?? leagueDefaultModelId(view.rules?.modelAllowlist),
             harness: source?.harness ?? DEFAULT_HARNESS,
             toolOverrides: source?.toolOverrides ?? [],
             skills: (source?.skills ?? []).map((s) => ({

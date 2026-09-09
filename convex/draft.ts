@@ -7,7 +7,7 @@
  */
 import { v } from "convex/values";
 
-import { DEFAULT_MODEL_ID, findModel } from "../lib/models";
+import { findModel, leagueDefaultModelId } from "../lib/models";
 import { internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
 import {
@@ -143,7 +143,7 @@ export const board = query({
       const version = config?.currentVersionId
         ? await ctx.db.get("config_versions", config.currentVersionId)
         : null;
-      const modelId = version?.modelId ?? rules.modelAllowlist[0] ?? DEFAULT_MODEL_ID;
+      const modelId = version?.modelId ?? leagueDefaultModelId(rules.modelAllowlist);
       modelCounts.set(modelId, (modelCounts.get(modelId) ?? 0) + 1);
     }
 

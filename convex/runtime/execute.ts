@@ -73,7 +73,7 @@ import { estimateNextStepCostUsd, type ResolvedModelPrice } from "../lib/pricing
 
 import { decryptSecret } from "../lib/secrets";
 import { modelSupportsReasoning, readGatewayCostUsd, resolveModel } from "./model";
-import { modelSupportsTemperature } from "../../lib/models";
+import { modelRequiresOwnKey, modelSupportsTemperature } from "../../lib/models";
 import { buildPrompt, estimateTokens, type PromptWindow } from "./prompt";
 import { buildTools, guidanceByTool, type ToolOverride } from "./tools";
 import {
@@ -384,6 +384,16 @@ export const executeRun = internalAction({
     }
     const bypassCaps = ownApiKey !== null;
     const keySource: "league" | "team" = bypassCaps ? "team" : "league";
+
+    // The priciest tier never runs on the league's shared key. Throwing (rather
+    // than returning a summary) is deliberate: `internal.runs.onComplete` then
+    // marks the run failed and enqueues the league's fallback model, and the
+    // trace discloses the substitution like any other provider failure.
+    if (modelRequiresOwnKey(primaryModelId) && ownApiKey === null) {
+      throw new Error(
+        `${primaryModelId} requires the team's own gateway key and none is on file`,
+      );
+    }
 
     // League USD hard cap: stop before we spend a cent (PRD 5.9).
     if (budget.leagueCapReached && !bypassCaps) {

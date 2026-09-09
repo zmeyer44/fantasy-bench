@@ -38,7 +38,7 @@ import {
   transparencyMode,
   windowOverride,
 } from "./schema";
-import { MODEL_CATALOG } from "@/lib/models";
+import { MODEL_CATALOG, findModel, modelRequiresOwnKey } from "@/lib/models";
 
 type Ctx = QueryCtx | MutationCtx;
 
@@ -64,6 +64,7 @@ const catalogEntry = v.object({
   reasoningPerM: v.union(v.number(), v.null()),
   supportsReasoning: v.boolean(),
   supportsTemperature: v.boolean(),
+  requiresOwnKey: v.boolean(),
 });
 
 const ruleChangeWithUser = v.object({
@@ -564,7 +565,15 @@ async function applyRulesPatch(
   if (patch.modelAllowlist) {
     for (const modelId of patch.modelAllowlist) assertPinnedModelId(modelId);
   }
-  if (patch.fallbackModelId) assertPinnedModelId(patch.fallbackModelId, "fallbackModelId");
+  if (patch.fallbackModelId) {
+    assertPinnedModelId(patch.fallbackModelId, "fallbackModelId");
+    if (modelRequiresOwnKey(patch.fallbackModelId)) {
+      throw rulesError(
+        `${findModel(patch.fallbackModelId)?.displayName ?? patch.fallbackModelId} only runs on a team's own gateway key, so it cannot be the league fallback.`,
+        "fallbackModelId",
+      );
+    }
+  }
 
   const nextPlayoffStart = patch.playoffStartWeek ?? rules.playoffStartWeek;
   const nextRegular = patch.regularSeasonWeeks ?? rules.regularSeasonWeeks;
@@ -1060,6 +1069,12 @@ export const replaceDeprecatedModel = mutation({
     assertPinnedModelId(toModelId, "toModelId");
     if (fromModelId === toModelId) {
       throw rulesError("Pick a different replacement model.", "toModelId");
+    }
+    if (modelRequiresOwnKey(toModelId)) {
+      throw rulesError(
+        `${findModel(toModelId)?.displayName ?? toModelId} only runs on a team's own gateway key; each owner has to opt in from their own agent editor.`,
+        "toModelId",
+      );
     }
 
     const rules = await rulesOf(ctx, leagueId);

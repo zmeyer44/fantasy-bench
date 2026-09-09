@@ -19,7 +19,7 @@ const modules = import.meta.glob("./**/*.ts");
 
 const NOW = Date.now();
 const SEASON = 2026;
-const SONNET = "anthropic/claude-opus-5";
+const SONNET = "openai/gpt-5.6-terra";
 const HAIKU = "google/gemini-3.8-flash";
 
 const RULES = {
@@ -553,7 +553,7 @@ describe("runs.modelOptions", () => {
     });
 
     expect(await t.query(api.runs.modelOptions, { leagueId: s.leagueId })).toEqual([
-      { modelId: SONNET, label: "Claude Opus 5", runCount: 6 },
+      { modelId: SONNET, label: "GPT-5.6 Terra", runCount: 6 },
       { modelId: HAIKU, label: "Gemini 3.8 Flash", runCount: 5 },
     ]);
   });

@@ -27,9 +27,27 @@ export type ModelCatalogEntry = {
    * frontier models reject it outright, so the runtime omits it when false.
    */
   supportsTemperature: boolean;
+  /**
+   * The model may only run on a team's own gateway key, never the league's
+   * shared one. Set on the most expensive tier of the catalog so a single
+   * team cannot drain the commissioner's budget.
+   */
+  requiresOwnKey: boolean;
 };
 
 export const MODEL_CATALOG: readonly ModelCatalogEntry[] = [
+  {
+    modelId: "openai/gpt-5.6-terra",
+    provider: "openai",
+    displayName: "GPT-5.6 Terra",
+    inputPerM: 2,
+    outputPerM: 12,
+    cachedInputPerM: 0.2,
+    reasoningPerM: null,
+    supportsReasoning: true,
+    supportsTemperature: true,
+    requiresOwnKey: false,
+  },
   {
     modelId: "anthropic/claude-opus-5",
     provider: "anthropic",
@@ -40,6 +58,7 @@ export const MODEL_CATALOG: readonly ModelCatalogEntry[] = [
     reasoningPerM: null,
     supportsReasoning: true,
     supportsTemperature: false,
+    requiresOwnKey: true,
   },
   {
     modelId: "anthropic/claude-fable-5.1",
@@ -51,6 +70,7 @@ export const MODEL_CATALOG: readonly ModelCatalogEntry[] = [
     reasoningPerM: null,
     supportsReasoning: true,
     supportsTemperature: true,
+    requiresOwnKey: true,
   },
   {
     modelId: "openai/gpt-6-astra",
@@ -62,17 +82,7 @@ export const MODEL_CATALOG: readonly ModelCatalogEntry[] = [
     reasoningPerM: null,
     supportsReasoning: true,
     supportsTemperature: false,
-  },
-  {
-    modelId: "openai/gpt-5.6-terra",
-    provider: "openai",
-    displayName: "GPT-5.6 Terra",
-    inputPerM: 2,
-    outputPerM: 12,
-    cachedInputPerM: 0.2,
-    reasoningPerM: null,
-    supportsReasoning: true,
-    supportsTemperature: true,
+    requiresOwnKey: true,
   },
   {
     modelId: "openai/gpt-5.6-sol",
@@ -84,6 +94,7 @@ export const MODEL_CATALOG: readonly ModelCatalogEntry[] = [
     reasoningPerM: null,
     supportsReasoning: true,
     supportsTemperature: true,
+    requiresOwnKey: false,
   },
   {
     modelId: "google/gemini-3.8-flash",
@@ -95,6 +106,7 @@ export const MODEL_CATALOG: readonly ModelCatalogEntry[] = [
     reasoningPerM: null,
     supportsReasoning: true,
     supportsTemperature: true,
+    requiresOwnKey: false,
   },
   {
     modelId: "deepseek/deepseek-v4.1-flash-beta",
@@ -106,6 +118,7 @@ export const MODEL_CATALOG: readonly ModelCatalogEntry[] = [
     reasoningPerM: null,
     supportsReasoning: true,
     supportsTemperature: true,
+    requiresOwnKey: false,
   },
   {
     modelId: "inception/mercury-2.5",
@@ -117,6 +130,7 @@ export const MODEL_CATALOG: readonly ModelCatalogEntry[] = [
     reasoningPerM: null,
     supportsReasoning: true,
     supportsTemperature: true,
+    requiresOwnKey: false,
   },
   {
     modelId: "zai/glm-5.3",
@@ -128,6 +142,7 @@ export const MODEL_CATALOG: readonly ModelCatalogEntry[] = [
     reasoningPerM: null,
     supportsReasoning: true,
     supportsTemperature: true,
+    requiresOwnKey: false,
   },
   {
     modelId: "alibaba/qwen3.8-max-0902",
@@ -139,6 +154,7 @@ export const MODEL_CATALOG: readonly ModelCatalogEntry[] = [
     reasoningPerM: null,
     supportsReasoning: true,
     supportsTemperature: true,
+    requiresOwnKey: false,
   },
   {
     modelId: "meta/muse-spark-1.3",
@@ -150,6 +166,7 @@ export const MODEL_CATALOG: readonly ModelCatalogEntry[] = [
     reasoningPerM: null,
     supportsReasoning: true,
     supportsTemperature: true,
+    requiresOwnKey: false,
   },
   {
     modelId: "spacexai/grok-4.6",
@@ -161,6 +178,7 @@ export const MODEL_CATALOG: readonly ModelCatalogEntry[] = [
     reasoningPerM: null,
     supportsReasoning: true,
     supportsTemperature: true,
+    requiresOwnKey: false,
   },
   {
     modelId: "moonshotai/kimi-k3",
@@ -172,6 +190,7 @@ export const MODEL_CATALOG: readonly ModelCatalogEntry[] = [
     reasoningPerM: null,
     supportsReasoning: true,
     supportsTemperature: false,
+    requiresOwnKey: false,
   },
   {
     modelId: "mock/scripted",
@@ -183,6 +202,7 @@ export const MODEL_CATALOG: readonly ModelCatalogEntry[] = [
     reasoningPerM: 0,
     supportsReasoning: false,
     supportsTemperature: true,
+    requiresOwnKey: false,
   },
 ] as const;
 
@@ -197,6 +217,23 @@ export const DEFAULT_FALLBACK_MODEL_ID = "google/gemini-3.8-flash";
 
 export function findModel(modelId: string): ModelCatalogEntry | undefined {
   return MODEL_CATALOG.find((m) => m.modelId === modelId);
+}
+
+/**
+ * The model a league hands to a team that has not chosen one: the first
+ * allowlisted model that runs on the league's shared key. A key-gated model
+ * at the head of the allowlist is skipped, since a fresh team has no key;
+ * with nothing else allowlisted the first entry wins, and an empty allowlist
+ * means the platform default.
+ */
+export function leagueDefaultModelId(allowlist: readonly string[] | null | undefined): string {
+  if (!allowlist || allowlist.length === 0) return DEFAULT_MODEL_ID;
+  return allowlist.find((id) => !modelRequiresOwnKey(id)) ?? allowlist[0];
+}
+
+/** Whether the model may only run on a team's own gateway key (unknown ids: no). */
+export function modelRequiresOwnKey(modelId: string): boolean {
+  return findModel(modelId)?.requiresOwnKey ?? false;
 }
 
 /** Whether the gateway accepts `temperature` for this model (unknown ids: yes). */

@@ -1,6 +1,9 @@
 "use client";
 
+import { useQuery } from "convex/react";
+
 import { formatUsd } from "@/components/cost/format";
+import { OwnKeyBadge } from "@/components/models/own-key-badge";
 import {
   Checkbox,
   Field,
@@ -13,6 +16,8 @@ import {
 } from "@/components/ui";
 import type { HarnessSettings } from "@/convex/lib/config_pure";
 import type { PromptEstimate } from "@/convex/lib/config_pure";
+import { api } from "@/convex/_generated/api";
+import type { Id } from "@/convex/_generated/dataModel";
 import { MODEL_CATALOG, findModel } from "@/lib/models";
 
 import { SpendPanel } from "./spend-panel";
@@ -51,6 +56,12 @@ export function ModelPanel({
 }) {
   const disabled = !canEdit;
   const model = findModel(modelId);
+  const keyStatus = useQuery(api.gateway_keys.status, {
+    leagueId: leagueId as Id<"leagues">,
+    teamId: teamId as Id<"teams">,
+  });
+  const hasOwnKey = keyStatus?.hasKey === true;
+  const lockedOut = model?.requiresOwnKey === true && keyStatus !== undefined && !hasOwnKey;
   const allowed =
     rules.modelAllowlist.length > 0
       ? MODEL_CATALOG.filter((m) => rules.modelAllowlist.includes(m.modelId))
@@ -68,14 +79,35 @@ export function ModelPanel({
             onChange={(e) => onModelChange(e.target.value)}
           >
             {allowed.map((m) => (
-              <NativeSelectOption key={m.modelId} value={m.modelId}>
+              <NativeSelectOption
+                key={m.modelId}
+                value={m.modelId}
+                disabled={m.requiresOwnKey && !hasOwnKey && m.modelId !== modelId}
+              >
                 {m.displayName} — {m.provider}
+                {m.requiresOwnKey ? " · 🔒 own key" : ""}
               </NativeSelectOption>
             ))}
             {!allowed.some((m) => m.modelId === modelId) ? (
               <NativeSelectOption value={modelId}>{modelId} (not allowlisted)</NativeSelectOption>
             ) : null}
           </NativeSelect>
+
+          {model?.requiresOwnKey ? (
+            <div
+              className={cn(
+                "mt-3 flex items-start gap-2 text-sm",
+                lockedOut ? "text-warning" : "text-muted-foreground",
+              )}
+            >
+              <OwnKeyBadge hasKey={hasOwnKey} className="mt-0.5" />
+              <span>
+                {lockedOut
+                  ? "Your team has no gateway key on file. Add one under Spend or pick another model; this one will not save."
+                  : "Runs on your team's own gateway key and bypasses the league's caps."}
+              </span>
+            </div>
+          ) : null}
 
           {model ? (
             <dl className="mt-4">

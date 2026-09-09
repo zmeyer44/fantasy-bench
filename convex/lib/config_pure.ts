@@ -9,7 +9,7 @@
  */
 import { structuredPatch } from "diff";
 
-import { findModel } from "../../lib/models";
+import { findModel, modelRequiresOwnKey } from "../../lib/models";
 import {
   DEFAULT_EDIT_LOCK,
   WEEKDAYS,
@@ -467,6 +467,8 @@ export type ValidationContext = {
     weeklyTokenCapPerTeam?: number | null;
   } | null;
   noteWasAppended?: boolean;
+  /** Whether the team has its own gateway key on file; gates `requiresOwnKey` models. */
+  hasOwnKey?: boolean;
 };
 
 /**
@@ -496,6 +498,11 @@ export function validateAgainstRules(ctx: ValidationContext): ConfigIssue[] {
     });
   } else if (!findModel(ctx.modelId)) {
     issues.push({ field: "modelId", message: `${ctx.modelId} is not a known gateway model id` });
+  } else if (modelRequiresOwnKey(ctx.modelId) && !ctx.hasOwnKey) {
+    issues.push({
+      field: "modelId",
+      message: `${findModel(ctx.modelId)!.displayName} requires your own gateway key. Add one under Spend, then pick it.`,
+    });
   }
 
   const { maxSteps, tokenBudget, temperature, reasoningEffort } = ctx.harness;

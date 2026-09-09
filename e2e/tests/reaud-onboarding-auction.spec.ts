@@ -128,7 +128,7 @@ test("compact 16-lot scripted auction preserves ownership, budgets, privacy, and
   await page.getByRole("button", { name: "Save", exact: true }).click();
   await expect(page.getByText("Saved.", { exact: true })).toBeVisible();
   await page.getByRole("tab", { name: "Models" }).click();
-  await page.getByLabel("From (deprecated)").selectOption("anthropic/claude-opus-5");
+  await page.getByLabel("From (deprecated)").selectOption("openai/gpt-5.6-terra");
   await page.getByLabel("To (replacement)").selectOption("mock/scripted");
   await page.getByRole("button", { name: "Replace across the league" }).click();
   await expect(page.getByText("Updated 8 team(s).", { exact: true })).toBeVisible({ timeout: 30_000 });

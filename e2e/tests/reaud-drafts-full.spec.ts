@@ -109,7 +109,7 @@ test("default eight-team snake draft produces full legal rosters and survives wa
   // All eight teams use the free deterministic model while default roster rules remain untouched.
   await page.goto(`/leagues/${leagueId}/settings`);
   await page.getByRole("tab", { name: "Models" }).click();
-  await page.getByLabel("From (deprecated)").selectOption("anthropic/claude-opus-5");
+  await page.getByLabel("From (deprecated)").selectOption("openai/gpt-5.6-terra");
   await page.getByLabel("To (replacement)").selectOption("mock/scripted");
   await page.getByRole("button", { name: "Replace across the league" }).click();
   await expect(page.getByText("Updated 8 team(s).", { exact: true })).toBeVisible({ timeout: 30_000 });

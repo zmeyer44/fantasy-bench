@@ -19,6 +19,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui";
+import { OwnKeyBadge } from "@/components/models/own-key-badge";
 import { api } from "@/convex/_generated/api";
 
 import { SettingsSection, ToggleField, useSave } from "./shared";
@@ -86,7 +87,10 @@ export function ModelsTab({ data }: { data: SettingsData }) {
                     />
                   </TableCell>
                   <TableCell className="max-w-72">
-                    <span className="block truncate text-foreground">{model.displayName}</span>
+                    <span className="flex items-center gap-2 text-foreground">
+                      <span className="truncate">{model.displayName}</span>
+                      {model.requiresOwnKey ? <OwnKeyBadge compact /> : null}
+                    </span>
                     <span className="block truncate font-mono text-xs text-ink-faint">
                       {model.modelId}
                     </span>
@@ -140,13 +144,19 @@ export function ModelsTab({ data }: { data: SettingsData }) {
           >
             <NativeSelectOption value="">None — fail without a model fallback</NativeSelectOption>
             {data.catalog.map((model) => (
-              <NativeSelectOption key={model.modelId} value={model.modelId}>
+              <NativeSelectOption
+                key={model.modelId}
+                value={model.modelId}
+                disabled={model.requiresOwnKey}
+              >
                 {model.displayName} ({model.modelId})
+                {model.requiresOwnKey ? " · 🔒 own key only" : ""}
               </NativeSelectOption>
             ))}
           </NativeSelect>
           <FieldDescription>
-            Used after retries are exhausted. Disclosed in the trace.
+            Used after retries are exhausted. Disclosed in the trace. Models that only run on a
+            team&apos;s own key cannot be the fallback.
           </FieldDescription>
         </Field>
 
@@ -202,8 +212,13 @@ export function ModelsTab({ data }: { data: SettingsData }) {
               {data.catalog
                 .filter((model) => model.modelId !== fromModel)
                 .map((model) => (
-                  <NativeSelectOption key={model.modelId} value={model.modelId}>
+                  <NativeSelectOption
+                    key={model.modelId}
+                    value={model.modelId}
+                    disabled={model.requiresOwnKey}
+                  >
                     {model.displayName} ({model.modelId})
+                    {model.requiresOwnKey ? " · 🔒 own key only" : ""}
                   </NativeSelectOption>
                 ))}
             </NativeSelect>
