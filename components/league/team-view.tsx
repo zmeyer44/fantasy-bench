@@ -62,8 +62,12 @@ export function TeamView({
             <h1 className="truncate text-2xl font-semibold tracking-tight text-foreground">
               {page.team.name}
             </h1>
-            <p className="mt-0.5 font-mono text-[10px] tracking-wider text-muted-foreground uppercase">
-              {[page.team.abbreviation, `#${page.record.rank}`, page.record.streak]
+            <p className="mt-0.5 font-mono text-[11px] text-muted-foreground">
+              {[
+                page.team.abbreviation,
+                `#${page.record.rank}`,
+                page.record.streak,
+              ]
                 .filter(Boolean)
                 .join(" · ")}
             </p>
@@ -74,7 +78,11 @@ export function TeamView({
           {[
             { label: "Record", value: record },
             { label: "Points for", value: page.record.pointsFor.toFixed(1) },
-            { label: "Karma", tip: "karma" as const, value: String(page.team.karma) },
+            {
+              label: "Karma",
+              tip: "karma" as const,
+              value: String(page.team.karma),
+            },
             {
               label: "FAAB",
               tip: "faab" as const,
@@ -83,7 +91,7 @@ export function TeamView({
             },
           ].map((stat) => (
             <div key={stat.label} className="min-w-0">
-              <dt className="inline-flex items-center gap-1 font-mono text-[10px] tracking-wider text-muted-foreground uppercase">
+              <dt className="inline-flex items-center gap-1 font-mono text-[11px] text-muted-foreground">
                 {stat.label}
                 {"tip" in stat && stat.tip ? <InfoTip term={stat.tip} /> : null}
               </dt>
@@ -202,22 +210,18 @@ export function TeamView({
                 <ul className="divide-y divide-border">
                   {page.recentRuns.map((run) => (
                     <li key={run.id} className="py-3 first:pt-0 last:pb-0">
-                      <Link
-                        href={`${base}/traces/${run.id}`}
-                        className="font-mono text-sm text-foreground hover:text-brand-strong"
-                      >
-                        {run.windowLabelText}
-                        {run.weekNo ? ` · wk ${run.weekNo}` : ""}
-                      </Link>
-                      <div className="mt-2">
-                        <RunTags
-                          run={run}
-                          leagueId={leagueId}
-                          showTeam={false}
-                        />
+                      <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                        <Link
+                          href={`${base}/traces/${run.id}`}
+                          className="font-mono text-sm text-foreground hover:text-brand-strong"
+                        >
+                          {run.windowLabelText}
+                          {run.weekNo ? ` · wk ${run.weekNo}` : ""}
+                        </Link>
+                        <RunTags run={run} />
                       </div>
                       {run.rationale ? (
-                        <p className="mt-2 line-clamp-2 text-sm leading-relaxed text-muted-foreground">
+                        <p className="mt-1.5 line-clamp-2 text-sm leading-relaxed text-muted-foreground">
                           {run.rationale}
                         </p>
                       ) : null}
@@ -233,8 +237,8 @@ export function TeamView({
           <section className="rounded-lg border border-border bg-card p-4">
             <h2 className="text-sm font-semibold">Team identity</h2>
             <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
-              The agent chooses the team name and crest. Owners can guide its style
-              by editing the agent.
+              The agent chooses the team name and crest. Owners can guide its
+              style by editing the agent.
             </p>
             <div className="mt-4 flex flex-wrap gap-2">
               {TEAM_AVATARS.map((template) => (
@@ -319,7 +323,9 @@ function AgentPanel({
   const totalTools = defaultTools + config.customTools.length;
   const hasVersion = config.versionNo !== null;
   const privateUntil = config.privateUntil;
-  const revealLabel = privateUntil ? `${formatET(privateUntil, "MMM d")}` : null;
+  const revealLabel = privateUntil
+    ? `${formatET(privateUntil, "MMM d")}`
+    : null;
   const excerpt = config.contextExcerpt
     .replace(/^#+\s*/gm, "")
     .replace(/^\s*[-*]\s+/gm, "")
@@ -335,13 +341,15 @@ function AgentPanel({
       <div className="grid gap-6 p-5 lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)] lg:gap-10">
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
-            <span className="eyebrow text-brand">Agent</span>
+            <span className="eyebrow-caps text-brand">Agent</span>
             {hasVersion ? (
               <Badge variant="outline">v{config.versionNo} live</Badge>
             ) : (
-              <Badge variant="outline">no version</Badge>
+              <Badge variant="outline">No version</Badge>
             )}
-            {config.hasPendingVersion ? <Badge variant="warning">edit queued</Badge> : null}
+            {config.hasPendingVersion ? (
+              <Badge variant="warning">Edit queued</Badge>
+            ) : null}
             {privateUntil ? (
               <Badge variant="secondary">
                 <Lock data-icon="inline-start" /> private until {revealLabel}
@@ -353,7 +361,10 @@ function AgentPanel({
               </Badge>
             ) : null}
           </div>
-          <h2 id="agent-panel-title" className="mt-2 text-xl font-semibold tracking-tight">
+          <h2
+            id="agent-panel-title"
+            className="mt-2 text-xl font-semibold tracking-tight"
+          >
             {config.modelLabel}
           </h2>
           <p className="mt-1 text-sm text-muted-foreground">
@@ -362,16 +373,19 @@ function AgentPanel({
               : hasVersion
                 ? "Runs every window on this configuration."
                 : "This team has not configured its agent yet. It runs on platform defaults."}
-            {config.createdAt ? ` · saved ${formatET(config.createdAt, "MMM d HH:mm")} ET` : ""}
+            {config.createdAt
+              ? ` · saved ${formatET(config.createdAt, "MMM d HH:mm")} ET`
+              : ""}
           </p>
 
           <div className="mt-4 border-l-2 border-border pl-3">
             <div className="eyebrow">System prompt</div>
             {privateUntil ? (
               <p className="mt-1.5 text-sm leading-relaxed text-muted-foreground">
-                The owner&apos;s context, skills and tool customizations are private until{" "}
-                {revealLabel}. Every customization becomes public {COOLDOWN_DAYS} days after it is
-                saved, so the league can learn from what worked.
+                The owner&apos;s context, skills and tool customizations are
+                private until {revealLabel}. Every customization becomes public{" "}
+                {COOLDOWN_DAYS} days after it is saved, so the league can learn
+                from what worked.
               </p>
             ) : (
               <p
@@ -380,7 +394,8 @@ function AgentPanel({
                   excerpt ? "text-foreground" : "text-muted-foreground",
                 )}
               >
-                {excerpt || "No owner context written yet. The agent plays a conventional game."}
+                {excerpt ||
+                  "No owner context written yet. The agent plays a conventional game."}
               </p>
             )}
           </div>
@@ -393,10 +408,18 @@ function AgentPanel({
             >
               {canEditAgent ? "Edit agent" : "View agent"}
             </Button>
-            <Button size="lg" variant="ghost" render={<Link href={`${href}?tab=tools`} />}>
+            <Button
+              size="lg"
+              variant="ghost"
+              render={<Link href={`${href}?tab=tools`} />}
+            >
               Tools
             </Button>
-            <Button size="lg" variant="ghost" render={<Link href={`${teamBase}/config/versions`} />}>
+            <Button
+              size="lg"
+              variant="ghost"
+              render={<Link href={`${teamBase}/config/versions`} />}
+            >
               Versions
             </Button>
           </div>
@@ -405,12 +428,16 @@ function AgentPanel({
         <dl className="grid grid-cols-2 gap-x-6 gap-y-5 border-t border-border pt-5 lg:border-t-0 lg:border-l lg:pt-0 lg:pl-10">
           <div className="min-w-0">
             <dt className="text-[11px] text-muted-foreground">Tools</dt>
-            <dd className="mt-1 font-mono text-2xl tabular-nums">{privateUntil ? "—" : totalTools}</dd>
+            <dd className="mt-1 font-mono text-2xl tabular-nums">
+              {privateUntil ? "—" : totalTools}
+            </dd>
             <dd className="mt-1 text-[11px] text-muted-foreground">
               {privateUntil
                 ? `revealed ${revealLabel}`
                 : `${defaultTools}/${TOOL_CATALOG.length} default${
-                    config.customTools.length ? ` · ${config.customTools.length} custom` : ""
+                    config.customTools.length
+                      ? ` · ${config.customTools.length} custom`
+                      : ""
                   }${config.toolsGuided ? ` · ${config.toolsGuided} guided` : ""}`}
             </dd>
           </div>
@@ -444,12 +471,15 @@ function AgentPanel({
               {config.contextChars.toLocaleString()}
             </dd>
             <dd className="mt-1 text-[11px] text-muted-foreground">
-              chars{config.harness ? ` · temp ${config.harness.temperature}` : ""}
+              chars
+              {config.harness ? ` · temp ${config.harness.temperature}` : ""}
             </dd>
           </div>
           {config.customTools.length > 0 ? (
             <div className="col-span-2 min-w-0">
-              <dt className="text-[11px] text-muted-foreground">Custom tools</dt>
+              <dt className="text-[11px] text-muted-foreground">
+                Custom tools
+              </dt>
               <dd className="mt-1 flex flex-wrap gap-1.5">
                 {config.customTools.map((name) => (
                   <span
@@ -465,8 +495,14 @@ function AgentPanel({
         </dl>
       </div>
       <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border px-5 py-2.5 text-xs text-muted-foreground">
-        <span>Customizations become public to the league {COOLDOWN_DAYS} days after they are saved.</span>
-        <Link href={`${base}/traces`} className="eyebrow transition-colors hover:text-foreground">
+        <span>
+          Customizations become public to the league {COOLDOWN_DAYS} days after
+          they are saved.
+        </span>
+        <Link
+          href={`${base}/traces`}
+          className="eyebrow transition-colors hover:text-foreground"
+        >
           Recent traces →
         </Link>
       </div>
@@ -538,10 +574,10 @@ function SlotTable({
                   size={32}
                 />
                 <div className="min-w-0">
-                  <div className="truncate text-xs font-medium leading-snug sm:text-sm">
-                    {row.entry.fullName}
+                  <div className="flex items-baseline gap-1.5 text-xs font-medium leading-snug sm:text-sm">
+                    <span className="truncate">{row.entry.fullName}</span>
                     {row.entry.injuryStatus ? (
-                      <span className="ml-1 text-[10px] font-semibold text-danger">
+                      <span className="shrink-0 text-[10px] font-semibold text-danger">
                         {row.entry.injuryStatus}
                       </span>
                     ) : null}

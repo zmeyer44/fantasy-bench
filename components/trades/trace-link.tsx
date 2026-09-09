@@ -19,17 +19,20 @@ export function TraceLink({
   className?: string;
 }) {
   if (!runId) return null;
-  const hash = stepIndex === null || stepIndex === undefined ? "" : `#step-${stepIndex}`;
+  const hash =
+    stepIndex === null || stepIndex === undefined ? "" : `#step-${stepIndex}`;
   return (
     <Link
       href={`/leagues/${leagueId}/traces/${runId}${hash}`}
       className={
         className ??
-        "font-mono text-[10px] tracking-wider uppercase text-ink-faint underline-offset-2 transition-colors hover:text-brand-strong hover:underline"
+        "font-mono text-[11px] text-ink-faint underline-offset-2 transition-colors hover:text-brand-strong hover:underline"
       }
     >
       {label}
-      {stepIndex === null || stepIndex === undefined ? "" : ` · step ${stepIndex}`}
+      {stepIndex === null || stepIndex === undefined
+        ? ""
+        : ` · step ${stepIndex}`}
     </Link>
   );
 }

@@ -17,7 +17,16 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui";
 
-export function UserMenu({ name, email }: { name: string; email: string }) {
+export function UserMenu({
+  name,
+  email,
+  size = "lg",
+}: {
+  name: string;
+  email: string;
+  /** Matches the height of the nav's signed-out buttons on the same page. */
+  size?: "sm" | "lg" | "xl";
+}) {
   const router = useRouter();
   const { signOut } = useAuthActions();
   const [pending, setPending] = useState(false);
@@ -33,8 +42,23 @@ export function UserMenu({ name, email }: { name: string; email: string }) {
 
   return (
     <DropdownMenu>
-      <DropdownMenuTrigger render={<Button variant="outline" size="sm" />}>
-        <span className="flex size-5 items-center justify-center rounded-sm bg-brand font-mono text-[10px] font-semibold text-primary-foreground">
+      <DropdownMenuTrigger
+        aria-label={`Account: ${name || email}`}
+        render={
+          // Same silhouette as the nav's brand buttons (mono, tracked) in
+          // neutral colours, so the account control reads as part of the bar
+          // rather than a second call to action.
+          <Button
+            variant="outline"
+            size={size}
+            className="border-border bg-transparent font-mono text-xs font-medium tracking-[0.06em] text-foreground hover:bg-muted dark:border-border dark:bg-transparent dark:hover:bg-muted"
+          />
+        }
+      >
+        <span
+          data-icon="inline-start"
+          className="flex size-5 items-center justify-center rounded-[3px] bg-muted text-[10px] tracking-normal text-foreground"
+        >
           {initials(name || email)}
         </span>
         <span className="hidden max-w-32 truncate sm:inline">

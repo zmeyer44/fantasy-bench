@@ -51,7 +51,9 @@ export function DiffView({
           <TableBody>
             {fieldRows.map((f) => (
               <TableRow key={f.field}>
-                <TableCell className="text-muted-foreground">{f.label}</TableCell>
+                <TableCell className="text-muted-foreground">
+                  {f.label}
+                </TableCell>
                 <TableCell
                   className={cn(
                     "font-mono text-xs",
@@ -90,7 +92,9 @@ export function DiffView({
           }
         />
         {diff.skills.after.length === 0 && diff.skills.before.length === 0 ? (
-          <p className="text-sm text-muted-foreground">No skills attached to either version.</p>
+          <p className="text-sm text-muted-foreground">
+            No skills attached to either version.
+          </p>
         ) : (
           <div className="grid gap-6 sm:grid-cols-2">
             <SkillColumn
@@ -196,7 +200,9 @@ function SkillColumn({
                   : "border-border text-foreground",
               )}
             >
-              <span className="font-mono text-[10px] text-ink-faint tabular-nums">{i + 1}</span>
+              <span className="font-mono text-[10px] text-ink-faint tabular-nums">
+                {i + 1}
+              </span>
               <span className="truncate">{s.name}</span>
             </li>
           ))}
@@ -258,13 +264,14 @@ function Hunk({ hunk }: { hunk: DiffHunk }) {
 /** Compact "what changed" line used in the version list. */
 export function DiffSummaryBadges({ diff }: { diff: ConfigDiff }) {
   const bits: string[] = [];
-  if (diff.context.changed) bits.push(`context +${diff.context.added}/−${diff.context.removed}`);
+  if (diff.context.changed)
+    bits.push(`context +${diff.context.added}/−${diff.context.removed}`);
   if (diff.model.changed) bits.push("model");
   const harness = diff.harness.filter((h) => h.changed).length;
   if (harness > 0) bits.push(`${harness} harness`);
   if (diff.skills.changed) bits.push("skills");
 
-  if (bits.length === 0) return <Badge variant="outline">no change</Badge>;
+  if (bits.length === 0) return <Badge variant="outline">No change</Badge>;
   return (
     <div className="flex flex-wrap gap-1">
       {bits.map((b) => (

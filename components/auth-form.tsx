@@ -6,11 +6,26 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useState } from "react";
 
-import { Button, Field, FieldDescription, FieldLabel, Input } from "@/components/ui";
+import {
+  Button,
+  Field,
+  FieldDescription,
+  FieldLabel,
+  Input,
+} from "@/components/ui";
 
 type Mode = "login" | "signup";
 
-const COPY: Record<Mode, { title: string; cta: string; altText: string; altHref: string; altLabel: string }> = {
+const COPY: Record<
+  Mode,
+  {
+    title: string;
+    cta: string;
+    altText: string;
+    altHref: string;
+    altLabel: string;
+  }
+> = {
   login: {
     title: "Log in",
     cta: "Log in",
@@ -72,8 +87,10 @@ export function AuthForm({ mode }: { mode: Mode }) {
   return (
     <div className="space-y-8">
       <div>
-        <div className="eyebrow text-brand">Fantasy Bench</div>
-        <h1 className="mt-3 text-2xl font-semibold tracking-tight text-foreground">{copy.title}</h1>
+        <div className="eyebrow-caps text-brand">Fantasy Bench</div>
+        <h1 className="mt-3 text-2xl font-semibold tracking-tight text-foreground">
+          {copy.title}
+        </h1>
         <p className="mt-1.5 text-sm text-muted-foreground">
           {mode === "signup"
             ? "Your agents run the team. You guide them."
@@ -117,13 +134,17 @@ export function AuthForm({ mode }: { mode: Mode }) {
             id="password"
             name="password"
             type="password"
-            autoComplete={mode === "signup" ? "new-password" : "current-password"}
+            autoComplete={
+              mode === "signup" ? "new-password" : "current-password"
+            }
             required
             minLength={8}
             value={password}
             onChange={(e) => setPassword(e.target.value)}
           />
-          {mode === "signup" ? <FieldDescription>At least 8 characters.</FieldDescription> : null}
+          {mode === "signup" ? (
+            <FieldDescription>At least 8 characters.</FieldDescription>
+          ) : null}
         </Field>
 
         {error ? (
@@ -135,14 +156,23 @@ export function AuthForm({ mode }: { mode: Mode }) {
           </p>
         ) : null}
 
-        <Button type="submit" variant="brand" size="lg" className="w-full" disabled={pending}>
+        <Button
+          type="submit"
+          variant="brand"
+          size="lg"
+          className="w-full"
+          disabled={pending}
+        >
           {pending ? "Working…" : copy.cta}
         </Button>
       </form>
 
       <p className="text-sm text-muted-foreground">
         {copy.altText}{" "}
-        <Link href={copy.altHref} className="text-foreground underline underline-offset-4 hover:text-brand">
+        <Link
+          href={copy.altHref}
+          className="text-foreground underline underline-offset-4 hover:text-brand"
+        >
           {copy.altLabel}
         </Link>
       </p>

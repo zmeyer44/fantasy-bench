@@ -37,7 +37,9 @@ export async function generateMetadata({
 }: PageProps<"/leagues/[leagueId]/teams/[teamId]/config/versions">): Promise<Metadata> {
   const { leagueId, teamId } = await params;
   const view = await loadVersions(leagueId, teamId);
-  return { title: view ? `${view.team.name} · Config history` : "Config history" };
+  return {
+    title: view ? `${view.team.name} · Config history` : "Config history",
+  };
 }
 
 /** The changelog. Public within the league (PRD 5.5). */
@@ -68,10 +70,11 @@ export default async function VersionsPage({
         actions={
           changedThisWeek > 0 ? (
             <Badge variant="success">
-              {changedThisWeek} change{changedThisWeek === 1 ? "" : "s"} this week
+              {changedThisWeek} change{changedThisWeek === 1 ? "" : "s"} this
+              week
             </Badge>
           ) : (
-            <Badge variant="outline">unchanged this week</Badge>
+            <Badge variant="outline">Unchanged this week</Badge>
           )
         }
       />
@@ -79,15 +82,21 @@ export default async function VersionsPage({
       <ConfigNav leagueId={leagueId} teamId={teamId} />
 
       {view.versions.length === 0 ? (
-        <EmptyState title="No versions yet" description="Save a config to start the changelog." />
+        <EmptyState
+          title="No versions yet"
+          description="Save a config to start the changelog."
+        />
       ) : (
         <section className="space-y-4">
           <div className="flex flex-wrap items-end justify-between gap-3 border-b border-border pb-3">
             <div className="min-w-0">
               <h2 className="eyebrow text-foreground">
-                {view.versions.length} version{view.versions.length === 1 ? "" : "s"}
+                {view.versions.length} version
+                {view.versions.length === 1 ? "" : "s"}
               </h2>
-              <p className="mt-2 text-sm text-muted-foreground">Newest first.</p>
+              <p className="mt-2 text-sm text-muted-foreground">
+                Newest first.
+              </p>
             </div>
             {view.versions.filter((v) => !v.redacted).length > 1 ? (
               <Link
@@ -120,17 +129,21 @@ export default async function VersionsPage({
                   </TableCell>
                   <TableCell>
                     {version.isCurrent ? (
-                      <Badge variant="success">applied</Badge>
+                      <Badge variant="success">Applied</Badge>
                     ) : version.isPending ? (
-                      <Badge variant="warning">queued</Badge>
+                      <Badge variant="warning">Queued</Badge>
                     ) : version.appliedAt ? (
-                      <Badge variant="outline">superseded</Badge>
+                      <Badge variant="outline">Superseded</Badge>
                     ) : (
-                      <Badge variant="outline">never applied</Badge>
+                      <Badge variant="outline">Never applied</Badge>
                     )}
                   </TableCell>
                   <TableCell className="font-mono text-xs whitespace-nowrap text-muted-foreground">
-                    {formatET(version.createdAt ?? version._creationTime, "MMM d, HH:mm")} ET
+                    {formatET(
+                      version.createdAt ?? version._creationTime,
+                      "MMM d, HH:mm",
+                    )}{" "}
+                    ET
                     {version.changedThisWeek ? (
                       <span className="ml-2 text-brand">new</span>
                     ) : null}
@@ -138,7 +151,9 @@ export default async function VersionsPage({
                   <TableCell className="text-muted-foreground">
                     {version.createdByName ?? "—"}
                   </TableCell>
-                  <TableCell className="font-mono text-xs">{version.modelDisplayName}</TableCell>
+                  <TableCell className="font-mono text-xs">
+                    {version.modelDisplayName}
+                  </TableCell>
                   <TableCell numeric className="font-mono text-xs">
                     {version.redacted ? "—" : version.skillCount}
                   </TableCell>
@@ -170,9 +185,10 @@ export default async function VersionsPage({
           </Table>
 
           <p className="text-sm text-ink-faint">
-            Version rows are never updated except to stamp when they went live. A version saved
-            during the edit lock stays queued until the window reopens. Content is private to the
-            owner and commissioner for {COOLDOWN_DAYS} days after each save.
+            Version rows are never updated except to stamp when they went live.
+            A version saved during the edit lock stays queued until the window
+            reopens. Content is private to the owner and commissioner for{" "}
+            {COOLDOWN_DAYS} days after each save.
           </p>
         </section>
       )}

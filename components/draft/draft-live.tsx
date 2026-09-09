@@ -43,7 +43,7 @@ export function DraftLive({
         actions={
           <div className="flex flex-col items-end gap-2">
             {live ? (
-              <span className="flex items-center gap-1.5 font-mono text-[10px] tracking-wider uppercase text-brand">
+              <span className="flex items-center gap-1.5 font-mono text-[11px] text-brand">
                 <span className="inline-block size-1.5 animate-pulse rounded-full bg-brand" />
                 live · updates as picks land
               </span>

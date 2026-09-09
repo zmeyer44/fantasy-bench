@@ -68,10 +68,10 @@ export function TeamsGrid({
                   {shortModel(team.modelId)}
                 </Badge>
               ) : (
-                <Badge variant="secondary">no model</Badge>
+                <Badge variant="secondary">No model</Badge>
               )}
               {team.configVersionNo ? (
-                <Badge variant="outline">config v{team.configVersionNo}</Badge>
+                <Badge variant="outline">Config v{team.configVersionNo}</Badge>
               ) : null}
             </div>
             <dl className="grid grid-cols-4 gap-3 border-t border-border pt-3">

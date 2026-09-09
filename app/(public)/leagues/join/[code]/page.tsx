@@ -11,12 +11,16 @@ import { getViewer } from "@/lib/convex/viewer";
 
 export const metadata: Metadata = { title: "Join a league" };
 
-export default async function JoinPage({ params }: PageProps<"/leagues/join/[code]">) {
+export default async function JoinPage({
+  params,
+}: PageProps<"/leagues/join/[code]">) {
   const { code } = await params;
 
   // `leagues.byJoinCode` is readable by anyone holding the code and already
   // reports whether the viewer is a member and how many teams are unowned.
-  const league = await readOrNull(() => fetchAuthQuery(api.leagues.byJoinCode, { code }));
+  const league = await readOrNull(() =>
+    fetchAuthQuery(api.leagues.byJoinCode, { code }),
+  );
   if (!league) notFound();
 
   const viewer = await getViewer();
@@ -24,12 +28,16 @@ export default async function JoinPage({ params }: PageProps<"/leagues/join/[cod
 
   return (
     <div className="mx-auto max-w-lg px-4 py-16 sm:px-6">
-      <div className="eyebrow text-brand">Invitation</div>
-      <h1 className="mt-3 text-2xl font-semibold tracking-tight text-foreground">{league.name}</h1>
+      <div className="eyebrow-caps text-brand">Invitation</div>
+      <h1 className="mt-3 text-2xl font-semibold tracking-tight text-foreground">
+        {league.name}
+      </h1>
       <div className="mt-4 flex flex-wrap items-center gap-2 border-b border-border pb-5">
         <Badge variant="outline">{league.season} season</Badge>
         <Badge variant="outline">{league.teamCount} teams</Badge>
-        <Badge variant={league.status === "in_season" ? "success" : "secondary"}>
+        <Badge
+          variant={league.status === "in_season" ? "success" : "secondary"}
+        >
           {league.status.replace("_", " ")}
         </Badge>
       </div>
@@ -39,7 +47,10 @@ export default async function JoinPage({ params }: PageProps<"/leagues/join/[cod
           <EmptyState
             title="You are already in this league"
             action={
-              <Button size="sm" render={<Link href={`/leagues/${league.leagueId}`} />}>
+              <Button
+                size="sm"
+                render={<Link href={`/leagues/${league.leagueId}`} />}
+              >
                 Open the league
               </Button>
             }
@@ -52,7 +63,9 @@ export default async function JoinPage({ params }: PageProps<"/leagues/join/[cod
               <Button
                 size="sm"
                 render={
-                  <Link href={`/login?next=${encodeURIComponent(`/leagues/join/${code}`)}`} />
+                  <Link
+                    href={`/login?next=${encodeURIComponent(`/leagues/join/${code}`)}`}
+                  />
                 }
               >
                 Sign in
@@ -76,9 +89,13 @@ export default async function JoinPage({ params }: PageProps<"/leagues/join/[cod
         ) : (
           <div className="space-y-5">
             <p className="text-sm text-muted-foreground">
-              <span className="font-mono text-foreground tabular-nums">{open}</span> team
-              {open === 1 ? "" : "s"} still unowned. Joining claims the lowest-numbered one and
-              hands you its agent config — you tune the agent, the agent runs the team.
+              <span className="font-mono text-foreground tabular-nums">
+                {open}
+              </span>{" "}
+              team
+              {open === 1 ? "" : "s"} still unowned. Joining claims the
+              lowest-numbered one and hands you its agent config — you tune the
+              agent, the agent runs the team.
             </p>
             <JoinByCode code={code} leagueName={league.name} />
           </div>

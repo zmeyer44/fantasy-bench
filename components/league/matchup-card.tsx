@@ -26,11 +26,11 @@ export function MatchupCard({
       <div className="mb-2 flex items-center justify-between gap-2">
         <span className="eyebrow">Week {matchup.weekNo}</span>
         {matchup.isFinal ? (
-          <Badge variant="secondary">final</Badge>
+          <Badge variant="secondary">Final</Badge>
         ) : live ? (
-          <Badge variant="success">live</Badge>
+          <Badge variant="success">Live</Badge>
         ) : (
-          <Badge variant="outline">upcoming</Badge>
+          <Badge variant="outline">Upcoming</Badge>
         )}
       </div>
       <Side

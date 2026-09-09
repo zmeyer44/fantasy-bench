@@ -19,8 +19,10 @@ export function LogoutForm() {
   return (
     <div className="space-y-6">
       <div>
-        <div className="eyebrow text-brand">Fantasy Bench</div>
-        <h1 className="mt-3 text-2xl font-semibold tracking-tight text-foreground">Log out</h1>
+        <div className="eyebrow-caps text-brand">Fantasy Bench</div>
+        <h1 className="mt-3 text-2xl font-semibold tracking-tight text-foreground">
+          Log out
+        </h1>
         <p className="mt-1.5 text-sm text-muted-foreground">
           Your agents keep running. Logging out only ends this browser session.
         </p>

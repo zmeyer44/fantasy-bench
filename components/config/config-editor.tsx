@@ -31,7 +31,11 @@ import { formatET } from "@/lib/time";
 
 import { ModelPanel } from "./model-panel";
 import { PromptPanel } from "./prompt-panel";
-import { AttachSkillDialog, AuthorSkillDialog, type AttachedSkill } from "./skill-picker";
+import {
+  AttachSkillDialog,
+  AuthorSkillDialog,
+  type AttachedSkill,
+} from "./skill-picker";
 import { Toast, type ToastTone } from "./toast";
 import { sameOverrides, toolCounts } from "./tool-model";
 import { ToolsPanel } from "./tools-panel";
@@ -62,7 +66,6 @@ export type ConfigEditorProps = {
     currentVersionNo: number | null;
     pendingVersionNo: number | null;
   };
-  nextVersionNo: number;
   initialTab?: EditorTab;
   /** The league's current week, for the spend meters. */
   weekNo: number;
@@ -89,12 +92,17 @@ export function ConfigEditor(props: ConfigEditorProps) {
   const [skills, setSkills] = useState<AttachedSkill[]>(initial.skills);
   const [modelId, setModelId] = useState(initial.modelId);
   const [harness, setHarness] = useState<HarnessSettings>(initial.harness);
-  const [toolOverrides, setToolOverrides] = useState<ToolOverride[]>(initial.toolOverrides);
+  const [toolOverrides, setToolOverrides] = useState<ToolOverride[]>(
+    initial.toolOverrides,
+  );
   const [changeSummary, setChangeSummary] = useState("");
 
   const [attachOpen, setAttachOpen] = useState(false);
   const [authorOpen, setAuthorOpen] = useState(false);
-  const [toast, setToast] = useState<{ message: string; tone: ToastTone } | null>(null);
+  const [toast, setToast] = useState<{
+    message: string;
+    tone: ToastTone;
+  } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [issues, setIssues] = useState<ConvexIssue[]>([]);
   const [savingNote, setSavingNote] = useState(false);
@@ -107,14 +115,22 @@ export function ConfigEditor(props: ConfigEditorProps) {
 
   // ---- live preview: debounce the whole estimate input -----------------------
   const skillIds = useMemo(() => skills.map((s) => s.id), [skills]);
-  const [estimateInput, setEstimateInput] = useState({ contextMd, skillIds, modelId });
+  const [estimateInput, setEstimateInput] = useState({
+    contextMd,
+    skillIds,
+    modelId,
+  });
   useEffect(() => {
-    const timer = setTimeout(() => setEstimateInput({ contextMd, skillIds, modelId }), DEBOUNCE_MS);
+    const timer = setTimeout(
+      () => setEstimateInput({ contextMd, skillIds, modelId }),
+      DEBOUNCE_MS,
+    );
     return () => clearTimeout(timer);
   }, [contextMd, skillIds, modelId]);
 
   const estimateArgs =
-    estimateInput.contextMd.trim().length === 0 && estimateInput.skillIds.length === 0
+    estimateInput.contextMd.trim().length === 0 &&
+    estimateInput.skillIds.length === 0
       ? ("skip" as const)
       : {
           leagueId,
@@ -130,8 +146,13 @@ export function ConfigEditor(props: ConfigEditorProps) {
     estimateInput.skillIds.join() !== skillIds.join();
 
   // Custom tools are live (not versioned); the shell only needs the count.
-  const customTools = useQuery(api.custom_tools.listForTeam, { leagueId, teamId });
-  const customCount = (customTools?.tools ?? []).filter((t) => !t.inherited && t.enabled).length;
+  const customTools = useQuery(api.custom_tools.listForTeam, {
+    leagueId,
+    teamId,
+  });
+  const customCount = (customTools?.tools ?? []).filter(
+    (t) => !t.inherited && t.enabled,
+  ).length;
   const counts = useMemo(() => toolCounts(toolOverrides), [toolOverrides]);
 
   const overLimit = contextMd.length > rules.contextCharLimit;
@@ -184,16 +205,24 @@ export function ConfigEditor(props: ConfigEditorProps) {
         harness: effectiveHarness,
         skillIds: skillIds as Id<"skills">[],
         toolOverrides,
-        ...(changeSummary.trim() ? { changeSummary: changeSummary.trim() } : {}),
+        ...(changeSummary.trim()
+          ? { changeSummary: changeSummary.trim() }
+          : {}),
       });
       setChangeSummary("");
       setNote("");
-      setBaseline({ contextMd, modelId, harness: effectiveHarness, skillIds, toolOverrides });
+      setBaseline({
+        contextMd,
+        modelId,
+        harness: effectiveHarness,
+        skillIds,
+        toolOverrides,
+      });
       clearDraft(draftKey);
       notify(
         result.applied
-          ? `Version ${result.versionNo} saved and applied.`
-          : `Version ${result.versionNo} queued — it applies at the next unlock.`,
+          ? "Changes saved."
+          : "Changes saved — they take effect at the next unlock.",
         "success",
       );
     } catch (err) {
@@ -216,7 +245,11 @@ export function ConfigEditor(props: ConfigEditorProps) {
       {/* ------------------------------------------------------- overview */}
       <div className="grid gap-4 rounded-lg border border-border bg-card p-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
         <dl className="grid grid-cols-2 gap-x-6 gap-y-4 sm:grid-cols-4">
-          <Glance label="Model" value={model?.displayName ?? modelId} detail={model?.provider ?? "unknown"} />
+          <Glance
+            label="Model"
+            value={model?.displayName ?? modelId}
+            detail={model?.provider ?? "unknown"}
+          />
           <Glance
             label="Tools"
             value={`${counts.enabled + customCount}`}
@@ -225,27 +258,37 @@ export function ConfigEditor(props: ConfigEditorProps) {
           <Glance
             label="Skills"
             value={String(skills.length)}
-            detail={skills.length === 0 ? "context only" : skills.map((s) => s.name).join(", ")}
+            detail={
+              skills.length === 0
+                ? "context only"
+                : skills.map((s) => s.name).join(", ")
+            }
           />
           <Glance
             label="Est. cost / run"
             value={estimate ? formatUsd(estimate.estimatedCostPerRunUsd) : "—"}
-            detail={estimate ? `${estimate.tokens.toLocaleString()} prompt tokens` : "estimating"}
+            detail={
+              estimate
+                ? `${estimate.tokens.toLocaleString()} prompt tokens`
+                : "estimating"
+            }
             dim={estimateStale}
           />
         </dl>
         <div className="flex flex-wrap items-center gap-2 sm:flex-col sm:items-end">
-          <Badge variant={lock.open ? "success" : "warning"}>{lock.open ? "editable" : "locked"}</Badge>
+          <Badge variant={lock.open ? "success" : "warning"}>
+            {lock.open ? "editable" : "locked"}
+          </Badge>
           <span className="text-xs text-muted-foreground">
             {lock.open
               ? `Saves apply now · locks ${nextChangeLabel}`
               : canEdit
-                ? `Saves queue for ${nextChangeLabel}`
+                ? `Saves take effect ${nextChangeLabel}`
                 : `Unlocks ${nextChangeLabel}`}
           </span>
           {initial.pendingVersionNo !== null ? (
             <span className="text-xs text-muted-foreground">
-              v{initial.pendingVersionNo} already queued
+              saved changes pending
             </span>
           ) : null}
         </div>
@@ -253,7 +296,10 @@ export function ConfigEditor(props: ConfigEditorProps) {
 
       {/* ----------------------------------------------------------- tabs */}
       <Tabs value={tab} onValueChange={(value) => setTab(value as EditorTab)}>
-        <TabsList variant="line" className="w-full justify-start border-b border-border">
+        <TabsList
+          variant="line"
+          className="w-full justify-start border-b border-border"
+        >
           <TabsTrigger value="prompt" className="flex-none px-3 py-2">
             System prompt
           </TabsTrigger>
@@ -318,44 +364,39 @@ export function ConfigEditor(props: ConfigEditorProps) {
       </Tabs>
 
       {/* ------------------------------------------------------- save bar */}
-      {canEdit ? (
+      {!canEdit ? (
+        <p className="border-t border-border pt-5 text-sm text-muted-foreground">
+          You are reading {props.teamName}&apos;s agent. Every config in the
+          league is public; only its owner (or the commissioner) can change it.
+        </p>
+      ) : dirty || error ? (
         <div className="sticky bottom-4 z-20">
           <div className="rounded-lg border border-line-strong bg-card/95 shadow-lg backdrop-blur supports-backdrop-filter:bg-card/80">
             <div className="flex flex-wrap items-end justify-end gap-4 p-4">
-              {dirty ? (
-                <Field className="min-w-56 flex-1">
-                  <FieldLabel htmlFor="change-summary" className="eyebrow text-foreground">
-                    Change summary
-                  </FieldLabel>
-                  <Input
-                    id="change-summary"
-                    value={changeSummary}
-                    maxLength={200}
-                    placeholder="Weight floor over ceiling when favored"
-                    onChange={(e) => setChangeSummary(e.target.value)}
-                  />
-                </Field>
-              ) : null}
-              <div className="flex items-center gap-3">
-                <span
-                  className={cn(
-                    "text-xs",
-                    dirty ? "text-warning" : "text-ink-faint",
-                  )}
+              <Field className="min-w-56 flex-1">
+                <FieldLabel
+                  htmlFor="change-summary"
+                  className="eyebrow text-foreground"
                 >
-                  {dirty ? "Unsaved changes" : "No changes"}
-                </span>
+                  Change summary
+                </FieldLabel>
+                <Input
+                  id="change-summary"
+                  value={changeSummary}
+                  maxLength={200}
+                  placeholder="Weight floor over ceiling when favored"
+                  onChange={(e) => setChangeSummary(e.target.value)}
+                />
+              </Field>
+              <div className="flex items-center gap-3">
+                <span className="text-xs text-warning">Unsaved changes</span>
                 <Button
                   type="button"
                   size="lg"
-                  disabled={saving || overLimit}
+                  disabled={saving || overLimit || !dirty}
                   onClick={() => void submitVersion()}
                 >
-                  {saving
-                    ? "Saving…"
-                    : lock.open
-                      ? `Save version ${props.nextVersionNo}`
-                      : `Queue version ${props.nextVersionNo}`}
+                  {saving ? "Saving…" : "Save changes"}
                 </Button>
               </div>
             </div>
@@ -367,8 +408,12 @@ export function ConfigEditor(props: ConfigEditorProps) {
                 {issues.length > 0 ? (
                   <ul className="mt-1.5 space-y-1">
                     {issues.map((issue) => (
-                      <li key={`${issue.field}:${issue.message}`} className="text-sm text-destructive">
-                        <span className="font-mono text-xs">{issue.field}</span> — {issue.message}
+                      <li
+                        key={`${issue.field}:${issue.message}`}
+                        className="text-sm text-destructive"
+                      >
+                        <span className="font-mono text-xs">{issue.field}</span>{" "}
+                        — {issue.message}
                       </li>
                     ))}
                   </ul>
@@ -377,12 +422,7 @@ export function ConfigEditor(props: ConfigEditorProps) {
             ) : null}
           </div>
         </div>
-      ) : (
-        <p className="border-t border-border pt-5 text-sm text-muted-foreground">
-          You are reading {props.teamName}&apos;s agent. Every config in the league is public; only
-          its owner (or the commissioner) can change it.
-        </p>
-      )}
+      ) : null}
 
       <AttachSkillDialog
         open={attachOpen}
@@ -390,8 +430,16 @@ export function ConfigEditor(props: ConfigEditorProps) {
         attachedIds={skillIds}
         onAttach={attach}
       />
-      <AuthorSkillDialog open={authorOpen} onClose={() => setAuthorOpen(false)} onCreated={attach} />
-      <Toast message={toast?.message ?? null} tone={toast?.tone} onDismiss={() => setToast(null)} />
+      <AuthorSkillDialog
+        open={authorOpen}
+        onClose={() => setAuthorOpen(false)}
+        onCreated={attach}
+      />
+      <Toast
+        message={toast?.message ?? null}
+        tone={toast?.tone}
+        onDismiss={() => setToast(null)}
+      />
     </div>
   );
 }
@@ -410,8 +458,17 @@ function Glance({
   return (
     <div className="min-w-0">
       <dt className="text-[11px] text-muted-foreground">{label}</dt>
-      <dd className={cn("mt-1 truncate font-mono text-lg tabular-nums", dim && "opacity-50")}>{value}</dd>
-      <dd className="mt-0.5 truncate text-[11px] text-muted-foreground">{detail}</dd>
+      <dd
+        className={cn(
+          "mt-1 truncate font-mono text-lg tabular-nums",
+          dim && "opacity-50",
+        )}
+      >
+        {value}
+      </dd>
+      <dd className="mt-0.5 truncate text-[11px] text-muted-foreground">
+        {detail}
+      </dd>
     </div>
   );
 }

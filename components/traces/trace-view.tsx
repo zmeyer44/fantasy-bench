@@ -2,7 +2,11 @@
 
 import { Download } from "lucide-react";
 import Link from "next/link";
-import { usePaginatedQuery, usePreloadedQuery, type Preloaded } from "convex/react";
+import {
+  usePaginatedQuery,
+  usePreloadedQuery,
+  type Preloaded,
+} from "convex/react";
 
 import { JsonBlock } from "@/components/traces/json-block";
 import { PromptSections } from "@/components/traces/prompt-sections";
@@ -74,11 +78,13 @@ export function TraceView({
       <header className="space-y-4">
         <div className="flex flex-wrap items-start justify-between gap-4 border-b border-border pb-4">
           <div className="min-w-0">
-            <div className="eyebrow text-brand">Trace</div>
+            <div className="eyebrow-caps text-brand">Trace</div>
             <h1 className="mt-2.5 flex flex-wrap items-baseline gap-2 text-2xl font-semibold tracking-tight text-foreground">
               {run.windowLabelText}
               {detail.team ? (
-                <span className="text-muted-foreground">· {detail.team.name}</span>
+                <span className="text-muted-foreground">
+                  · {detail.team.name}
+                </span>
               ) : null}
             </h1>
             <p className="mt-1.5 font-mono text-[10px] text-ink-faint">
@@ -89,23 +95,36 @@ export function TraceView({
           <Button
             variant="outline"
             size="sm"
-            render={<a href={`/api/leagues/${leagueId}/traces/${runId}/export`} download />}
+            render={
+              <a
+                href={`/api/leagues/${leagueId}/traces/${runId}/export`}
+                download
+              />
+            }
           >
             <Download data-icon="inline-start" />
             Export JSON
           </Button>
         </div>
 
-        <RunTags run={run} leagueId={leagueId} />
+        <RunTags run={run} />
 
         <dl className="grid grid-cols-2 divide-border border-y border-border sm:grid-cols-4 sm:divide-x">
           <Metric
             label="Started"
-            value={run.startedAt ? `${formatET(run.startedAt, "MMM d HH:mm:ss")} ET` : "—"}
+            value={
+              run.startedAt
+                ? `${formatET(run.startedAt, "MMM d HH:mm:ss")} ET`
+                : "—"
+            }
           />
           <Metric
             label="Duration"
-            value={run.durationMs !== null ? `${(run.durationMs / 1000).toFixed(1)}s` : "—"}
+            value={
+              run.durationMs !== null
+                ? `${(run.durationMs / 1000).toFixed(1)}s`
+                : "—"
+            }
           />
           <Metric
             label="Tokens"
@@ -124,8 +143,12 @@ export function TraceView({
               {run.fallback.fromModelId && run.fallback.toModelId ? (
                 <>
                   {" "}
-                  Model switched from <code className="font-mono">{run.fallback.fromModelId}</code>{" "}
-                  to <code className="font-mono">{run.fallback.toModelId}</code>.
+                  Model switched from{" "}
+                  <code className="font-mono">
+                    {run.fallback.fromModelId}
+                  </code>{" "}
+                  to <code className="font-mono">{run.fallback.toModelId}</code>
+                  .
                 </>
               ) : null}
             </AlertDescription>
@@ -142,12 +165,17 @@ export function TraceView({
 
         <div className="flex flex-wrap items-center gap-3 text-[10px] text-ink-faint">
           <span className="font-mono">
-            window opens {formatET(detail.window.opensAt, "MMM d HH:mm")} · deadline{" "}
-            {formatET(detail.window.submissionDeadlineAt, "HH:mm")} · closes{" "}
-            {formatET(detail.window.closesAt, "HH:mm")} ET
+            window opens {formatET(detail.window.opensAt, "MMM d HH:mm")} ·
+            deadline {formatET(detail.window.submissionDeadlineAt, "HH:mm")} ·
+            closes {formatET(detail.window.closesAt, "HH:mm")} ET
+          </span>
+          <span className="font-mono" title={run.modelId}>
+            model {run.modelLabel}
           </span>
           {detail.window.snapshotId ? (
-            <Badge variant="outline">snapshot {detail.window.snapshotId.slice(0, 8)}</Badge>
+            <span className="font-mono">
+              snapshot {detail.window.snapshotId.slice(0, 8)}
+            </span>
           ) : null}
           {detail.configVersion ? (
             <Link
@@ -174,7 +202,8 @@ export function TraceView({
                 {step.stepIndex}
               </a>
             ))}
-            {steps.status === "CanLoadMore" || steps.status === "LoadingMore" ? (
+            {steps.status === "CanLoadMore" ||
+            steps.status === "LoadingMore" ? (
               <span className="font-mono text-[10px] text-ink-faint">
                 · {run.stepCount} step{run.stepCount === 1 ? "" : "s"} in total
               </span>
@@ -185,13 +214,17 @@ export function TraceView({
 
       {detail.privateUntil ? (
         <p className="border-l-2 border-line-strong pl-3 text-sm text-muted-foreground">
-          The owner&apos;s context, skills, tool guidance and custom-tool calls in this trace are
-          private until {formatET(detail.privateUntil, "MMM d, HH:mm")} ET. Customizations become
-          public {COOLDOWN_DAYS} days after a run.
+          The owner&apos;s context, skills, tool guidance and custom-tool calls
+          in this trace are private until{" "}
+          {formatET(detail.privateUntil, "MMM d, HH:mm")} ET. Customizations
+          become public {COOLDOWN_DAYS} days after a run.
         </p>
       ) : null}
 
-      <PromptSections sections={detail.promptSections} source={detail.promptSectionsSource} />
+      <PromptSections
+        sections={detail.promptSections}
+        source={detail.promptSectionsSource}
+      />
 
       <section>
         <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 border-b border-border pb-2">
@@ -206,7 +239,9 @@ export function TraceView({
         ) : loaded.length === 0 ? (
           <p className="py-3 text-sm text-muted-foreground">
             This run recorded no steps
-            {run.status === "fallback" ? " — the fallback path ran instead of the model." : "."}
+            {run.status === "fallback"
+              ? " — the fallback path ran instead of the model."
+              : "."}
           </p>
         ) : (
           <div>
@@ -237,7 +272,9 @@ export function TraceView({
         <section>
           <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 border-b border-border pb-2">
             <h2 className="eyebrow text-foreground">Rationale</h2>
-            <p className="font-mono text-[10px] text-ink-faint">the agent&apos;s public explanation</p>
+            <p className="font-mono text-[10px] text-ink-faint">
+              the agent&apos;s public explanation
+            </p>
           </div>
           <p className="whitespace-pre-wrap pt-3 text-sm leading-relaxed text-foreground">
             {run.rationale}
@@ -249,12 +286,15 @@ export function TraceView({
         <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 border-b border-border pb-2">
           <h2 className="eyebrow text-foreground">Committed actions</h2>
           <p className="font-mono text-[10px] tabular-nums text-ink-faint">
-            {detail.actions.length} write tool call{detail.actions.length === 1 ? "" : "s"}
+            {detail.actions.length} write tool call
+            {detail.actions.length === 1 ? "" : "s"}
           </p>
         </div>
 
         {detail.actions.length === 0 ? (
-          <p className="py-3 text-sm text-muted-foreground">This run committed nothing.</p>
+          <p className="py-3 text-sm text-muted-foreground">
+            This run committed nothing.
+          </p>
         ) : (
           <Table>
             <TableHeader>
@@ -282,10 +322,10 @@ export function TraceView({
                   </TableCell>
                   <TableCell>
                     {action.validationResult.ok ? (
-                      <Badge variant="success">ok</Badge>
+                      <Badge variant="success">OK</Badge>
                     ) : (
                       <span className="flex flex-wrap items-center gap-1">
-                        <Badge variant="destructive">rejected</Badge>
+                        <Badge variant="destructive">Rejected</Badge>
                         <span className="text-xs text-destructive">
                           {(action.validationResult.errors ?? []).join("; ")}
                         </span>
@@ -293,7 +333,9 @@ export function TraceView({
                     )}
                   </TableCell>
                   <TableCell className="font-mono text-[10px] text-muted-foreground">
-                    {action.committedAt ? formatET(action.committedAt, "HH:mm:ss") : "—"}
+                    {action.committedAt
+                      ? formatET(action.committedAt, "HH:mm:ss")
+                      : "—"}
                   </TableCell>
                   <TableCell className="max-w-md whitespace-normal">
                     <details>
@@ -313,13 +355,17 @@ export function TraceView({
       <section>
         <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 border-b border-border pb-2">
           <h2 className="eyebrow text-foreground">Usage ledger</h2>
-          <p className="font-mono text-[10px] text-ink-faint">one row per model call</p>
+          <p className="font-mono text-[10px] text-ink-faint">
+            one row per model call
+          </p>
         </div>
 
         {usage.status === "LoadingFirstPage" ? (
           <p className="py-3 text-sm text-muted-foreground">Loading usage…</p>
         ) : usage.results.length === 0 ? (
-          <p className="py-3 text-sm text-muted-foreground">No usage recorded.</p>
+          <p className="py-3 text-sm text-muted-foreground">
+            No usage recorded.
+          </p>
         ) : (
           <Table>
             <TableHeader>
@@ -337,7 +383,9 @@ export function TraceView({
             <TableBody>
               {usage.results.map((event, index) => (
                 <TableRow key={`${event.stepIndex}-${index}`}>
-                  <TableCell className="font-mono text-xs">#{event.stepIndex}</TableCell>
+                  <TableCell className="font-mono text-xs">
+                    #{event.stepIndex}
+                  </TableCell>
                   <TableCell className="font-mono text-[10px] text-muted-foreground">
                     {event.modelId}
                     <span className="text-ink-faint"> · {event.provider}</span>
@@ -345,22 +393,33 @@ export function TraceView({
                   <TableCell numeric className="font-mono text-xs">
                     {event.inputTokens.toLocaleString()}
                   </TableCell>
-                  <TableCell numeric className="font-mono text-xs text-muted-foreground">
+                  <TableCell
+                    numeric
+                    className="font-mono text-xs text-muted-foreground"
+                  >
                     {event.cachedInputTokens.toLocaleString()}
                   </TableCell>
                   <TableCell numeric className="font-mono text-xs">
                     {event.outputTokens.toLocaleString()}
                   </TableCell>
-                  <TableCell numeric className="font-mono text-xs text-muted-foreground">
+                  <TableCell
+                    numeric
+                    className="font-mono text-xs text-muted-foreground"
+                  >
                     {event.reasoningTokens.toLocaleString()}
                   </TableCell>
-                  <TableCell numeric className="font-mono text-xs text-muted-foreground">
+                  <TableCell
+                    numeric
+                    className="font-mono text-xs text-muted-foreground"
+                  >
                     {event.latencyMs !== null ? `${event.latencyMs}ms` : "—"}
                   </TableCell>
                   <TableCell numeric className="font-mono text-xs">
                     ${event.costUsd.toFixed(5)}
                     {event.gatewayCostUsd === null ? (
-                      <span className="block text-[10px] text-ink-faint">computed</span>
+                      <span className="block text-[10px] text-ink-faint">
+                        computed
+                      </span>
                     ) : null}
                   </TableCell>
                 </TableRow>
@@ -387,8 +446,9 @@ export function TraceView({
 
         <p className="mt-3 border-t border-border pt-3 font-mono text-[10px] tabular-nums text-ink-faint">
           Run totals: {detail.usage.inputTokens.toLocaleString()} in ·{" "}
-          {detail.usage.outputTokens.toLocaleString()} out · ${detail.usage.costUsd.toFixed(5)} over{" "}
-          {detail.usage.stepCount} step{detail.usage.stepCount === 1 ? "" : "s"}.
+          {detail.usage.outputTokens.toLocaleString()} out · $
+          {detail.usage.costUsd.toFixed(5)} over {detail.usage.stepCount} step
+          {detail.usage.stepCount === 1 ? "" : "s"}.
         </p>
       </section>
     </div>
@@ -399,7 +459,9 @@ function Metric({ label, value }: { label: string; value: string }) {
   return (
     <div className="min-w-0 px-4 py-3 first:pl-0 last:pr-0">
       <dt className="eyebrow">{label}</dt>
-      <dd className="mt-2 font-mono text-sm tabular-nums text-foreground">{value}</dd>
+      <dd className="mt-2 font-mono text-sm tabular-nums text-foreground">
+        {value}
+      </dd>
     </div>
   );
 }

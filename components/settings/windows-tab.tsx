@@ -70,7 +70,9 @@ export function WindowsTab({ data }: { data: SettingsData }) {
               id="unlock-day"
               className="w-full"
               value={editLock.unlockDay}
-              onChange={(event) => setEditLock({ ...editLock, unlockDay: event.target.value })}
+              onChange={(event) =>
+                setEditLock({ ...editLock, unlockDay: event.target.value })
+              }
             >
               {WEEKDAY_OPTIONS.map((day) => (
                 <NativeSelectOption key={day} value={day}>
@@ -86,7 +88,9 @@ export function WindowsTab({ data }: { data: SettingsData }) {
               className="font-mono"
               value={editLock.unlockTime}
               placeholder="06:00"
-              onChange={(event) => setEditLock({ ...editLock, unlockTime: event.target.value })}
+              onChange={(event) =>
+                setEditLock({ ...editLock, unlockTime: event.target.value })
+              }
             />
           </Field>
           <Field>
@@ -95,7 +99,9 @@ export function WindowsTab({ data }: { data: SettingsData }) {
               id="lock-day"
               className="w-full"
               value={editLock.lockDay}
-              onChange={(event) => setEditLock({ ...editLock, lockDay: event.target.value })}
+              onChange={(event) =>
+                setEditLock({ ...editLock, lockDay: event.target.value })
+              }
             >
               {WEEKDAY_OPTIONS.map((day) => (
                 <NativeSelectOption key={day} value={day}>
@@ -111,7 +117,9 @@ export function WindowsTab({ data }: { data: SettingsData }) {
               className="font-mono"
               value={editLock.lockTime}
               placeholder="03:00"
-              onChange={(event) => setEditLock({ ...editLock, lockTime: event.target.value })}
+              onChange={(event) =>
+                setEditLock({ ...editLock, lockTime: event.target.value })
+              }
             />
           </Field>
         </FieldGroup>
@@ -126,7 +134,8 @@ export function WindowsTab({ data }: { data: SettingsData }) {
         onSubmit={() =>
           void saveOverrides.submit({
             leagueId: data.league._id,
-            windowOverrides: Object.keys(overrides).length > 0 ? overrides : null,
+            windowOverrides:
+              Object.keys(overrides).length > 0 ? overrides : null,
           })
         }
       >
@@ -150,7 +159,9 @@ export function WindowsTab({ data }: { data: SettingsData }) {
               return (
                 <TableRow key={template.label}>
                   <TableCell className="align-top">
-                    <span className="block text-foreground">{template.name}</span>
+                    <span className="block text-foreground">
+                      {template.name}
+                    </span>
                     <span className="block font-mono text-xs text-ink-faint">
                       {template.label} · {template.defaults}
                     </span>
@@ -160,16 +171,18 @@ export function WindowsTab({ data }: { data: SettingsData }) {
                       <Switch
                         checked={enabled}
                         aria-label={`${template.name} enabled`}
-                        onCheckedChange={(next) => patch(template.label, { enabled: next })}
+                        onCheckedChange={(next) =>
+                          patch(template.label, { enabled: next })
+                        }
                       />
                       <span
                         className={
                           enabled
-                            ? "font-mono text-xs tracking-wider text-brand uppercase"
-                            : "font-mono text-xs tracking-wider text-muted-foreground uppercase"
+                            ? "font-mono text-xs text-brand"
+                            : "font-mono text-xs text-muted-foreground"
                         }
                       >
-                        {enabled ? "open" : "off"}
+                        {enabled ? "Open" : "Off"}
                       </span>
                     </div>
                   </TableCell>
@@ -177,42 +190,56 @@ export function WindowsTab({ data }: { data: SettingsData }) {
                     <DaySelect
                       label={`${template.name} opens on`}
                       value={current.opensDay ?? ""}
-                      onChange={(value) => patch(template.label, { opensDay: value })}
+                      onChange={(value) =>
+                        patch(template.label, { opensDay: value })
+                      }
                     />
                   </TableCell>
                   <TableCell className="align-top">
                     <TimeInput
                       label={`${template.name} opens at`}
                       value={current.opensTime ?? ""}
-                      onChange={(value) => patch(template.label, { opensTime: value || undefined })}
+                      onChange={(value) =>
+                        patch(template.label, { opensTime: value || undefined })
+                      }
                     />
                   </TableCell>
                   <TableCell className="align-top">
                     <DaySelect
                       label={`${template.name} closes on`}
                       value={current.closesDay ?? ""}
-                      onChange={(value) => patch(template.label, { closesDay: value })}
+                      onChange={(value) =>
+                        patch(template.label, { closesDay: value })
+                      }
                     />
                   </TableCell>
                   <TableCell className="align-top">
                     <TimeInput
                       label={`${template.name} closes at`}
                       value={current.closesTime ?? ""}
-                      onChange={(value) => patch(template.label, { closesTime: value || undefined })}
+                      onChange={(value) =>
+                        patch(template.label, {
+                          closesTime: value || undefined,
+                        })
+                      }
                     />
                   </TableCell>
                   <TableCell numeric className="align-top">
                     <NumberInput
                       label={`${template.name} submission lead minutes`}
                       value={current.submissionLeadMinutes}
-                      onChange={(value) => patch(template.label, { submissionLeadMinutes: value })}
+                      onChange={(value) =>
+                        patch(template.label, { submissionLeadMinutes: value })
+                      }
                     />
                   </TableCell>
                   <TableCell numeric className="align-top">
                     <NumberInput
                       label={`${template.name} rounds`}
                       value={current.rounds}
-                      onChange={(value) => patch(template.label, { rounds: value })}
+                      onChange={(value) =>
+                        patch(template.label, { rounds: value })
+                      }
                     />
                   </TableCell>
                 </TableRow>
@@ -240,7 +267,9 @@ function DaySelect({
       aria-label={label}
       className="w-24"
       value={value}
-      onChange={(event) => onChange((event.target.value || undefined) as Weekday | undefined)}
+      onChange={(event) =>
+        onChange((event.target.value || undefined) as Weekday | undefined)
+      }
     >
       <NativeSelectOption value="">—</NativeSelectOption>
       {WEEKDAY_OPTIONS.map((day) => (
@@ -288,7 +317,11 @@ function NumberInput({
       min={0}
       className="h-7 w-20 text-right font-mono text-xs"
       value={value ?? ""}
-      onChange={(event) => onChange(event.target.value === "" ? undefined : Number(event.target.value))}
+      onChange={(event) =>
+        onChange(
+          event.target.value === "" ? undefined : Number(event.target.value),
+        )
+      }
     />
   );
 }

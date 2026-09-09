@@ -116,7 +116,7 @@ function InspectorBody({
               <Lock data-icon="inline-start" /> required
             </Badge>
           ) : null}
-          {!enabled ? <Badge variant="warning">off</Badge> : null}
+          {!enabled ? <Badge variant="warning">Off</Badge> : null}
         </div>
         <SheetDescription>{tool.summary}</SheetDescription>
       </SheetHeader>

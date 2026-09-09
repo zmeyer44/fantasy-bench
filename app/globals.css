@@ -172,6 +172,18 @@
    */
   .eyebrow {
     font-family: var(--font-mono);
+    font-size: 0.75rem;
+    line-height: 1;
+    color: var(--muted-foreground);
+  }
+
+  /*
+   * The tracked, uppercase form of the label. Reserved for brand surfaces
+   * (landing page, its nav, the auth plate) and the single lime kicker above
+   * a page or panel title. Everything else is the sentence-case `.eyebrow`.
+   */
+  .eyebrow-caps {
+    font-family: var(--font-mono);
     font-size: 0.6875rem;
     line-height: 1;
     letter-spacing: 0.14em;

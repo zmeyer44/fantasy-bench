@@ -26,9 +26,7 @@ import { LeagueTabs, LeagueTabsRow } from "./nav/league-tabs";
 import { UserMenu } from "./user-menu";
 
 /** Account-level sections, shown when the viewer is not inside a league. */
-const CONSOLE_LINKS = [
-  { href: "/leagues", label: "Leagues" },
-] as const;
+const CONSOLE_LINKS = [{ href: "/leagues", label: "Leagues" }] as const;
 
 const LANDING_LINKS = [
   { href: "/leagues", label: "League" },
@@ -55,30 +53,69 @@ export function SiteNav() {
   // bookmark that is not a Convex id) resolves to `null` and the bar falls back
   // to the console links while the page below renders its 404.
   const leagueId = leagueIdFromPathname(pathname);
-  const league = useQuery(api.leagues.navContext, leagueId ? { leagueId } : "skip");
+  const league = useQuery(
+    api.leagues.navContext,
+    leagueId ? { leagueId } : "skip",
+  );
   const inLeague = leagueId !== null && Boolean(league);
   const leagueEntries = league
     ? leagueNavEntries(
-        { leagueId: league.leagueId, isCommissioner: league.isCommissioner, myTeamId: league.viewerTeamId },
+        {
+          leagueId: league.leagueId,
+          isCommissioner: league.isCommissioner,
+          myTeamId: league.viewerTeamId,
+        },
         pathname,
       )
     : [];
 
   const links = isLanding ? LANDING_LINKS : CONSOLE_LINKS;
+  // Signed-in CTA: a member goes straight to their league, everyone else to the
+  // league list. Hidden inside a league, where the switcher already covers it.
+  const homeLeagueId = viewer?.memberships[0]?.leagueId ?? null;
 
   return (
-    <header className={cn("sticky top-0 z-40 border-b border-border bg-background/90 backdrop-blur supports-backdrop-filter:bg-background/75", isLanding && styles.header)}>
-      <nav aria-label="Main navigation" className={cn("mx-auto flex h-14 max-w-7xl items-center gap-4 px-4 sm:px-6", isLanding && styles.nav)}>
-        <Link href="/" className={cn("flex shrink-0 items-center gap-2.5 text-foreground", isLanding && styles.brandLink)} aria-label="Fantasy Bench home">
-          <LogoMark className={cn("size-7", isLanding && styles.brandLogo)} />
-          <span className={cn("display text-[13px] tracking-[0.12em]", inLeague && "hidden xl:inline", isLanding && styles.brandName)}>
+    <header
+      className={cn(
+        "sticky top-0 z-40 border-b border-border bg-background/90 backdrop-blur supports-backdrop-filter:bg-background/75",
+        isLanding && styles.header,
+      )}
+    >
+      <nav
+        aria-label="Main navigation"
+        className={cn(
+          "mx-auto flex h-14 max-w-7xl items-center gap-4 px-4 sm:px-6",
+          isLanding && styles.nav,
+        )}
+      >
+        <Link
+          href="/"
+          className={cn(
+            "flex shrink-0 items-center gap-2.5 text-foreground",
+            isLanding && styles.brandLink,
+          )}
+          aria-label="Fantasy Bench home"
+        >
+          <LogoMark className={isLanding ? "size-9" : "size-7"} />
+          <span
+            className={cn(
+              "display text-[13px] tracking-[0.12em]",
+              inLeague && "hidden xl:inline",
+              isLanding && styles.brandName,
+            )}
+          >
             Fantasy Bench
           </span>
         </Link>
 
         {inLeague && league ? (
           <>
-            <span aria-hidden className="select-none text-lg font-light text-border">/</span>
+            <span
+              aria-hidden
+              className="select-none text-lg font-light text-border"
+            >
+              /
+            </span>
             <LeagueSwitcher
               current={{
                 leagueId: league.leagueId,
@@ -97,16 +134,23 @@ export function SiteNav() {
             <LeagueTabs entries={leagueEntries} className="hidden lg:flex" />
           </>
         ) : (
-          <div className={cn("hidden items-center gap-1 md:flex", isLanding && styles.navLinks)}>
+          <div
+            className={cn(
+              "hidden items-center gap-1 md:flex",
+              isLanding && styles.navLinks,
+            )}
+          >
             {links.map((link) => {
-              const active = pathname === link.href || pathname.startsWith(`${link.href}/`);
+              const active =
+                pathname === link.href || pathname.startsWith(`${link.href}/`);
               return (
                 <Link
                   key={link.href}
                   href={link.href}
                   aria-current={active ? "page" : undefined}
                   className={cn(
-                    "eyebrow rounded-md px-2.5 py-2 transition-colors hover:text-foreground",
+                    "rounded-md px-2.5 py-2 transition-colors hover:text-foreground",
+                    isLanding ? "eyebrow-caps" : "eyebrow",
                     active && "text-foreground",
                   )}
                 >
@@ -117,24 +161,55 @@ export function SiteNav() {
           </div>
         )}
 
-        <div className={cn("ml-auto flex items-center gap-2", isLanding && styles.account)}>
+        <div
+          className={cn(
+            "ml-auto flex items-center gap-2",
+            isLanding && styles.account,
+          )}
+        >
           {viewer === undefined ? (
             // First paint before the subscription resolves: reserve the space
             // rather than flashing "Log in" at someone who is signed in.
             <span className="h-8 w-40" aria-hidden />
           ) : viewer ? (
-            <UserMenu name={viewer.name ?? ""} email={viewer.email ?? ""} />
+            <>
+              {inLeague ? null : (
+                <Button
+                  variant="brand"
+                  size={isLanding ? "xl" : "lg"}
+                  role="link"
+                  render={<Link href={homeLeagueId ? `/leagues/${homeLeagueId}` : "/leagues"} />}
+                >
+                  {homeLeagueId ? "View league" : "Join a league"}
+                  <ArrowUpRight data-icon="inline-end" />
+                </Button>
+              )}
+              <UserMenu
+                name={viewer.name ?? ""}
+                email={viewer.email ?? ""}
+                size={isLanding ? "xl" : "lg"}
+              />
+            </>
           ) : (
             <>
               <Button
                 variant="ghost"
                 size="sm"
-                className="eyebrow hidden hover:text-foreground sm:inline-flex"
-                role="link" render={<Link href="/login" />}
+                className={cn(
+                  "hidden hover:text-foreground sm:inline-flex",
+                  isLanding ? "eyebrow-caps" : "eyebrow",
+                )}
+                role="link"
+                render={<Link href="/login" />}
               >
                 Log in
               </Button>
-              <Button variant="brand" size="sm" role="link" render={<Link href="/signup" />}>
+              <Button
+                variant="brand"
+                size={isLanding ? "xl" : "lg"}
+                role="link"
+                render={<Link href="/signup" />}
+              >
                 Get started
                 <ArrowUpRight data-icon="inline-end" />
               </Button>
@@ -144,15 +219,24 @@ export function SiteNav() {
           <Sheet open={menuOpen} onOpenChange={setMenuOpen}>
             <SheetTrigger
               render={
-                <Button variant="ghost" size="icon-sm" className={cn("md:hidden", isLanding && styles.menuTrigger)} aria-label="Open menu" />
+                <Button
+                  variant="ghost"
+                  size="icon-sm"
+                  className={cn("md:hidden", isLanding && styles.menuTrigger)}
+                  aria-label="Open menu"
+                />
               }
             >
               <Menu />
             </SheetTrigger>
             <SheetContent side="right" className="w-72">
               <SheetHeader>
-                <SheetTitle className="display text-sm tracking-[0.12em]">Fantasy Bench</SheetTitle>
-                <SheetDescription className="sr-only">Site navigation</SheetDescription>
+                <SheetTitle className="display text-sm tracking-[0.12em]">
+                  Fantasy Bench
+                </SheetTitle>
+                <SheetDescription className="sr-only">
+                  Site navigation
+                </SheetDescription>
               </SheetHeader>
               <div className="flex flex-col gap-1 px-4">
                 {CONSOLE_LINKS.map((link) => (
@@ -166,7 +250,11 @@ export function SiteNav() {
                   </Link>
                 ))}
                 {viewer ? null : (
-                  <Link href="/login" onClick={() => setMenuOpen(false)} className="eyebrow rounded-md px-2 py-3 hover:bg-accent hover:text-foreground">
+                  <Link
+                    href="/login"
+                    onClick={() => setMenuOpen(false)}
+                    className="eyebrow rounded-md px-2 py-3 hover:bg-accent hover:text-foreground"
+                  >
                     Log in
                   </Link>
                 )}
@@ -178,7 +266,10 @@ export function SiteNav() {
 
       {inLeague ? (
         <div className="border-t border-border lg:hidden">
-          <LeagueTabsRow entries={leagueEntries} className="mx-auto max-w-7xl px-4 sm:px-6" />
+          <LeagueTabsRow
+            entries={leagueEntries}
+            className="mx-auto max-w-7xl px-4 sm:px-6"
+          />
         </div>
       ) : null}
     </header>

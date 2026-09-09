@@ -44,7 +44,8 @@ export function LeagueHomeView({
 
   const base = `/leagues/${leagueId}`;
   const next = home.windows.next;
-  const pendingDraft = home.league.status === "setup" || home.league.status === "drafting";
+  const pendingDraft =
+    home.league.status === "setup" || home.league.status === "drafting";
   const anyLive = home.matchups.some((m) => m.home.live || m.away.live);
 
   return (
@@ -52,7 +53,7 @@ export function LeagueHomeView({
       {/* Status + the next window countdown (PRD 5.11): a rule, not a card. */}
       <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-2 border-b border-border pb-4">
         <div className="flex flex-wrap items-center gap-2">
-          <Badge variant="outline">week {home.currentWeek}</Badge>
+          <Badge variant="outline">Week {home.currentWeek}</Badge>
           <span className="font-mono text-[10px] text-ink-faint">
             {home.snapshotTakenAt
               ? `snapshot ${formatET(home.snapshotTakenAt, "MMM d HH:mm")} ET`
@@ -62,12 +63,16 @@ export function LeagueHomeView({
         {next ? (
           <WindowCountdown
             labelText={next.labelText}
-            target={new Date(next.phase === "open" ? next.closesAt : next.opensAt).toISOString()}
+            target={new Date(
+              next.phase === "open" ? next.closesAt : next.opensAt,
+            ).toISOString()}
             verb={next.phase === "open" ? "closes" : "opens"}
             initial={next.countdown}
           />
         ) : (
-          <span className="font-mono text-xs text-ink-faint">No windows scheduled</span>
+          <span className="font-mono text-xs text-ink-faint">
+            No windows scheduled
+          </span>
         )}
       </div>
 
@@ -91,10 +96,16 @@ export function LeagueHomeView({
           <div className="flex shrink-0 gap-2">
             {/* The one primary action on this page. */}
             <Button size="sm" render={<Link href={`${base}/draft`} />}>
-              {home.league.status === "drafting" ? "Watch the draft" : "Draft board"}
+              {home.league.status === "drafting"
+                ? "Watch the draft"
+                : "Draft board"}
             </Button>
             {home.viewer.isCommissioner ? (
-              <Button size="sm" variant="outline" render={<Link href={`${base}/settings`} />}>
+              <Button
+                size="sm"
+                variant="outline"
+                render={<Link href={`${base}/settings`} />}
+              >
                 League settings
               </Button>
             ) : null}
@@ -109,7 +120,11 @@ export function LeagueHomeView({
           <Section
             title={`Week ${home.currentWeek}`}
             meta={anyLive ? "Live" : undefined}
-            action={<SectionLink href={`${base}/matchups/${home.currentWeek}`}>Matchups</SectionLink>}
+            action={
+              <SectionLink href={`${base}/matchups/${home.currentWeek}`}>
+                Matchups
+              </SectionLink>
+            }
           >
             {home.matchups.length === 0 ? (
               <EmptyState
@@ -120,7 +135,11 @@ export function LeagueHomeView({
             ) : (
               <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-1">
                 {home.matchups.map((matchup) => (
-                  <MatchupCard key={matchup.id} leagueId={leagueId} matchup={matchup} />
+                  <MatchupCard
+                    key={matchup.id}
+                    leagueId={leagueId}
+                    matchup={matchup}
+                  />
                 ))}
               </div>
             )}
@@ -129,12 +148,18 @@ export function LeagueHomeView({
           <Section
             title="Standings"
             flush={home.standings.length > 0}
-            action={<SectionLink href={`${base}/standings`}>Full table</SectionLink>}
+            action={
+              <SectionLink href={`${base}/standings`}>Full table</SectionLink>
+            }
           >
             {home.standings.length === 0 ? (
               <EmptyState title="No teams yet" className="py-8" />
             ) : (
-              <StandingsTable leagueId={leagueId} rows={home.standings.slice(0, 6)} compact />
+              <StandingsTable
+                leagueId={leagueId}
+                rows={home.standings.slice(0, 6)}
+                compact
+              />
             )}
           </Section>
 
@@ -143,35 +168,42 @@ export function LeagueHomeView({
             meta="Eastern"
             action={<SectionLink href={`${base}/traces`}>Runs</SectionLink>}
           >
-            {home.windows.open.length === 0 && home.windows.upcoming.length === 0 ? (
-              <p className="text-sm text-muted-foreground">Nothing scheduled.</p>
+            {home.windows.open.length === 0 &&
+            home.windows.upcoming.length === 0 ? (
+              <p className="text-sm text-muted-foreground">
+                Nothing scheduled.
+              </p>
             ) : (
               <ul className="divide-y divide-border">
-                {[...home.windows.open, ...home.windows.upcoming].map((window) => (
-                  <li
-                    key={window.id}
-                    className="flex items-baseline justify-between gap-3 py-2 first:pt-0 last:pb-0"
-                  >
-                    <span className="min-w-0 truncate text-sm text-foreground">
-                      {window.labelText}
-                      {window.weekNo ? (
-                        <span className="ml-1.5 font-mono text-[10px] text-ink-faint">
-                          wk {window.weekNo}
-                        </span>
-                      ) : null}
-                    </span>
-                    <span
-                      className={cn(
-                        "shrink-0 font-mono text-[10px] tabular-nums",
-                        window.phase === "open" ? "text-brand" : "text-muted-foreground",
-                      )}
+                {[...home.windows.open, ...home.windows.upcoming].map(
+                  (window) => (
+                    <li
+                      key={window.id}
+                      className="flex items-baseline justify-between gap-3 py-2 first:pt-0 last:pb-0"
                     >
-                      {window.phase === "open"
-                        ? `closes ${window.countdown}`
-                        : `opens ${window.countdown}`}
-                    </span>
-                  </li>
-                ))}
+                      <span className="min-w-0 truncate text-sm text-foreground">
+                        {window.labelText}
+                        {window.weekNo ? (
+                          <span className="ml-1.5 font-mono text-[10px] text-ink-faint">
+                            wk {window.weekNo}
+                          </span>
+                        ) : null}
+                      </span>
+                      <span
+                        className={cn(
+                          "shrink-0 font-mono text-[10px] tabular-nums",
+                          window.phase === "open"
+                            ? "text-brand"
+                            : "text-muted-foreground",
+                        )}
+                      >
+                        {window.phase === "open"
+                          ? `closes ${window.countdown}`
+                          : `opens ${window.countdown}`}
+                      </span>
+                    </li>
+                  ),
+                )}
               </ul>
             )}
           </Section>
@@ -206,7 +238,9 @@ function Section({
       <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 border-b border-border pb-2.5">
         <div className="flex flex-wrap items-baseline gap-3">
           <h2 className="eyebrow text-foreground">{title}</h2>
-          {meta ? <span className="text-xs text-muted-foreground">{meta}</span> : null}
+          {meta ? (
+            <span className="text-xs text-muted-foreground">{meta}</span>
+          ) : null}
         </div>
         {action}
       </div>
@@ -215,9 +249,18 @@ function Section({
   );
 }
 
-function SectionLink({ href, children }: { href: string; children: ReactNode }) {
+function SectionLink({
+  href,
+  children,
+}: {
+  href: string;
+  children: ReactNode;
+}) {
   return (
-    <Link href={href} className="eyebrow transition-colors hover:text-foreground">
+    <Link
+      href={href}
+      className="eyebrow transition-colors hover:text-foreground"
+    >
       {children} →
     </Link>
   );

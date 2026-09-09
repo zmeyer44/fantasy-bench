@@ -30,13 +30,15 @@ export function StatusTimeline({
   orientation?: "vertical" | "horizontal";
 }) {
   const steps = TERMINAL[status] ?? [...HAPPY_PATH];
-  const reachedIndex = steps.indexOf(status === "accepted" ? "accepted" : status);
+  const reachedIndex = steps.indexOf(
+    status === "accepted" ? "accepted" : status,
+  );
   const current = reachedIndex === -1 ? steps.length - 1 : reachedIndex;
   const currentIsBad = BAD.has(steps[current] ?? "");
 
   if (orientation === "horizontal") {
     return (
-      <ol className="flex flex-wrap items-center gap-1.5 font-mono text-[10px] tracking-wider uppercase">
+      <ol className="flex flex-wrap items-center gap-1.5 font-mono text-[11px]">
         {steps.map((step, index) => {
           const done = index <= current;
           const isCurrent = index === current;
@@ -94,7 +96,7 @@ export function StatusTimeline({
             />
             <span
               className={cn(
-                "font-mono text-[10px] tracking-wider uppercase",
+                "font-mono text-[11px]",
                 isCurrent && currentIsBad
                   ? "text-destructive"
                   : isCurrent

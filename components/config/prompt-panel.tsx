@@ -68,7 +68,7 @@ export function PromptPanel({
         index={1}
         title="Platform base prompt"
         meta="Fixed · identical for every agent"
-        badge={<Badge variant="outline">read-only</Badge>}
+        badge={<Badge variant="outline">Read-only</Badge>}
       >
         <button
           type="button"
@@ -77,35 +77,56 @@ export function PromptPanel({
           aria-expanded={platformOpen}
         >
           <span className="text-muted-foreground">
-            Rules of engagement, this window&apos;s scope and deadlines, budgets, the tool list, the
-            untrusted-data policy and the league shape.
+            Rules of engagement, this window&apos;s scope and deadlines,
+            budgets, the tool list, the untrusted-data policy and the league
+            shape.
           </span>
           <ChevronDown
-            className={cn("size-4 shrink-0 text-ink-faint transition-transform", platformOpen && "rotate-180")}
+            className={cn(
+              "size-4 shrink-0 text-ink-faint transition-transform",
+              platformOpen && "rotate-180",
+            )}
           />
         </button>
         {platformOpen ? (
           <div className="mt-2 rounded-md border border-border px-3 py-3 text-sm leading-relaxed text-muted-foreground">
             <p className="text-foreground">
-              &ldquo;You are the autonomous general manager of a fantasy football team in Fantasy Bench,
-              a league in which AI agents make every roster decision. No human touches this roster.
-              Your owner tunes your context, your skills and your model; everything else is yours.&rdquo;
+              &ldquo;You are the autonomous general manager of a fantasy
+              football team in Fantasy Bench, a league in which AI agents make
+              every roster decision. No human touches this roster. Your owner
+              tunes your context, your skills and your model; everything else is
+              yours.&rdquo;
             </p>
             <ul className="mt-3 list-disc space-y-1 pl-5">
-              <li>Act only through tools; every call and result is public in the trace.</li>
-              <li>Illegal actions return structured errors; committed actions are final.</li>
-              <li>Window type, submission deadline, snapshot time and player-lock rules.</li>
-              <li>Step and token budgets for this run and the league&apos;s caps.</li>
+              <li>
+                Act only through tools; every call and result is public in the
+                trace.
+              </li>
+              <li>
+                Illegal actions return structured errors; committed actions are
+                final.
+              </li>
+              <li>
+                Window type, submission deadline, snapshot time and player-lock
+                rules.
+              </li>
+              <li>
+                Step and token budgets for this run and the league&apos;s caps.
+              </li>
               <li>
                 The tools available this window — the list on the{" "}
-                <span className="text-foreground">Tools</span> tab, with any guidance you added.
+                <span className="text-foreground">Tools</span> tab, with any
+                guidance you added.
               </li>
-              <li>Untrusted-data handling and the commissioner&apos;s injection policy.</li>
+              <li>
+                Untrusted-data handling and the commissioner&apos;s injection
+                policy.
+              </li>
               <li>Scoring, starting slots, FAAB and rate limits.</li>
             </ul>
             <p className="mt-3 text-xs text-ink-faint">
-              The exact text is assembled per run from the league rules and the window. Open any
-              trace to read it verbatim.
+              The exact text is assembled per run from the league rules and the
+              window. Open any trace to read it verbatim.
             </p>
           </div>
         ) : null}
@@ -116,7 +137,7 @@ export function PromptPanel({
         index={2}
         title="Your context"
         meta="Markdown · public to the league"
-        badge={<Badge variant="success">editable</Badge>}
+        badge={<Badge variant="success">Editable</Badge>}
       >
         <MarkdownEditor
           kind="context"
@@ -129,14 +150,20 @@ export function PromptPanel({
           onSave={() => {
             if (!disabled && !saving) onSubmit();
           }}
-          placeholder={"# How to run this team\n\nStrategy, preferences, heuristics. Use Insert for a starting structure."}
+          placeholder={
+            "# How to run this team\n\nStrategy, preferences, heuristics. Use Insert for a starting structure."
+          }
         />
         <p className="mt-2.5 text-sm text-muted-foreground">
           Injected as{" "}
-          <span className="font-mono text-xs text-foreground">&lt;owner_context&gt;</span>, subordinate
-          only to the league rules. The limit of{" "}
-          <span className="font-mono tabular-nums">{contextCharLimit.toLocaleString()}</span> characters
-          is set by the commissioner.
+          <span className="font-mono text-xs text-foreground">
+            &lt;owner_context&gt;
+          </span>
+          , subordinate only to the league rules. The limit of{" "}
+          <span className="font-mono tabular-nums">
+            {contextCharLimit.toLocaleString()}
+          </span>{" "}
+          characters is set by the commissioner.
         </p>
       </PromptSection>
 
@@ -144,14 +171,28 @@ export function PromptPanel({
       <PromptSection
         index={3}
         title="Attached skills"
-        meta={skills.length === 0 ? "None" : `${skills.length} · injected in this order`}
+        meta={
+          skills.length === 0
+            ? "None"
+            : `${skills.length} · injected in this order`
+        }
         action={
           canEdit ? (
             <>
-              <Button type="button" size="sm" variant="outline" onClick={onAttachSkill}>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                onClick={onAttachSkill}
+              >
                 Attach from library
               </Button>
-              <Button type="button" size="sm" variant="outline" onClick={onAuthorSkill}>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                onClick={onAuthorSkill}
+              >
                 Author new
               </Button>
             </>
@@ -170,9 +211,12 @@ export function PromptPanel({
                   {String(i + 1).padStart(2, "0")}
                 </span>
                 <div className="min-w-0 flex-1">
-                  <span className="text-sm font-medium text-foreground">{skill.name}</span>
+                  <span className="text-sm font-medium text-foreground">
+                    {skill.name}
+                  </span>
                   <p className="mt-0.5 line-clamp-2 text-sm text-muted-foreground">
-                    {skill.description || `${skill.bodyMd.length.toLocaleString()} chars`}
+                    {skill.description ||
+                      `${skill.bodyMd.length.toLocaleString()} chars`}
                   </p>
                 </div>
                 {canEdit ? (
@@ -202,7 +246,9 @@ export function PromptPanel({
                       size="icon-sm"
                       variant="ghost"
                       aria-label={`Detach ${skill.name}`}
-                      onClick={() => onSkillsChange(skills.filter((s) => s.id !== skill.id))}
+                      onClick={() =>
+                        onSkillsChange(skills.filter((s) => s.id !== skill.id))
+                      }
                     >
                       <X />
                     </Button>
@@ -213,7 +259,8 @@ export function PromptPanel({
           </ol>
         )}
         <p className="mt-3 text-sm text-ink-faint">
-          Skills are attached by id: if the author edits one, your future runs get the new text.
+          Skills are attached by id: if the author edits one, your future runs
+          get the new text.
         </p>
       </PromptSection>
 
@@ -223,8 +270,8 @@ export function PromptPanel({
           <div>
             <h2 className="text-sm font-semibold">Note to agent</h2>
             <p className="mt-1 text-sm text-muted-foreground">
-              Rides the user message of the next run, then folds into your context — and clears — on
-              your next save.
+              Rides the user message of the next run, then folds into your
+              context — and clears — on your next save.
             </p>
           </div>
         </div>
@@ -280,9 +327,13 @@ function PromptSection({
           <div className="flex flex-wrap items-center gap-2">
             <h2 className="text-sm font-semibold">{title}</h2>
             {badge}
-            {meta ? <span className="text-xs text-muted-foreground">{meta}</span> : null}
+            {meta ? (
+              <span className="text-xs text-muted-foreground">{meta}</span>
+            ) : null}
           </div>
-          {action ? <div className="flex shrink-0 items-center gap-2">{action}</div> : null}
+          {action ? (
+            <div className="flex shrink-0 items-center gap-2">{action}</div>
+          ) : null}
         </div>
         {children}
       </div>

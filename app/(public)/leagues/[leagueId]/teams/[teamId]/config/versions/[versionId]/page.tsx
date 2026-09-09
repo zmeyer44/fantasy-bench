@@ -6,7 +6,13 @@ import { ConfigNav } from "@/components/config/config-nav";
 import { DiffView } from "@/components/config/diff-view";
 import { Markdown } from "@/components/config/markdown";
 import { readOrNull } from "@/components/league/convex-errors";
-import { Badge, EmptyState, PageHeader, Stat, StatStrip } from "@/components/ui";
+import {
+  Badge,
+  EmptyState,
+  PageHeader,
+  Stat,
+  StatStrip,
+} from "@/components/ui";
 import { COOLDOWN_DAYS } from "@/convex/lib/visibility";
 import { api } from "@/convex/_generated/api";
 import type { Id } from "@/convex/_generated/dataModel";
@@ -41,7 +47,9 @@ export async function generateMetadata({
   const { leagueId, teamId, versionId } = await params;
   const loaded = await load(leagueId, teamId, versionId);
   return {
-    title: loaded ? `${loaded.config.team.name} · v${loaded.version.versionNo}` : "Config version",
+    title: loaded
+      ? `${loaded.config.team.name} · v${loaded.version.versionNo}`
+      : "Config version",
   };
 }
 
@@ -55,13 +63,14 @@ export default async function VersionDiffPage({
   if (!loaded) notFound();
 
   const { version: current, previous, config: view } = loaded;
-  const diff = previous && !current.redacted
-    ? await fetchAuthQuery(api.configs.diff, {
-        leagueId: leagueId as Id<"leagues">,
-        a: previous._id,
-        b: current._id,
-      })
-    : null;
+  const diff =
+    previous && !current.redacted
+      ? await fetchAuthQuery(api.configs.diff, {
+          leagueId: leagueId as Id<"leagues">,
+          a: previous._id,
+          b: current._id,
+        })
+      : null;
 
   const model = findModel(current.modelId);
   const base = `/leagues/${leagueId}/teams/${teamId}/config/versions`;
@@ -83,11 +92,13 @@ export default async function VersionDiffPage({
         actions={
           <div className="flex items-center gap-2">
             {view.config?.currentVersionId === current._id ? (
-              <Badge variant="success">applied</Badge>
+              <Badge variant="success">Applied</Badge>
             ) : view.config?.pendingVersionId === current._id ? (
-              <Badge variant="warning">queued</Badge>
+              <Badge variant="warning">Queued</Badge>
             ) : null}
-            <Badge variant="outline">{model?.displayName ?? current.modelId}</Badge>
+            <Badge variant="outline">
+              {model?.displayName ?? current.modelId}
+            </Badge>
           </div>
         }
       />
@@ -100,47 +111,55 @@ export default async function VersionDiffPage({
           description={`The owner's context, skills, tool customizations and harness for version ${current.versionNo} become public ${COOLDOWN_DAYS} days after it was saved.`}
         />
       ) : (
-      <>
-      <StatStrip>
-        <Stat
-          label="Saved"
-          value={
-            <span className="text-base">
-              {formatET(current.createdAt ?? current._creationTime, "MMM d, HH:mm")} ET
-            </span>
-          }
-        />
-        <Stat
-          label="Applied"
-          value={
-            <span className="text-base">
-              {current.appliedAt ? `${formatET(current.appliedAt, "MMM d, HH:mm")} ET` : "never"}
-            </span>
-          }
-        />
-        <Stat label="Skills" value={current.skills.length} />
-        <Stat
-          label="Summary"
-          value={
-            <span className="line-clamp-2 text-base font-sans">
-              {current.changeSummary ?? "—"}
-            </span>
-          }
-        />
-      </StatStrip>
+        <>
+          <StatStrip>
+            <Stat
+              label="Saved"
+              value={
+                <span className="text-base">
+                  {formatET(
+                    current.createdAt ?? current._creationTime,
+                    "MMM d, HH:mm",
+                  )}{" "}
+                  ET
+                </span>
+              }
+            />
+            <Stat
+              label="Applied"
+              value={
+                <span className="text-base">
+                  {current.appliedAt
+                    ? `${formatET(current.appliedAt, "MMM d, HH:mm")} ET`
+                    : "never"}
+                </span>
+              }
+            />
+            <Stat label="Skills" value={current.skills.length} />
+            <Stat
+              label="Summary"
+              value={
+                <span className="line-clamp-2 text-base font-sans">
+                  {current.changeSummary ?? "—"}
+                </span>
+              }
+            />
+          </StatStrip>
 
-      {diff ? (
-        <DiffView diff={diff} leagueId={leagueId} teamId={teamId} />
-      ) : (
-        <section className="space-y-4">
-          <div className="border-b border-border pb-3">
-            <h2 className="eyebrow text-foreground">Context</h2>
-            <p className="mt-2 text-sm text-muted-foreground">The initial configuration.</p>
-          </div>
-          <Markdown>{current.contextMd}</Markdown>
-        </section>
-      )}
-      </>
+          {diff ? (
+            <DiffView diff={diff} leagueId={leagueId} teamId={teamId} />
+          ) : (
+            <section className="space-y-4">
+              <div className="border-b border-border pb-3">
+                <h2 className="eyebrow text-foreground">Context</h2>
+                <p className="mt-2 text-sm text-muted-foreground">
+                  The initial configuration.
+                </p>
+              </div>
+              <Markdown>{current.contextMd}</Markdown>
+            </section>
+          )}
+        </>
       )}
 
       {previous ? (

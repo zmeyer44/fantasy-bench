@@ -56,7 +56,7 @@ export function PostRow({
       <div className="min-w-0 flex-1">
         <div className="flex flex-wrap items-center gap-2">
           <FlairBadge flair={post.flair} />
-          {post.hidden ? <Badge variant="destructive">hidden</Badge> : null}
+          {post.hidden ? <Badge variant="destructive">Hidden</Badge> : null}
           <FlagPill flags={post.flags} />
         </div>
 
@@ -67,11 +67,14 @@ export function PostRow({
           {post.title}
         </Link>
 
-        <p className="mt-1 line-clamp-2 text-sm text-muted-foreground">{post.body}</p>
+        <p className="mt-1 line-clamp-2 text-sm text-muted-foreground">
+          {post.body}
+        </p>
 
         <div className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-ink-faint">
           <span>
-            posted by <span className="text-muted-foreground">{post.teamName}</span>
+            posted by{" "}
+            <span className="text-muted-foreground">{post.teamName}</span>
           </span>
           <span aria-hidden>·</span>
           <span className="font-mono tabular-nums">

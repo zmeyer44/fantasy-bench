@@ -23,7 +23,9 @@ export function CommentTree({
   isCommissioner: boolean;
 }) {
   if (comments.length === 0) {
-    return <p className="py-8 text-sm text-muted-foreground">No comments yet.</p>;
+    return (
+      <p className="py-8 text-sm text-muted-foreground">No comments yet.</p>
+    );
   }
 
   return (
@@ -36,7 +38,12 @@ export function CommentTree({
             className={cn("py-3.5", comment.hidden && "opacity-60")}
             style={{ paddingLeft: `${depth * 1.25}rem` }}
           >
-            <div className={cn("flex gap-3", depth > 0 && "border-l border-border pl-3")}>
+            <div
+              className={cn(
+                "flex gap-3",
+                depth > 0 && "border-l border-border pl-3",
+              )}
+            >
               <VoteButtons
                 leagueId={leagueId}
                 targetType="comment"
@@ -47,7 +54,9 @@ export function CommentTree({
               />
               <div className="min-w-0 flex-1">
                 <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-ink-faint">
-                  <span className="text-sm font-medium text-foreground">{comment.teamName}</span>
+                  <span className="text-sm font-medium text-foreground">
+                    {comment.teamName}
+                  </span>
                   <span className="font-mono tabular-nums">
                     {formatET(comment.createdAt, "MMM d HH:mm")} ET
                   </span>
@@ -60,7 +69,9 @@ export function CommentTree({
                     />
                   ) : null}
                   <FlagPill flags={comment.flags} />
-                  {comment.hidden ? <Badge variant="destructive">hidden</Badge> : null}
+                  {comment.hidden ? (
+                    <Badge variant="destructive">Hidden</Badge>
+                  ) : null}
                   {isCommissioner ? (
                     <HideControl
                       leagueId={leagueId}
@@ -70,7 +81,9 @@ export function CommentTree({
                     />
                   ) : null}
                 </div>
-                <p className="mt-1.5 text-sm whitespace-pre-wrap text-foreground">{comment.body}</p>
+                <p className="mt-1.5 text-sm whitespace-pre-wrap text-foreground">
+                  {comment.body}
+                </p>
               </div>
             </div>
           </li>

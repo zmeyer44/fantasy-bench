@@ -30,10 +30,13 @@ export function TeamsTab({ data }: { data: SettingsData }) {
   return (
     <section className="space-y-5">
       <header className="border-b border-border pb-3">
-        <h2 className="font-heading text-base leading-snug font-medium text-foreground">Teams</h2>
+        <h2 className="font-heading text-base leading-snug font-medium text-foreground">
+          Teams
+        </h2>
         <p className="mt-1 max-w-3xl text-sm text-muted-foreground">
-          In waiver-priority order. Assign an owner by the email on their Fantasy Bench account, or
-          send them the invite link from the League tab.
+          In waiver-priority order. Assign an owner by the email on their
+          Fantasy Bench account, or send them the invite link from the League
+          tab.
         </p>
       </header>
 
@@ -61,7 +64,13 @@ export function TeamsTab({ data }: { data: SettingsData }) {
   );
 }
 
-function TeamRow({ leagueId, team }: { leagueId: Id<"leagues">; team: SettingsTeam }) {
+function TeamRow({
+  leagueId,
+  team,
+}: {
+  leagueId: Id<"leagues">;
+  team: SettingsTeam;
+}) {
   const [name, setName] = useState(team.name);
   const [abbreviation, setAbbreviation] = useState(team.abbreviation);
   const [email, setEmail] = useState("");
@@ -77,7 +86,9 @@ function TeamRow({ leagueId, team }: { leagueId: Id<"leagues">; team: SettingsTe
 
   return (
     <>
-      <TableRow className={messages.length > 0 || saved ? "border-b-0" : undefined}>
+      <TableRow
+        className={messages.length > 0 || saved ? "border-b-0" : undefined}
+      >
         <TableCell numeric className="font-mono text-xs text-ink-faint">
           {team.waiverPriority}
         </TableCell>
@@ -105,11 +116,13 @@ function TeamRow({ leagueId, team }: { leagueId: Id<"leagues">; team: SettingsTe
                 {team.ownerName ?? team.ownerEmail ?? "owned"}
               </span>
               {team.ownerEmail ? (
-                <span className="font-mono text-xs text-ink-faint">{team.ownerEmail}</span>
+                <span className="font-mono text-xs text-ink-faint">
+                  {team.ownerEmail}
+                </span>
               ) : null}
             </div>
           ) : (
-            <Badge variant="warning">unowned</Badge>
+            <Badge variant="warning">Unowned</Badge>
           )}
         </TableCell>
         <TableCell className="font-mono text-xs text-muted-foreground">
@@ -139,7 +152,14 @@ function TeamRow({ leagueId, team }: { leagueId: Id<"leagues">; team: SettingsTe
               size="sm"
               variant="outline"
               disabled={rename.isPending}
-              onClick={() => void rename.submit({ leagueId, teamId: team.id, name, abbreviation })}
+              onClick={() =>
+                void rename.submit({
+                  leagueId,
+                  teamId: team.id,
+                  name,
+                  abbreviation,
+                })
+              }
             >
               Rename
             </Button>
@@ -148,7 +168,9 @@ function TeamRow({ leagueId, team }: { leagueId: Id<"leagues">; team: SettingsTe
               size="sm"
               variant="outline"
               disabled={assign.isPending || email.length === 0}
-              onClick={() => void assign.submit({ leagueId, teamId: team.id, email })}
+              onClick={() =>
+                void assign.submit({ leagueId, teamId: team.id, email })
+              }
             >
               Assign
             </Button>
@@ -158,7 +180,13 @@ function TeamRow({ leagueId, team }: { leagueId: Id<"leagues">; team: SettingsTe
                 size="sm"
                 variant="ghost"
                 disabled={unassign.isPending}
-                onClick={() => void unassign.submit({ leagueId, teamId: team.id, userId: null })}
+                onClick={() =>
+                  void unassign.submit({
+                    leagueId,
+                    teamId: team.id,
+                    userId: null,
+                  })
+                }
               >
                 Unassign
               </Button>

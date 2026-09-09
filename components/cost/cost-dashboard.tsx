@@ -62,7 +62,8 @@ export function CostDashboard({
   const benchmark = usePreloadedQuery(preloadedBenchmark);
 
   const totals = dashboard.totals;
-  const myTeamName = dashboard.byTeam.find((row) => row.teamId === myTeamId)?.teamName ?? null;
+  const myTeamName =
+    dashboard.byTeam.find((row) => row.teamId === myTeamId)?.teamName ?? null;
   const overCap = usdCap !== null && totals.usd >= usdCap;
 
   return (
@@ -71,7 +72,7 @@ export function CostDashboard({
         eyebrow="Ledger"
         title="Cost"
         description="Every model step writes a usage row. These are rollups over that ledger — nothing here is estimated."
-        actions={<Badge variant="outline">week {weekNo}</Badge>}
+        actions={<Badge variant="outline">Week {weekNo}</Badge>}
       />
 
       <StatStrip>
@@ -82,13 +83,19 @@ export function CostDashboard({
             usdCap === null ? (
               "no hard cap set"
             ) : overCap ? (
-              <span className="text-destructive">over the {formatUsd(usdCap)} hard cap</span>
+              <span className="text-destructive">
+                over the {formatUsd(usdCap)} hard cap
+              </span>
             ) : (
               `${formatPct(totals.usd / usdCap)} of a ${formatUsd(usdCap)} hard cap`
             )
           }
         />
-        <Stat label="Tokens" value={formatTokens(totals.tokens)} detail="input + output" />
+        <Stat
+          label="Tokens"
+          value={formatTokens(totals.tokens)}
+          detail="input + output"
+        />
         <Stat
           label="Runs"
           value={totals.runCount.toLocaleString()}
@@ -96,7 +103,9 @@ export function CostDashboard({
         />
         <Stat
           label="Avg / run"
-          value={formatUsd(totals.runCount > 0 ? totals.usd / totals.runCount : 0)}
+          value={formatUsd(
+            totals.runCount > 0 ? totals.usd / totals.runCount : 0,
+          )}
           detail="across every window type"
         />
       </StatStrip>
@@ -130,7 +139,10 @@ export function CostDashboard({
         </Section>
 
         <Section>
-          <SectionHeader title="Spend by model" description="Where the money actually goes." />
+          <SectionHeader
+            title="Spend by model"
+            description="Where the money actually goes."
+          />
           <BarChart
             data={dashboard.byModel.map((row) => ({
               key: row.modelId,
@@ -186,7 +198,9 @@ export function CostDashboard({
               {dashboard.expensive.map((run) => (
                 <TableRow key={run.runId}>
                   <TableCell>{run.teamName ?? "commissioner"}</TableCell>
-                  <TableCell className="font-mono text-xs">{run.windowLabel}</TableCell>
+                  <TableCell className="font-mono text-xs">
+                    {run.windowLabel}
+                  </TableCell>
                   <TableCell numeric className="font-mono text-xs">
                     {run.weekNo ?? "—"}
                   </TableCell>
@@ -194,7 +208,11 @@ export function CostDashboard({
                     {run.modelId}
                   </TableCell>
                   <TableCell>
-                    <Badge variant={run.status === "succeeded" ? "success" : "warning"}>
+                    <Badge
+                      variant={
+                        run.status === "succeeded" ? "success" : "warning"
+                      }
+                    >
                       {run.status}
                     </Badge>
                   </TableCell>
@@ -208,7 +226,9 @@ export function CostDashboard({
                     {formatET(run.createdAt, "MMM d HH:mm")}
                   </TableCell>
                   <TableCell>
-                    <TraceLink href={`/leagues/${leagueId}/traces/${run.runId}`} />
+                    <TraceLink
+                      href={`/leagues/${leagueId}/traces/${run.runId}`}
+                    />
                   </TableCell>
                 </TableRow>
               ))}
@@ -276,10 +296,14 @@ export function CostDashboard({
                       {row.wins}
                     </TableCell>
                     <TableCell numeric className="font-mono text-xs">
-                      {row.pointsPerUsd === null ? "—" : row.pointsPerUsd.toFixed(1)}
+                      {row.pointsPerUsd === null
+                        ? "—"
+                        : row.pointsPerUsd.toFixed(1)}
                     </TableCell>
                     <TableCell numeric className="font-mono text-xs">
-                      {row.costPerPoint === null ? "—" : formatUsd(row.costPerPoint)}
+                      {row.costPerPoint === null
+                        ? "—"
+                        : formatUsd(row.costPerPoint)}
                     </TableCell>
                   </TableRow>
                 ))}
@@ -287,8 +311,9 @@ export function CostDashboard({
             </Table>
 
             <p className="text-sm text-muted-foreground">
-              A team is credited to the model on its current config version; spend comes from the
-              team-week rollups and the record from the standings rollup.
+              A team is credited to the model on its current config version;
+              spend comes from the team-week rollups and the record from the
+              standings rollup.
             </p>
           </div>
         )}
@@ -297,7 +322,13 @@ export function CostDashboard({
   );
 }
 
-function TraceLink({ href, children = "Trace" }: { href: string; children?: ReactNode }) {
+function TraceLink({
+  href,
+  children = "Trace",
+}: {
+  href: string;
+  children?: ReactNode;
+}) {
   return (
     <Link
       href={href}
@@ -332,13 +363,18 @@ function MyTeamCard({
           Week {weekNo} against your caps, and season efficiency.
         </CardDescription>
         <CardAction>
-          <TraceLink href={`/leagues/${leagueId}/teams/${teamId}`}>Team page →</TraceLink>
+          <TraceLink href={`/leagues/${leagueId}/teams/${teamId}`}>
+            Team page →
+          </TraceLink>
         </CardAction>
       </CardHeader>
       <CardContent className="grid gap-8 md:grid-cols-2">
         <dl className="space-y-2">
           <TeamFigure label="This week" value={formatUsd(mine.week.usd)} />
-          <TeamFigure label="Season to date" value={formatUsd(mine.season.usd)} />
+          <TeamFigure
+            label="Season to date"
+            value={formatUsd(mine.season.usd)}
+          />
           <TeamFigure
             label="Cost per point"
             value={
@@ -349,7 +385,11 @@ function MyTeamCard({
           />
           <TeamFigure
             label="Cost per win"
-            value={mine.costPerWin.costPerWin === null ? "—" : formatUsd(mine.costPerWin.costPerWin)}
+            value={
+              mine.costPerWin.costPerWin === null
+                ? "—"
+                : formatUsd(mine.costPerWin.costPerWin)
+            }
           />
           <TeamFigure
             label="Record"
@@ -369,7 +409,8 @@ function MyTeamCard({
           />
           {mine.budget.ownKey ? (
             <p className="-mt-3 text-xs text-muted-foreground">
-              Running on the owner&apos;s own gateway key: caps bypassed, spend still metered.
+              Running on the owner&apos;s own gateway key: caps bypassed, spend
+              still metered.
             </p>
           ) : null}
           <CapMeter
@@ -385,8 +426,8 @@ function MyTeamCard({
             format={formatUsd}
           />
           <p className="text-sm text-muted-foreground">
-            The weekly token cap is a safety mechanism, not a game mechanic (PRD open question 2).
-            Unused budget does not roll over.
+            The weekly token cap is a safety mechanism, not a game mechanic (PRD
+            open question 2). Unused budget does not roll over.
           </p>
         </div>
       </CardContent>
@@ -398,7 +439,9 @@ function TeamFigure({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex items-baseline justify-between gap-3 border-b border-border pb-2 last:border-0">
       <dt className="eyebrow">{label}</dt>
-      <dd className="font-mono text-sm tabular-nums text-foreground">{value}</dd>
+      <dd className="font-mono text-sm tabular-nums text-foreground">
+        {value}
+      </dd>
     </div>
   );
 }

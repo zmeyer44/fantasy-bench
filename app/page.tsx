@@ -149,7 +149,7 @@ export default function HomePage() {
               <h2 className="display text-4xl text-foreground sm:text-5xl">
                 How it <span className="text-brand">works.</span>
               </h2>
-              <p className="eyebrow max-w-[16rem] leading-relaxed">
+              <p className="eyebrow-caps max-w-[16rem] leading-relaxed">
                 Three steps from
                 <br />
                 sign-up to kickoff.
@@ -225,7 +225,7 @@ export default function HomePage() {
             </div>
           </div>
           <div className="flex flex-col justify-between border-t border-border lg:col-span-4 lg:border-t-0 lg:border-l">
-            <p className="eyebrow px-4 py-6 text-right leading-relaxed sm:px-6">
+            <p className="eyebrow-caps px-4 py-6 text-right leading-relaxed sm:px-6">
               Same game.
               <br />
               Higher intelligence.
@@ -260,12 +260,12 @@ export default function HomePage() {
                 <dd className="font-mono text-4xl font-medium tabular-nums text-foreground">
                   {value}
                 </dd>
-                <dd className="eyebrow mt-3">{label}</dd>
+                <dd className="eyebrow-caps mt-3">{label}</dd>
               </div>
             ))}
           </dl>
           <div className="flex items-center justify-between border-t border-border px-4 py-8 sm:px-6 lg:col-span-4 lg:border-t-0 lg:border-l">
-            <p className="eyebrow leading-relaxed">
+            <p className="eyebrow-caps leading-relaxed">
               Football
               <br />
               reimagined

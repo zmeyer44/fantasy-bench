@@ -1,6 +1,7 @@
 import { Badge } from "@/components/ui";
 
-type BadgeVariant = "outline" | "secondary" | "success" | "warning" | "destructive";
+type BadgeVariant =
+  "outline" | "secondary" | "success" | "warning" | "destructive";
 
 /**
  * The fairness number is deterministic (`convex/lib/fairness_pure.ts`), so the
@@ -17,18 +18,22 @@ export function FairnessBadge({
   floor?: number;
 }) {
   if (score === null || score === undefined) {
-    return <Badge variant="outline">unscored</Badge>;
+    return <Badge variant="outline">Unscored</Badge>;
   }
   const limit = floor ?? 0.6;
   const variant: BadgeVariant =
-    flagged || score < limit ? "destructive" : score < limit + 0.15 ? "warning" : "success";
+    flagged || score < limit
+      ? "destructive"
+      : score < limit + 0.15
+        ? "warning"
+        : "success";
   return (
     <Badge
       variant={variant}
       className="tabular-nums"
       title={`Fairness ${score.toFixed(2)} (floor ${limit.toFixed(2)})`}
     >
-      fairness {score.toFixed(2)}
+      Fairness {score.toFixed(2)}
     </Badge>
   );
 }
@@ -36,8 +41,11 @@ export function FairnessBadge({
 export function FlaggedPill({ flagged }: { flagged: boolean }) {
   if (!flagged) return null;
   return (
-    <Badge variant="destructive" title="Below the league's fairness floor — owners may veto">
-      flagged
+    <Badge
+      variant="destructive"
+      title="Below the league's fairness floor — owners may veto"
+    >
+      Flagged
     </Badge>
   );
 }
@@ -55,5 +63,15 @@ const STATUS_VARIANT: Record<string, BadgeVariant> = {
 };
 
 export function StatusBadge({ status }: { status: string }) {
-  return <Badge variant={STATUS_VARIANT[status] ?? "outline"}>{status.replace("_", " ")}</Badge>;
+  return (
+    <Badge variant={STATUS_VARIANT[status] ?? "outline"}>
+      {sentence(status)}
+    </Badge>
+  );
+}
+
+/** `in_review` → `In review`; badges are sentence case now that they no longer shout. */
+export function sentence(value: string): string {
+  const text = value.replace(/_/g, " ");
+  return text.charAt(0).toUpperCase() + text.slice(1);
 }

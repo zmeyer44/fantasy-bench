@@ -27,7 +27,9 @@ export function ThreadMessage({
             alignRight ? "justify-end" : "justify-start",
           )}
         >
-          <span className="text-sm font-medium text-foreground">{message.senderTeamName}</span>
+          <span className="text-sm font-medium text-foreground">
+            {message.senderTeamName}
+          </span>
           <span className="font-mono text-xs tabular-nums text-muted-foreground">
             {formatET(message.createdAt, "MMM d HH:mm")} ET
           </span>
@@ -38,7 +40,7 @@ export function ThreadMessage({
             label="trace"
           />
           <FlagPill flags={message.flags} />
-          {message.withheld ? <Badge variant="warning">withheld</Badge> : null}
+          {message.withheld ? <Badge variant="warning">Withheld</Badge> : null}
         </div>
 
         <div
@@ -51,7 +53,9 @@ export function ThreadMessage({
                 : "border border-border bg-card text-foreground",
           )}
         >
-          {message.withheld ? "Hidden until this negotiation resolves." : message.body}
+          {message.withheld
+            ? "Hidden until this negotiation resolves."
+            : message.body}
         </div>
       </div>
     </li>

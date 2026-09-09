@@ -33,7 +33,9 @@ export function DraftBoardView({
   leagueId: string;
   board: DraftBoardData;
 }) {
-  const madePicks = board.picks.filter((pick) => pick.playerId !== null).reverse();
+  const madePicks = board.picks
+    .filter((pick) => pick.playerId !== null)
+    .reverse();
   // A full draft is 150+ picks with rationales; show the latest two rounds'
   // worth by default and keep the rest behind a native disclosure.
   const recentPicks = madePicks.slice(0, RECENT_PICKS);
@@ -57,19 +59,26 @@ export function DraftBoardView({
                     ? ` · until ${formatET(board.onTheClock.deadlineAt, "HH:mm:ss")} ET`
                     : ""
                 }`
-              : board.status === "complete" || board.picksMade === board.totalPicks
+              : board.status === "complete" ||
+                  board.picksMade === board.totalPicks
                 ? "Draft complete"
                 : "Not started"
           }
         />
         <Stat
           label="Progress"
-          value={<span className="block text-lg">{`${board.picksMade} / ${board.totalPicks || "—"}`}</span>}
+          value={
+            <span className="block text-lg">{`${board.picksMade} / ${board.totalPicks || "—"}`}</span>
+          }
           detail={`${board.draftType} draft · ${board.rounds || 0} rounds`}
         />
         <Stat
           label="Running cost"
-          value={<span className="block text-lg">${board.runningCostUsd.toFixed(4)}</span>}
+          value={
+            <span className="block text-lg">
+              ${board.runningCostUsd.toFixed(4)}
+            </span>
+          }
           detail="Across every draft run"
         />
       </StatStrip>
@@ -88,7 +97,9 @@ export function DraftBoardView({
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead className="sticky left-0 z-10 bg-background">R</TableHead>
+                  <TableHead className="sticky left-0 z-10 bg-background">
+                    R
+                  </TableHead>
                   {board.teams.map((team) => (
                     <TableHead key={team.id} title={team.name}>
                       {team.abbreviation}
@@ -104,7 +115,9 @@ export function DraftBoardView({
                     </TableCell>
                     {row.map((pick, slotIndex) => {
                       const onClock =
-                        board.onTheClock && pick && pick.overallNo === board.onTheClock.overallNo;
+                        board.onTheClock &&
+                        pick &&
+                        pick.overallNo === board.onTheClock.overallNo;
                       return (
                         <TableCell
                           key={slotIndex}
@@ -117,23 +130,33 @@ export function DraftBoardView({
                         >
                           {pick?.playerName ? (
                             <span className="flex items-start gap-1.5">
-                              <TeamLogo team={pick.nflTeam} size={18} className="mt-px" />
+                              <TeamLogo
+                                team={pick.nflTeam}
+                                size={18}
+                                className="mt-px"
+                              />
                               <span className="min-w-0">
-                              <span className="block truncate text-xs text-foreground">
-                                {pick.playerName}
-                              </span>
-                              <span className="block font-mono text-[10px] text-ink-faint">
-                                {pick.position}
-                                {pick.nflTeam ? ` · ${pick.nflTeam}` : ""}
-                                {pick.price !== null ? ` · $${pick.price}` : ""}
-                                {pick.auto ? " · auto" : ""}
-                              </span>
+                                <span className="block truncate text-xs text-foreground">
+                                  {pick.playerName}
+                                </span>
+                                <span className="block font-mono text-[10px] text-ink-faint">
+                                  {pick.position}
+                                  {pick.nflTeam ? ` · ${pick.nflTeam}` : ""}
+                                  {pick.price !== null
+                                    ? ` · $${pick.price}`
+                                    : ""}
+                                  {pick.auto ? " · auto" : ""}
+                                </span>
                               </span>
                             </span>
                           ) : onClock ? (
-                            <span className="font-mono text-[10px] text-brand">on the clock</span>
+                            <span className="font-mono text-[10px] text-brand">
+                              on the clock
+                            </span>
                           ) : (
-                            <span className="font-mono text-[10px] text-ink-faint">—</span>
+                            <span className="font-mono text-[10px] text-ink-faint">
+                              —
+                            </span>
                           )}
                         </TableCell>
                       );
@@ -143,14 +166,18 @@ export function DraftBoardView({
               </TableBody>
             </Table>
             <p className="mt-3 text-xs text-muted-foreground">
-              Row = round, column = draft slot. The highlighted cell is on the clock.
+              Row = round, column = draft slot. The highlighted cell is on the
+              clock.
             </p>
           </>
         )}
       </section>
 
       <section>
-        <SectionRule title="Picks" meta="Newest first, with the agent's rationale" />
+        <SectionRule
+          title="Picks"
+          meta="Newest first, with the agent's rationale"
+        />
         <div className="mt-4">
           {madePicks.length === 0 ? (
             <p className="text-sm text-muted-foreground">No picks yet.</p>
@@ -164,7 +191,9 @@ export function DraftBoardView({
               {olderPicks.length > 0 ? (
                 <details className="group mt-3 border-t border-border pt-3">
                   <summary className="eyebrow cursor-pointer list-none text-foreground hover:text-brand [&::-webkit-details-marker]:hidden">
-                    <span className="group-open:hidden">Show all {madePicks.length} picks</span>
+                    <span className="group-open:hidden">
+                      Show all {madePicks.length} picks
+                    </span>
                     <span className="hidden group-open:inline">Show fewer</span>
                   </summary>
                   <ul className="mt-3 divide-y divide-border">
@@ -190,7 +219,11 @@ function PickRow({ leagueId, pick }: { leagueId: string; pick: DraftPick }) {
           <span className="font-mono text-xs tabular-nums text-ink-faint">
             {pick.round}.{String(pick.pickNo).padStart(2, "0")}
           </span>{" "}
-          <TeamLogo team={pick.nflTeam} size={16} className="mx-1 align-text-bottom" />
+          <TeamLogo
+            team={pick.nflTeam}
+            size={16}
+            className="mx-1 align-text-bottom"
+          />
           <span className="font-medium">{pick.playerName}</span>{" "}
           <span className="font-mono text-[10px] text-ink-faint">
             {pick.position}
@@ -204,8 +237,10 @@ function PickRow({ leagueId, pick }: { leagueId: string; pick: DraftPick }) {
           >
             {pick.teamAbbreviation}
           </Badge>
-          {pick.price !== null ? <Badge variant="outline">${pick.price}</Badge> : null}
-          {pick.auto ? <Badge variant="warning">auto-pick</Badge> : null}
+          {pick.price !== null ? (
+            <Badge variant="outline">${pick.price}</Badge>
+          ) : null}
+          {pick.auto ? <Badge variant="warning">Auto-pick</Badge> : null}
           {pick.costUsd !== null ? (
             <Badge variant="outline">${pick.costUsd.toFixed(4)}</Badge>
           ) : null}
@@ -232,7 +267,9 @@ function SectionRule({ title, meta }: { title: string; meta?: ReactNode }) {
   return (
     <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 border-b border-border pb-2.5">
       <h2 className="eyebrow text-foreground">{title}</h2>
-      {meta ? <span className="text-xs text-muted-foreground">{meta}</span> : null}
+      {meta ? (
+        <span className="text-xs text-muted-foreground">{meta}</span>
+      ) : null}
     </div>
   );
 }

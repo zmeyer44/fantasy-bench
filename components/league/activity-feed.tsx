@@ -10,7 +10,12 @@ import { TraceLink } from "@/components/trades/trace-link";
 import { Badge, Button, EmptyState, Skeleton, cn } from "@/components/ui";
 import { api } from "@/convex/_generated/api";
 import type { Id } from "@/convex/_generated/dataModel";
-import type { ActivityFilter, ActivityItem, ActivityPlayer, ActivityTeam } from "@/convex/activity";
+import type {
+  ActivityFilter,
+  ActivityItem,
+  ActivityPlayer,
+  ActivityTeam,
+} from "@/convex/activity";
 import { etDayKey, etDayLabel, formatET, timeAgo } from "@/lib/time";
 
 const PAGE = 40;
@@ -66,7 +71,11 @@ export function ActivityFeed({
             {feed.items.length === 0 ? "Nothing yet" : "Live · newest first"}
           </span>
         </div>
-        <div role="tablist" aria-label="Filter activity" className="flex gap-0.5">
+        <div
+          role="tablist"
+          aria-label="Filter activity"
+          className="flex gap-0.5"
+        >
           {FILTERS.map((f) => {
             const active = f.value === filter;
             return (
@@ -91,11 +100,16 @@ export function ActivityFeed({
         </div>
       </div>
 
-      <div className={cn("transition-opacity", loading && "opacity-60")} aria-busy={loading}>
+      <div
+        className={cn("transition-opacity", loading && "opacity-60")}
+        aria-busy={loading}
+      >
         {feed.items.length === 0 ? (
           <EmptyState
             className="mt-4"
-            title={filter === "all" ? "Nothing has happened yet" : "Nothing here yet"}
+            title={
+              filter === "all" ? "Nothing has happened yet" : "Nothing here yet"
+            }
             description="Agent moves, trades, Commons posts and negotiations show up here as they happen."
           />
         ) : (
@@ -106,7 +120,12 @@ export function ActivityFeed({
               </h3>
               <ol className="divide-y divide-border border-t border-border">
                 {group.items.map((item) => (
-                  <ActivityRow key={item.id} leagueId={leagueId} item={item} now={now} />
+                  <ActivityRow
+                    key={item.id}
+                    leagueId={leagueId}
+                    item={item}
+                    now={now}
+                  />
                 ))}
               </ol>
             </div>
@@ -141,7 +160,15 @@ export function ActivityFeed({
 // Rows
 // ---------------------------------------------------------------------------
 
-function ActivityRow({ leagueId, item, now }: { leagueId: string; item: ActivityItem; now: number }) {
+function ActivityRow({
+  leagueId,
+  item,
+  now,
+}: {
+  leagueId: string;
+  item: ActivityItem;
+  now: number;
+}) {
   const base = `/leagues/${leagueId}`;
   const actor = actorOf(item);
 
@@ -149,7 +176,11 @@ function ActivityRow({ leagueId, item, now }: { leagueId: string; item: Activity
     <li className="flex gap-3 py-3">
       <div className="w-7 shrink-0 pt-0.5">
         {actor ? (
-          <Link href={`${base}/teams/${actor.id}`} className="block" aria-label={actor.name}>
+          <Link
+            href={`${base}/teams/${actor.id}`}
+            className="block"
+            aria-label={actor.name}
+          >
             <TeamAvatar
               name={actor.name}
               teamId={actor.id}
@@ -184,7 +215,11 @@ function ActivityRow({ leagueId, item, now }: { leagueId: string; item: Activity
         >
           {timeAgo(item.at, now)}
         </time>
-        <TraceLink leagueId={leagueId} runId={item.runId} stepIndex={item.stepIndex} />
+        <TraceLink
+          leagueId={leagueId}
+          runId={item.runId}
+          stepIndex={item.stepIndex}
+        />
       </div>
     </li>
   );
@@ -209,13 +244,20 @@ function actorOf(item: ActivityItem): ActivityTeam | null {
 }
 
 /** The one-line account of what happened. Team and player names carry the ink. */
-function Sentence({ leagueId, item }: { leagueId: string; item: ActivityItem }) {
+function Sentence({
+  leagueId,
+  item,
+}: {
+  leagueId: string;
+  item: ActivityItem;
+}) {
   const base = `/leagues/${leagueId}`;
   switch (item.kind) {
     case "add":
       return (
         <>
-          <Team leagueId={leagueId} team={item.team} /> added <Player player={item.player} />
+          <Team leagueId={leagueId} team={item.team} /> added{" "}
+          <Player player={item.player} />
           {item.viaWaiver && item.bid !== null ? (
             <>
               {" "}
@@ -234,13 +276,15 @@ function Sentence({ leagueId, item }: { leagueId: string; item: ActivityItem }) 
     case "drop":
       return (
         <>
-          <Team leagueId={leagueId} team={item.team} /> dropped <Player player={item.player} />
+          <Team leagueId={leagueId} team={item.team} /> dropped{" "}
+          <Player player={item.player} />
         </>
       );
     case "draft":
       return (
         <>
-          <Team leagueId={leagueId} team={item.team} /> {item.auto ? "auto-drafted" : "drafted"}{" "}
+          <Team leagueId={leagueId} team={item.team} />{" "}
+          {item.auto ? "auto-drafted" : "drafted"}{" "}
           <Player player={item.player} />
           {item.price !== null ? (
             <>
@@ -254,29 +298,38 @@ function Sentence({ leagueId, item }: { leagueId: string; item: ActivityItem }) 
       return (
         <>
           <Team leagueId={leagueId} team={item.team} />{" "}
-          {item.source === "autopilot" ? "had its lineup set by autopilot" : "set its lineup"}
+          {item.source === "autopilot"
+            ? "had its lineup set by autopilot"
+            : "set its lineup"}
           {item.weekNo !== null ? ` for week ${item.weekNo}` : ""}
         </>
       );
     case "trade": {
       const link = (text: string) => (
-        <Link href={`${base}/trades/${item.tradeId}`} className="text-foreground hover:text-brand-strong">
+        <Link
+          href={`${base}/trades/${item.tradeId}`}
+          className="text-foreground hover:text-brand-strong"
+        >
           {text}
         </Link>
       );
       if (item.event === "resolved") {
         return (
           <>
-            {link("Trade")} between <Team leagueId={leagueId} team={item.proposer} /> and{" "}
-            <Team leagueId={leagueId} team={item.recipient} /> {TRADE_STATUS_VERB[item.status] ?? item.status}
+            {link("Trade")} between{" "}
+            <Team leagueId={leagueId} team={item.proposer} /> and{" "}
+            <Team leagueId={leagueId} team={item.recipient} />{" "}
+            {TRADE_STATUS_VERB[item.status] ?? item.status}
           </>
         );
       }
       return (
         <>
           <Team leagueId={leagueId} team={item.proposer} />{" "}
-          {item.event === "countered" ? link("countered with an offer") : link("proposed a trade")} to{" "}
-          <Team leagueId={leagueId} team={item.recipient} />
+          {item.event === "countered"
+            ? link("countered with an offer")
+            : link("proposed a trade")}{" "}
+          to <Team leagueId={leagueId} team={item.recipient} />
         </>
       );
     }
@@ -303,7 +356,10 @@ function Sentence({ leagueId, item }: { leagueId: string; item: ActivityItem }) 
           <Team leagueId={leagueId} team={item.from} /> messaged{" "}
           <Team leagueId={leagueId} team={item.to} />
           {" · "}
-          <Link href={`${base}/threads/${item.threadId}`} className="hover:text-foreground">
+          <Link
+            href={`${base}/threads/${item.threadId}`}
+            className="hover:text-foreground"
+          >
             negotiation
           </Link>
         </>
@@ -311,7 +367,10 @@ function Sentence({ leagueId, item }: { leagueId: string; item: ActivityItem }) 
     case "rule_change":
       return (
         <>
-          The commissioner changed <span className="font-mono text-xs text-foreground">{item.field}</span>
+          The commissioner changed{" "}
+          <span className="font-mono text-xs text-foreground">
+            {item.field}
+          </span>
           {item.fromValue !== null ? (
             <>
               {" "}
@@ -329,7 +388,9 @@ function Sentence({ leagueId, item }: { leagueId: string; item: ActivityItem }) 
   }
 }
 
-const TRADE_STATUS_VERB: Partial<Record<ActivityItem extends { status: infer S } ? S & string : string, string>> = {
+const TRADE_STATUS_VERB: Partial<
+  Record<ActivityItem extends { status: infer S } ? S & string : string, string>
+> = {
   accepted: "was accepted and is under review",
   in_review: "is under league review",
   completed: "went through",
@@ -347,7 +408,8 @@ function Detail({ leagueId, item }: { leagueId: string; item: ActivityItem }) {
       return (
         <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
           <span>
-            <span className="text-ink-faint">sends</span> <Players players={item.give} />
+            <span className="text-ink-faint">sends</span>{" "}
+            <Players players={item.give} />
             {item.faab > 0 ? (
               <>
                 {item.give.length ? " + " : " "}
@@ -366,33 +428,43 @@ function Detail({ leagueId, item }: { leagueId: string; item: ActivityItem }) {
             ) : null}
           </span>
           {item.fairnessScore !== null ? (
-            <span className="font-mono text-[10px] text-ink-faint">fairness {item.fairnessScore.toFixed(2)}</span>
+            <span className="font-mono text-[10px] text-ink-faint">
+              fairness {item.fairnessScore.toFixed(2)}
+            </span>
           ) : null}
-          {item.flagged ? <Badge variant="destructive">flagged</Badge> : null}
+          {item.flagged ? <Badge variant="destructive">Flagged</Badge> : null}
         </div>
       );
     }
     case "post":
       return (
         <p className="mt-1 font-mono text-[10px] text-ink-faint">
-          {FLAIR_LABEL[item.flair] ?? item.flair} · {item.score > 0 ? `+${item.score}` : item.score} ·{" "}
-          {item.commentCount} comment{item.commentCount === 1 ? "" : "s"}
+          {FLAIR_LABEL[item.flair] ?? item.flair} ·{" "}
+          {item.score > 0 ? `+${item.score}` : item.score} · {item.commentCount}{" "}
+          comment{item.commentCount === 1 ? "" : "s"}
         </p>
       );
     case "message":
       return item.body ? (
-        <p className="mt-1 line-clamp-2 text-sm text-foreground/80">{item.body}</p>
+        <p className="mt-1 line-clamp-2 text-sm text-foreground/80">
+          {item.body}
+        </p>
       ) : (
         <p className="mt-1 font-mono text-[10px] text-ink-faint">
           hidden until this negotiation resolves
-          {item.revealAt ? ` · reveals ${formatET(item.revealAt, "MMM d HH:mm")} ET` : ""}
+          {item.revealAt
+            ? ` · reveals ${formatET(item.revealAt, "MMM d HH:mm")} ET`
+            : ""}
         </p>
       );
     case "lineup":
       return (
         <p className="mt-1 font-mono text-[10px] text-ink-faint">
           v{item.version} · {item.starters} starters ·{" "}
-          <Link href={`/leagues/${leagueId}/teams/${item.team.id}`} className="hover:text-brand-strong">
+          <Link
+            href={`/leagues/${leagueId}/teams/${item.team.id}`}
+            className="hover:text-brand-strong"
+          >
             roster
           </Link>
         </p>
@@ -406,7 +478,9 @@ function Detail({ leagueId, item }: { leagueId: string; item: ActivityItem }) {
         </p>
       ) : null;
     case "rule_change":
-      return item.note ? <p className="mt-1 text-xs text-muted-foreground">{item.note}</p> : null;
+      return item.note ? (
+        <p className="mt-1 text-xs text-muted-foreground">{item.note}</p>
+      ) : null;
     default:
       return null;
   }
@@ -441,7 +515,8 @@ function Player({ player }: { player: ActivityPlayer | null }) {
 }
 
 function Players({ players }: { players: ActivityPlayer[] }) {
-  if (players.length === 0) return <span className="text-ink-faint">nothing</span>;
+  if (players.length === 0)
+    return <span className="text-ink-faint">nothing</span>;
   return (
     <>
       {players.map((player, i) => (
@@ -466,7 +541,9 @@ function Value({ children }: { children: ReactNode }) {
 // Grouping and clock
 // ---------------------------------------------------------------------------
 
-function groupByDay(items: ActivityItem[]): { key: string; at: number; items: ActivityItem[] }[] {
+function groupByDay(
+  items: ActivityItem[],
+): { key: string; at: number; items: ActivityItem[] }[] {
   const groups: { key: string; at: number; items: ActivityItem[] }[] = [];
   for (const item of items) {
     const key = etDayKey(item.at);

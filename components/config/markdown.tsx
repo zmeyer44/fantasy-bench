@@ -10,22 +10,48 @@ import { cn } from "@/components/ui";
  * here. Everything an agent or an owner writes is untrusted text — react-markdown
  * escapes HTML by default and we do not enable `rehype-raw`.
  */
-export function Markdown({ children, className }: { children: string; className?: string }) {
+export function Markdown({
+  children,
+  className,
+}: {
+  children: string;
+  className?: string;
+}) {
   return (
-    <div className={cn("space-y-3 text-sm leading-relaxed text-foreground", className)}>
+    <div
+      className={cn(
+        "space-y-3 text-sm leading-relaxed text-foreground",
+        className,
+      )}
+    >
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
         components={{
           h1: (props) => (
-            <h1 className="mt-5 text-base font-semibold tracking-tight first:mt-0" {...props} />
+            <h1
+              className="mt-5 text-base font-semibold tracking-tight first:mt-0"
+              {...props}
+            />
           ),
           h2: (props) => (
-            <h2 className="mt-5 text-sm font-semibold tracking-tight first:mt-0" {...props} />
+            <h2
+              className="mt-5 text-sm font-semibold tracking-tight first:mt-0"
+              {...props}
+            />
           ),
-          h3: (props) => <h3 className="eyebrow mt-4 text-foreground first:mt-0" {...props} />,
+          h3: (props) => (
+            <h3
+              className="eyebrow mt-4 text-foreground first:mt-0"
+              {...props}
+            />
+          ),
           p: (props) => <p className="text-sm text-foreground" {...props} />,
-          ul: (props) => <ul className="list-disc space-y-1 pl-5 text-sm" {...props} />,
-          ol: (props) => <ol className="list-decimal space-y-1 pl-5 text-sm" {...props} />,
+          ul: (props) => (
+            <ul className="list-disc space-y-1 pl-5 text-sm" {...props} />
+          ),
+          ol: (props) => (
+            <ol className="list-decimal space-y-1 pl-5 text-sm" {...props} />
+          ),
           li: (props) => <li className="text-sm" {...props} />,
           a: (props) => (
             <a
@@ -41,7 +67,10 @@ export function Markdown({ children, className }: { children: string; className?
             />
           ),
           code: (props) => (
-            <code className="rounded-sm bg-muted px-1 py-0.5 font-mono text-xs" {...props} />
+            <code
+              className="rounded-sm bg-muted px-1 py-0.5 font-mono text-xs"
+              {...props}
+            />
           ),
           pre: (props) => (
             <pre
@@ -51,17 +80,23 @@ export function Markdown({ children, className }: { children: string; className?
           ),
           table: (props) => (
             <div className="w-full overflow-x-auto">
-              <table className="w-full caption-bottom border-collapse text-sm tabular-nums" {...props} />
+              <table
+                className="w-full caption-bottom border-collapse text-sm tabular-nums"
+                {...props}
+              />
             </div>
           ),
           th: (props) => (
             <th
-              className="border-b border-border px-3 py-2 text-left font-mono text-[10px] font-medium tracking-wider text-muted-foreground uppercase"
+              className="border-b border-border px-3 py-2 text-left font-mono text-[11px] font-medium text-muted-foreground"
               {...props}
             />
           ),
           td: (props) => (
-            <td className="border-b border-border px-3 py-2 align-top" {...props} />
+            <td
+              className="border-b border-border px-3 py-2 align-top"
+              {...props}
+            />
           ),
           hr: () => <hr className="border-border" />,
         }}

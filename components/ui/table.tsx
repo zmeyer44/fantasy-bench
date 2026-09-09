@@ -1,5 +1,5 @@
-import * as React from "react"
-import { cn } from "cn"
+import * as React from "react";
+import { cn } from "cn";
 
 /**
  * Tables carry the evidence in this product, so they span the width of their
@@ -18,7 +18,7 @@ function Table({ className, ...props }: React.ComponentProps<"table">) {
         {...props}
       />
     </div>
-  )
+  );
 }
 
 function TableHeader({ className, ...props }: React.ComponentProps<"thead">) {
@@ -28,7 +28,7 @@ function TableHeader({ className, ...props }: React.ComponentProps<"thead">) {
       className={cn("[&_tr]:border-b", className)}
       {...props}
     />
-  )
+  );
 }
 
 function TableBody({ className, ...props }: React.ComponentProps<"tbody">) {
@@ -38,7 +38,7 @@ function TableBody({ className, ...props }: React.ComponentProps<"tbody">) {
       className={cn("[&_tr:last-child]:border-0", className)}
       {...props}
     />
-  )
+  );
 }
 
 function TableFooter({ className, ...props }: React.ComponentProps<"tfoot">) {
@@ -47,11 +47,11 @@ function TableFooter({ className, ...props }: React.ComponentProps<"tfoot">) {
       data-slot="table-footer"
       className={cn(
         "border-t bg-muted/50 font-medium [&>tr]:last:border-b-0",
-        className
+        className,
       )}
       {...props}
     />
-  )
+  );
 }
 
 function TableRow({ className, ...props }: React.ComponentProps<"tr">) {
@@ -60,11 +60,11 @@ function TableRow({ className, ...props }: React.ComponentProps<"tr">) {
       data-slot="table-row"
       className={cn(
         "border-b transition-colors hover:bg-muted/50 has-aria-expanded:bg-muted/50 data-[state=selected]:bg-muted",
-        className
+        className,
       )}
       {...props}
     />
-  )
+  );
 }
 
 function TableHead({
@@ -76,13 +76,13 @@ function TableHead({
     <th
       data-slot="table-head"
       className={cn(
-        "h-9 px-3 align-middle font-mono text-[10px] font-medium tracking-wider whitespace-nowrap text-muted-foreground uppercase [&:has([role=checkbox])]:pr-0",
+        "h-9 px-3 align-middle font-mono text-[11px] font-medium whitespace-nowrap text-muted-foreground [&:has([role=checkbox])]:pr-0",
         numeric ? "text-right" : "text-left",
-        className
+        className,
       )}
       {...props}
     />
-  )
+  );
 }
 
 function TableCell({
@@ -96,11 +96,11 @@ function TableCell({
       className={cn(
         "px-3 py-2 align-middle whitespace-nowrap [&:has([role=checkbox])]:pr-0",
         numeric && "text-right tabular-nums",
-        className
+        className,
       )}
       {...props}
     />
-  )
+  );
 }
 
 function TableCaption({
@@ -113,7 +113,7 @@ function TableCaption({
       className={cn("mt-4 text-sm text-muted-foreground", className)}
       {...props}
     />
-  )
+  );
 }
 
 export {
@@ -125,4 +125,4 @@ export {
   TableRow,
   TableCell,
   TableCaption,
-}
+};

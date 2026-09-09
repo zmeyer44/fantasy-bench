@@ -7,11 +7,9 @@ import { RunTags, type RunListItem } from "./run-tags";
 export function TraceRow({
   run,
   leagueId,
-  showTeam = true,
 }: {
   run: RunListItem;
   leagueId: string;
-  showTeam?: boolean;
 }) {
   return (
     <div className="border-b border-border py-3 transition-colors last:border-b-0 hover:bg-accent">
@@ -24,7 +22,7 @@ export function TraceRow({
             {run.windowLabelText}
             {run.teamName ? ` · ${run.teamName}` : ""}
           </Link>
-          <RunTags run={run} leagueId={leagueId} showTeam={showTeam} />
+          <RunTags run={run} />
           {run.rationale ? (
             <p className="line-clamp-2 max-w-3xl text-sm leading-relaxed text-muted-foreground">
               {run.rationale}
@@ -34,10 +32,13 @@ export function TraceRow({
         <div className="shrink-0 space-y-0.5 text-right font-mono text-[10px] tabular-nums text-ink-faint">
           <div>{formatET(run.createdAt, "MMM d HH:mm")} ET</div>
           <div>
-            {run.stepCount} step{run.stepCount === 1 ? "" : "s"} · {run.actionCount} action
+            {run.stepCount} step{run.stepCount === 1 ? "" : "s"} ·{" "}
+            {run.actionCount} action
             {run.actionCount === 1 ? "" : "s"}
           </div>
-          {run.durationMs !== null ? <div>{(run.durationMs / 1000).toFixed(1)}s</div> : null}
+          {run.durationMs !== null ? (
+            <div>{(run.durationMs / 1000).toFixed(1)}s</div>
+          ) : null}
         </div>
       </div>
     </div>

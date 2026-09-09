@@ -12,9 +12,16 @@ import type { FunctionReturnType } from "convex/server";
 import { Collapsible } from "./collapsible";
 import { JsonBlock } from "./json-block";
 
-export type TraceStep = FunctionReturnType<typeof api.runs.steps>["page"][number];
+export type TraceStep = FunctionReturnType<
+  typeof api.runs.steps
+>["page"][number];
 
-type ToolCall = { toolName?: string; toolCallId?: string; input?: unknown; args?: unknown };
+type ToolCall = {
+  toolName?: string;
+  toolCallId?: string;
+  input?: unknown;
+  args?: unknown;
+};
 type ToolResult = {
   toolName?: string;
   toolCallId?: string;
@@ -30,7 +37,10 @@ function asToolCall(value: unknown): ToolCall {
 function resultErrors(value: unknown): string[] {
   if (!value || typeof value !== "object") return [];
   const record = value as Record<string, unknown>;
-  const output = (record.output ?? record.result ?? record) as Record<string, unknown>;
+  const output = (record.output ?? record.result ?? record) as Record<
+    string,
+    unknown
+  >;
   if (!output || typeof output !== "object") return [];
   if (Array.isArray(output.errors)) return output.errors.map(String);
   if (output.ok === false) return ["Tool rejected the call"];
@@ -55,7 +65,8 @@ export function StepCard({ step }: { step: TraceStep }) {
   useEffect(() => {
     const anchor = `#step-${step.stepIndex}`;
     const reveal = () => {
-      if (window.location.hash === anchor && details.current) details.current.open = true;
+      if (window.location.hash === anchor && details.current)
+        details.current.open = true;
     };
     reveal();
     window.addEventListener("hashchange", reveal);
@@ -87,21 +98,32 @@ export function StepCard({ step }: { step: TraceStep }) {
           >
             #{step.stepIndex}
           </a>
-          <span className="text-sm font-medium text-foreground">Step {step.stepIndex}</span>
-          {step.hasValidationError ? <Badge variant="destructive">validation error</Badge> : null}
-          {step.finishReason ? <Badge variant="outline">{step.finishReason}</Badge> : null}
+          <span className="text-sm font-medium text-foreground">
+            Step {step.stepIndex}
+          </span>
+          {step.hasValidationError ? (
+            <Badge variant="destructive">Validation error</Badge>
+          ) : null}
+          {step.finishReason ? (
+            <Badge variant="outline">{step.finishReason}</Badge>
+          ) : null}
           <span className="ml-auto font-mono text-[10px] tabular-nums text-ink-faint">
             {tokens.inputTokens} in · {tokens.outputTokens} out
             {tokens.reasoningTokens ? ` · ${tokens.reasoningTokens} rsn` : ""}
-            {tokens.cachedInputTokens ? ` · ${tokens.cachedInputTokens} cached` : ""} · $
-            {step.costUsd.toFixed(5)}
+            {tokens.cachedInputTokens
+              ? ` · ${tokens.cachedInputTokens} cached`
+              : ""}{" "}
+            · ${step.costUsd.toFixed(5)}
             {step.latencyMs !== null ? ` · ${step.latencyMs}ms` : ""}
           </span>
         </summary>
 
         <div className="space-y-2.5 pb-4 pl-5">
           {step.reasoning ? (
-            <Collapsible summary="Reasoning" meta={`${step.reasoning.length} chars`}>
+            <Collapsible
+              summary="Reasoning"
+              meta={`${step.reasoning.length} chars`}
+            >
               <p className="whitespace-pre-wrap text-sm leading-relaxed text-muted-foreground">
                 {step.reasoning}
               </p>
@@ -113,12 +135,15 @@ export function StepCard({ step }: { step: TraceStep }) {
               {step.text}
             </p>
           ) : step.toolCalls.length === 0 ? (
-            <p className="text-sm text-muted-foreground">No model text on this step.</p>
+            <p className="text-sm text-muted-foreground">
+              No model text on this step.
+            </p>
           ) : null}
 
           {step.toolCalls.map((raw, index) => {
             const call = asToolCall(raw);
-            const positional = step.toolResults[index] as ToolResult | undefined;
+            const positional = step.toolResults[index] as
+              ToolResult | undefined;
             const matched =
               (step.toolResults.find(
                 (candidate) =>
@@ -126,7 +151,11 @@ export function StepCard({ step }: { step: TraceStep }) {
                   (candidate as ToolResult).toolCallId === call.toolCallId,
               ) as ToolResult | undefined) ?? positional;
             return (
-              <ToolCallBlock key={call.toolCallId ?? index} call={call} result={matched ?? null} />
+              <ToolCallBlock
+                key={call.toolCallId ?? index}
+                call={call}
+                result={matched ?? null}
+              />
             );
           })}
         </div>
@@ -142,14 +171,23 @@ export function StepCard({ step }: { step: TraceStep }) {
  * `{ toolCallId, payloadRef }`; the payload is fetched only once the reader
  * actually opens the result.
  */
-function ToolCallBlock({ call, result }: { call: ToolCall; result: ToolResult | null }) {
+function ToolCallBlock({
+  call,
+  result,
+}: {
+  call: ToolCall;
+  result: ToolResult | null;
+}) {
   const [resultOpen, setResultOpen] = useState(false);
   const errors = resultErrors(result);
-  const payloadRef = typeof result?.payloadRef === "string" ? result.payloadRef : null;
+  const payloadRef =
+    typeof result?.payloadRef === "string" ? result.payloadRef : null;
 
   const payload = useQuery(
     api.runs.stepPayload,
-    resultOpen && payloadRef ? { payloadId: payloadRef as Id<"run_step_payloads"> } : "skip",
+    resultOpen && payloadRef
+      ? { payloadId: payloadRef as Id<"run_step_payloads"> }
+      : "skip",
   );
 
   const inline = result ? (result.output ?? result.result ?? result) : null;
@@ -190,9 +228,14 @@ function ToolCallBlock({ call, result }: { call: ToolCall; result: ToolResult | 
             </ul>
           ) : null}
           {body === undefined ? (
-            <p className="text-sm text-muted-foreground">Loading the stored result…</p>
+            <p className="text-sm text-muted-foreground">
+              Loading the stored result…
+            </p>
           ) : (
-            <JsonBlock value={body} tone={errors.length > 0 ? "error" : "default"} />
+            <JsonBlock
+              value={body}
+              tone={errors.length > 0 ? "error" : "default"}
+            />
           )}
         </Collapsible>
       ) : null}

@@ -39,10 +39,10 @@ export function ThreadsFeed({
               variant="warning"
               title="Bodies are withheld from non-parties until a negotiation resolves"
             >
-              delayed reveal
+              Delayed reveal
             </Badge>
           ) : (
-            <Badge variant="outline">live transparency</Badge>
+            <Badge variant="outline">Live transparency</Badge>
           )
         }
       />

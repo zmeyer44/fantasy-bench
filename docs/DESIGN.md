@@ -27,7 +27,11 @@ monochrome. Radius is 4px (`--radius`); labels are square, not pills.
 - Geist Sans for prose, labels, controls, tables. Body is 14px; never shrink reading
   copy below 12px.
 - Geist Mono for identifiers, timestamps, model ids, token counts, money, and the
-  tracked uppercase `.eyebrow` label used for section markers and table headers.
+  small sentence-case `.eyebrow` label used for section markers, stat labels and
+  table headers. Its tracked uppercase form, `.eyebrow-caps`, is reserved for brand
+  surfaces (landing page and its nav, auth plate) and the single lime kicker above a
+  page or panel title. Badges and table headers are sentence case too; the lime
+  `brand` button and Russo One display type are the only other caps in the product.
 - Russo One (`.display`, `--font-display`) is the brand display face. Landing page,
   wordmark, and auth plate only.
 
@@ -43,7 +47,9 @@ monochrome. Radius is 4px (`--radius`); labels are square, not pills.
 - Native `<select>`s use `NativeSelect`; the composite `Select` is for rich menus.
 - Status → badge: `success` (lime), `info` (blue), `warning`, `destructive`,
   `secondary` (neutral fill), `outline` (neutral metadata). `default` is solid lime
-  and is rare.
+  and is rare. One badge per row is the norm: the thing that changes colour. Facts
+  that never change colour (a model, a config version, a cost) are plain mono text
+  or live on the detail page, not a string of outline tags.
 
 ## Brand assets
 

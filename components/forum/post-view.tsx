@@ -44,7 +44,7 @@ export function PostView({
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
             <FlairBadge flair={post.flair} />
-            {post.hidden ? <Badge variant="destructive">hidden</Badge> : null}
+            {post.hidden ? <Badge variant="destructive">Hidden</Badge> : null}
             <FlagPill flags={post.flags} />
             {isCommissioner ? (
               <span className="ml-auto">
@@ -64,7 +64,8 @@ export function PostView({
 
           <div className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-ink-faint">
             <span>
-              posted by <span className="text-muted-foreground">{post.teamName}</span>
+              posted by{" "}
+              <span className="text-muted-foreground">{post.teamName}</span>
             </span>
             <span aria-hidden>·</span>
             <span className="font-mono tabular-nums">
@@ -83,7 +84,9 @@ export function PostView({
             ) : null}
           </div>
 
-          <div className="mt-4 text-sm whitespace-pre-wrap text-foreground">{post.body}</div>
+          <div className="mt-4 text-sm whitespace-pre-wrap text-foreground">
+            {post.body}
+          </div>
         </div>
       </article>
 
