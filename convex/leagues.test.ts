@@ -20,7 +20,9 @@ import goldenWeeks from "../tests/golden/postgres-week1/weeks.json";
 const modules = import.meta.glob("./**/*.ts");
 
 /** The `code` a `ConvexError` from convex/lib/errors.ts carried, or null. */
-export async function errorCode(promise: Promise<unknown>): Promise<string | null> {
+export async function errorCode(
+  promise: Promise<unknown>,
+): Promise<string | null> {
   try {
     await promise;
     return null;
@@ -28,7 +30,11 @@ export async function errorCode(promise: Promise<unknown>): Promise<string | nul
     const data = (error as { data?: { code?: string } }).data;
     if (data?.code) return data.code;
     const message = error instanceof Error ? error.message : String(error);
-    const match = /"code":\s*"([A-Z_]+)"/.exec(message) ?? /\b(UNAUTHORIZED|FORBIDDEN|NOT_FOUND|BAD_REQUEST|CONFLICT)\b/.exec(message);
+    const match =
+      /"code":\s*"([A-Z_]+)"/.exec(message) ??
+      /\b(UNAUTHORIZED|FORBIDDEN|NOT_FOUND|BAD_REQUEST|CONFLICT)\b/.exec(
+        message,
+      );
     return match?.[1] ?? message;
   }
 }
@@ -49,7 +55,10 @@ export async function actor(t: T, name: string, email: string) {
     });
     return { userId, sessionId };
   });
-  return { userId, session: t.withIdentity({ subject: `${userId}|${sessionId}` }) };
+  return {
+    userId,
+    session: t.withIdentity({ subject: `${userId}|${sessionId}` }),
+  };
 }
 
 async function fixture() {
@@ -58,17 +67,22 @@ async function fixture() {
   const owner = await actor(t, "Owner", "owner@fantasybench.dev");
   const outsider = await actor(t, "Outsider", "outsider@fantasybench.dev");
 
-  const { leagueId, teamIds } = await t.mutation(internal.leagues.createLeague, {
-    name: "Test League",
-    commissionerUserId: commish.userId,
-    teamCount: 8,
-    season: 2026,
-  });
+  const { leagueId, teamIds } = await t.mutation(
+    internal.leagues.createLeague,
+    {
+      name: "Test League",
+      commissionerUserId: commish.userId,
+      teamCount: 8,
+      season: 2026,
+    },
+  );
   return { t, commish, owner, outsider, leagueId, teamIds };
 }
 
 async function makePrivate(t: T, leagueId: Id<"leagues">) {
-  await t.run(async (ctx) => ctx.db.patch("leagues", leagueId, { isPublic: false }));
+  await t.run(async (ctx) =>
+    ctx.db.patch("leagues", leagueId, { isPublic: false }),
+  );
 }
 
 describe("leagues.get — authorization ladder", () => {
@@ -84,13 +98,17 @@ describe("leagues.get — authorization ladder", () => {
   it("is UNAUTHORIZED signed out on a private league", async () => {
     const { t, leagueId } = await fixture();
     await makePrivate(t, leagueId);
-    expect(await errorCode(t.query(api.leagues.get, { leagueId }))).toBe("UNAUTHORIZED");
+    expect(await errorCode(t.query(api.leagues.get, { leagueId }))).toBe(
+      "UNAUTHORIZED",
+    );
   });
 
   it("is FORBIDDEN for a signed-in non-member of a private league", async () => {
     const { t, leagueId, outsider } = await fixture();
     await makePrivate(t, leagueId);
-    expect(await errorCode(outsider.session.query(api.leagues.get, { leagueId }))).toBe("FORBIDDEN");
+    expect(
+      await errorCode(outsider.session.query(api.leagues.get, { leagueId })),
+    ).toBe("FORBIDDEN");
   });
 
   it("lets a member read a private league", async () => {
@@ -107,7 +125,8 @@ describe("leagues.get — authorization ladder", () => {
       const id = await ctx.db.insert("leagues", {
         name: "Gone",
         slug: "gone",
-        commissionerUserId: (await ctx.db.get("leagues", leagueId))!.commissionerUserId,
+        commissionerUserId: (await ctx.db.get("leagues", leagueId))!
+          .commissionerUserId,
         season: 2026,
         teamCount: 8,
         isPublic: true,
@@ -118,7 +137,9 @@ describe("leagues.get — authorization ladder", () => {
       await ctx.db.delete("leagues", id);
       return id;
     });
-    expect(await errorCode(t.query(api.leagues.get, { leagueId: ghost }))).toBe("NOT_FOUND");
+    expect(await errorCode(t.query(api.leagues.get, { leagueId: ghost }))).toBe(
+      "NOT_FOUND",
+    );
   });
 });
 
@@ -128,7 +149,9 @@ describe("leagues.get — shape", () => {
     const view = await t.query(api.leagues.get, { leagueId });
 
     expect(view.teams).toHaveLength(8);
-    expect(view.teams.map((team) => team.waiverPriority)).toEqual([1, 2, 3, 4, 5, 6, 7, 8]);
+    expect(view.teams.map((team) => team.waiverPriority)).toEqual([
+      1, 2, 3, 4, 5, 6, 7, 8,
+    ]);
     expect(view.teams.map((team) => team.name)).toEqual([
       "Team 1",
       "Team 2",
@@ -154,10 +177,14 @@ describe("leagues.get — shape", () => {
     );
     expect(weeks).toHaveLength(17);
     // 2026: Labor Day is Mon Sep 7, so week 1 opens Tue Sep 8 06:00 ET (10:00 UTC).
-    expect(new Date(weeks[0].startsAt).toISOString()).toBe("2026-09-08T10:00:00.000Z");
+    expect(new Date(weeks[0].startsAt).toISOString()).toBe(
+      "2026-09-08T10:00:00.000Z",
+    );
     expect(weeks[1].startsAt - weeks[0].startsAt).toBe(7 * 24 * 60 * 60 * 1000);
     // playoffStartWeek defaults to regularSeasonWeeks + 1 = 15, so 15/16/17.
-    expect(weeks.filter((week) => week.isPlayoff).map((w) => w.weekNo)).toEqual([15, 16, 17]);
+    expect(weeks.filter((week) => week.isPlayoff).map((w) => w.weekNo)).toEqual(
+      [15, 16, 17],
+    );
   });
 
   it("gives every team a default agent config on version 1", async () => {
@@ -169,10 +196,15 @@ describe("leagues.get — shape", () => {
         .collect(),
     );
     expect(configs).toHaveLength(teamIds.length);
-    expect(configs.every((config) => config.currentVersionId !== undefined)).toBe(true);
+    expect(
+      configs.every((config) => config.currentVersionId !== undefined),
+    ).toBe(true);
 
     // The commissioner sees the fresh version in full; the cooldown hides it from others.
-    const version = await commish.session.query(api.configs.get, { leagueId, teamId: teamIds[0] });
+    const version = await commish.session.query(api.configs.get, {
+      leagueId,
+      teamId: teamIds[0],
+    });
     expect(version.current?.versionNo).toBe(1);
     expect(version.current?.changeSummary).toBe("Initial configuration");
   });
@@ -181,7 +213,9 @@ describe("leagues.get — shape", () => {
 describe("leagues.listMine / join / joinByCode", () => {
   it("requires a session", async () => {
     const { t } = await fixture();
-    expect(await errorCode(t.query(api.leagues.listMine, {}))).toBe("UNAUTHORIZED");
+    expect(await errorCode(t.query(api.leagues.listMine, {}))).toBe(
+      "UNAUTHORIZED",
+    );
   });
 
   it("lists the leagues a user belongs to with their role", async () => {
@@ -210,10 +244,16 @@ describe("leagues.listMine / join / joinByCode", () => {
   it("refuses to join a private league without a code, but honours the code", async () => {
     const { t, owner, leagueId } = await fixture();
     await makePrivate(t, leagueId);
-    expect(await errorCode(owner.session.mutation(api.leagues.join, { leagueId }))).toBe("FORBIDDEN");
+    expect(
+      await errorCode(owner.session.mutation(api.leagues.join, { leagueId })),
+    ).toBe("FORBIDDEN");
 
-    await t.run(async (ctx) => ctx.db.patch("leagues", leagueId, { joinCode: "ABCD1234" }));
-    const joined = await owner.session.mutation(api.leagues.joinByCode, { code: "abcd1234" });
+    await t.run(async (ctx) =>
+      ctx.db.patch("leagues", leagueId, { joinCode: "ABCD1234" }),
+    );
+    const joined = await owner.session.mutation(api.leagues.joinByCode, {
+      code: "abcd1234",
+    });
     expect(joined.leagueId).toBe(leagueId);
     expect(joined.teamId).not.toBeNull();
 
@@ -224,9 +264,11 @@ describe("leagues.listMine / join / joinByCode", () => {
 
   it("rejects an unknown invite code", async () => {
     const { owner } = await fixture();
-    expect(await errorCode(owner.session.mutation(api.leagues.joinByCode, { code: "NOPE" }))).toBe(
-      "BAD_REQUEST",
-    );
+    expect(
+      await errorCode(
+        owner.session.mutation(api.leagues.joinByCode, { code: "NOPE" }),
+      ),
+    ).toBe("BAD_REQUEST");
   });
 });
 
@@ -238,9 +280,9 @@ describe("leagues.bySlug", () => {
     expect(await t.query(api.leagues.bySlug, { slug: "nope" })).toBeNull();
 
     await makePrivate(t, leagueId);
-    expect(await errorCode(t.query(api.leagues.bySlug, { slug: "test-league" }))).toBe(
-      "UNAUTHORIZED",
-    );
+    expect(
+      await errorCode(t.query(api.leagues.bySlug, { slug: "test-league" })),
+    ).toBe("UNAUTHORIZED");
   });
 });
 
@@ -259,25 +301,39 @@ describe("leagues.create — authorization + validation", () => {
 
   it("is UNAUTHORIZED signed out", async () => {
     const t = newTest();
-    expect(await errorCode(t.mutation(api.leagues.create, { name: "Nobody's League" }))).toBe(
-      "UNAUTHORIZED",
-    );
+    expect(
+      await errorCode(
+        t.mutation(api.leagues.create, { name: "Nobody's League" }),
+      ),
+    ).toBe("UNAUTHORIZED");
   });
 
   it("rejects a short name, a bad team count and an out-of-range FAAB budget", async () => {
     const t = newTest();
     const me = await actor(t, "Founder", "founder@fantasybench.dev");
-    expect(await errorCode(me.session.mutation(api.leagues.create, { name: "ab" }))).toBe(
-      "BAD_REQUEST",
-    );
     expect(
-      await errorCode(me.session.mutation(api.leagues.create, { name: "Fine", teamCount: 7 })),
+      await errorCode(me.session.mutation(api.leagues.create, { name: "ab" })),
     ).toBe("BAD_REQUEST");
     expect(
-      await errorCode(me.session.mutation(api.leagues.create, { name: "Fine", teamCount: 15 })),
+      await errorCode(
+        me.session.mutation(api.leagues.create, { name: "Fine", teamCount: 7 }),
+      ),
     ).toBe("BAD_REQUEST");
     expect(
-      await errorCode(me.session.mutation(api.leagues.create, { name: "Fine", faabBudget: 2_000 })),
+      await errorCode(
+        me.session.mutation(api.leagues.create, {
+          name: "Fine",
+          teamCount: 15,
+        }),
+      ),
+    ).toBe("BAD_REQUEST");
+    expect(
+      await errorCode(
+        me.session.mutation(api.leagues.create, {
+          name: "Fine",
+          faabBudget: 2_000,
+        }),
+      ),
     ).toBe("BAD_REQUEST");
   });
 });
@@ -290,16 +346,19 @@ describe("leagues.create — the skeleton", () => {
     const t = newTest();
     const me = await actor(t, "Founder", "founder@fantasybench.dev");
 
-    const { leagueId, slug } = await me.session.mutation(api.leagues.create, {
-      name: "My Cool League",
-      teamCount: 10,
-      scoringPreset: "half_ppr",
-      draftType: "auction",
-      isPublic: false,
-      superflex: true,
-      tePremium: true,
-      faabBudget: 250,
-    });
+    const { leagueId, slug, teamId } = await me.session.mutation(
+      api.leagues.create,
+      {
+        name: "My Cool League",
+        teamCount: 10,
+        scoringPreset: "half_ppr",
+        draftType: "auction",
+        isPublic: false,
+        superflex: true,
+        tePremium: true,
+        faabBudget: 250,
+      },
+    );
     expect(slug).toBe("my-cool-league");
 
     const view = await me.session.query(api.leagues.get, { leagueId });
@@ -332,7 +391,12 @@ describe("leagues.create — the skeleton", () => {
       1, 2, 3, 4, 5, 6, 7, 8, 9, 10,
     ]);
     expect(view.teams.every((team) => team.faabRemaining === 250)).toBe(true);
-    expect(view.teams.every((team) => team.ownerUserId === undefined)).toBe(true);
+    // The commissioner is seated on team 1; every other seat is open.
+    expect(view.teams[0]._id).toBe(teamId);
+    expect(view.teams[0].ownerUserId).toBe(me.userId);
+    expect(
+      view.teams.slice(1).every((team) => team.ownerUserId === undefined),
+    ).toBe(true);
 
     const { weeks, configs, versions } = await t.run(async (ctx) => ({
       weeks: await ctx.db
@@ -365,17 +429,24 @@ describe("leagues.create — the skeleton", () => {
     const me = await actor(t, "Founder", "founder@fantasybench.dev");
     const joiner = await actor(t, "Joiner", "joiner@fantasybench.dev");
 
-    const { leagueId } = await me.session.mutation(api.leagues.create, {
-      name: "Coded League",
-      teamCount: 8,
-      isPublic: false,
-    });
+    const { leagueId, joinCode } = await me.session.mutation(
+      api.leagues.create,
+      {
+        name: "Coded League",
+        teamCount: 8,
+        isPublic: false,
+      },
+    );
     const league = await t.run(async (ctx) => ctx.db.get("leagues", leagueId));
     expect(league?.joinCode).toMatch(/^[A-HJ-NP-Z2-9]{8}$/);
+    // The create dialog builds its shareable link from the returned code.
+    expect(joinCode).toBe(league?.joinCode);
 
-    const summary = await t.query(api.leagues.byJoinCode, { code: league!.joinCode! });
+    const summary = await t.query(api.leagues.byJoinCode, {
+      code: league!.joinCode!,
+    });
     expect(summary?.leagueId).toBe(leagueId);
-    expect(summary?.openTeamCount).toBe(8);
+    expect(summary?.openTeamCount).toBe(7); // 8 teams, one already the commissioner's;
 
     const joined = await joiner.session.mutation(api.leagues.joinByCode, {
       code: league!.joinCode!,
@@ -387,12 +458,14 @@ describe("leagues.create — the skeleton", () => {
     const t = newTest();
     const a = await actor(t, "A", "a@fantasybench.dev");
     const b = await actor(t, "B", "b@fantasybench.dev");
-    expect((await a.session.mutation(api.leagues.create, { name: "Same Name" })).slug).toBe(
-      "same-name",
-    );
-    expect((await b.session.mutation(api.leagues.create, { name: "Same Name" })).slug).toBe(
-      "same-name-2",
-    );
+    expect(
+      (await a.session.mutation(api.leagues.create, { name: "Same Name" }))
+        .slug,
+    ).toBe("same-name");
+    expect(
+      (await b.session.mutation(api.leagues.create, { name: "Same Name" }))
+        .slug,
+    ).toBe("same-name-2");
   });
 });
 
@@ -413,7 +486,9 @@ describe("leagues.create — golden-league parity", () => {
     freeze("2026-09-08T14:00:00.000Z");
     const t = newTest();
     const me = await actor(t, "Demo", "demo@fantasybench.dev");
-    const { leagueId } = await me.session.mutation(api.leagues.create, { name: "Demo League" });
+    const { leagueId } = await me.session.mutation(api.leagues.create, {
+      name: "Demo League",
+    });
 
     const view = await me.session.query(api.leagues.get, { leagueId });
     const rules = view.rules!;
@@ -431,7 +506,9 @@ describe("leagues.create — golden-league parity", () => {
     expect(rules.transparencyMode).toBe(rulesRow.transparency_mode);
     expect(rules.injectionPolicy).toBe(rulesRow.injection_policy);
     expect(rules.fallbackModelId).toBe(rulesRow.fallback_model_id);
-    expect(rules.weeklyTokenCapPerTeam ?? null).toBe(rulesRow.weekly_token_cap_per_team);
+    expect(rules.weeklyTokenCapPerTeam ?? null).toBe(
+      rulesRow.weekly_token_cap_per_team,
+    );
     expect(rules.leagueUsdHardCap ?? null).toBe(rulesRow.league_usd_hard_cap);
     expect(rules.contextCharLimit).toBe(rulesRow.context_char_limit);
     expect(rules.maxStepsCap).toBe(rulesRow.max_steps_cap);
@@ -460,12 +537,16 @@ describe("leagues.create — golden-league parity", () => {
     const goldenPriorities = goldenTeamRows
       .map((row) => row.waiver_priority)
       .sort((a, b) => a - b);
-    expect(view.teams.map((team) => team.waiverPriority)).toEqual(goldenPriorities);
-    for (const team of view.teams) {
+    expect(view.teams.map((team) => team.waiverPriority)).toEqual(
+      goldenPriorities,
+    );
+    for (const [index, team] of view.teams.entries()) {
       expect(team.faabRemaining).toBe(rulesRow.faab_budget);
       expect(team.draftBudgetRemaining).toBe(rulesRow.draft_budget);
       expect(team.karma).toBe(0);
-      expect(team.ownerUserId ?? null).toBeNull();
+      // The Postgres golden league had no owners; `create` now seats the
+      // commissioner on team 1, so only the remaining seats are open.
+      expect(team.ownerUserId ?? null).toBe(index === 0 ? me.userId : null);
     }
 
     // --- weeks --------------------------------------------------------------
@@ -475,14 +556,16 @@ describe("leagues.create — golden-league parity", () => {
         .withIndex("by_leagueId_weekNo", (q) => q.eq("leagueId", leagueId))
         .collect(),
     );
-    const goldenWeekRows = [...(goldenWeeks as Array<Record<string, string | number | boolean>>)].sort(
-      (a, b) => (a.week_no as number) - (b.week_no as number),
-    );
+    const goldenWeekRows = [
+      ...(goldenWeeks as Array<Record<string, string | number | boolean>>),
+    ].sort((a, b) => (a.week_no as number) - (b.week_no as number));
     expect(weeks).toHaveLength(goldenWeekRows.length);
     weeks.forEach((week, i) => {
       const golden = goldenWeekRows[i];
       expect(week.weekNo).toBe(golden.week_no);
-      expect(week.startsAt).toBe(new Date(golden.starts_at as string).getTime());
+      expect(week.startsAt).toBe(
+        new Date(golden.starts_at as string).getTime(),
+      );
       expect(week.endsAt).toBe(new Date(golden.ends_at as string).getTime());
       expect(week.isPlayoff).toBe(golden.is_playoff);
       expect(week.status).toBe(golden.status);

@@ -54,6 +54,7 @@ export function AuthForm({ mode }: { mode: Mode }) {
   const searchParams = useSearchParams();
   const { signIn } = useAuthActions();
   const next = normalizeReturnPath(searchParams.get("next"));
+  const isInvite = next.startsWith("/leagues/join/");
 
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
@@ -93,9 +94,11 @@ export function AuthForm({ mode }: { mode: Mode }) {
           {copy.title}
         </h1>
         <p className="mt-1.5 text-sm text-muted-foreground">
-          {mode === "signup"
-            ? "Your agents run the team. You guide them."
-            : "Welcome back. Your agents kept working."}
+          {isInvite
+            ? "You have a league invitation. Finish here and you will land on it."
+            : mode === "signup"
+              ? "Your agents run the team. You guide them."
+              : "Welcome back. Your agents kept working."}
         </p>
       </div>
 

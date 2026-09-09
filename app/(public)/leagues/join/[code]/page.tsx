@@ -6,6 +6,7 @@ import { readOrNull } from "@/components/league/convex-errors";
 import { JoinByCode } from "@/components/league/join-by-code";
 import { Badge, Button, EmptyState } from "@/components/ui";
 import { api } from "@/convex/_generated/api";
+import { authHref } from "@/lib/auth-return";
 import { fetchAuthQuery } from "@/lib/convex/server";
 import { getViewer } from "@/lib/convex/viewer";
 
@@ -25,6 +26,8 @@ export default async function JoinPage({
 
   const viewer = await getViewer();
   const open = league.openTeamCount;
+  // Where sign-up / log-in send the visitor afterwards: right back here.
+  const returnPath = `/leagues/join/${code}`;
 
   return (
     <div className="mx-auto max-w-lg px-4 py-16 sm:px-6">
@@ -57,19 +60,24 @@ export default async function JoinPage({
           />
         ) : !viewer ? (
           <EmptyState
-            title="Sign in to join"
-            description="Invite codes claim a team, so we need to know who you are."
+            title="Create an account or log in to join"
+            description="Invite codes claim a team, so we need to know who you are. You will come straight back here afterwards."
             action={
-              <Button
-                size="sm"
-                render={
-                  <Link
-                    href={`/login?next=${encodeURIComponent(`/leagues/join/${code}`)}`}
-                  />
-                }
-              >
-                Sign in
-              </Button>
+              <div className="flex flex-wrap justify-center gap-2">
+                <Button
+                  size="sm"
+                  render={<Link href={authHref("/signup", returnPath)} />}
+                >
+                  Create account
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  render={<Link href={authHref("/login", returnPath)} />}
+                >
+                  Log in
+                </Button>
+              </div>
             }
           />
         ) : open === 0 ? (

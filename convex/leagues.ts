@@ -47,7 +47,10 @@ import {
 type Ctx = QueryCtx | MutationCtx;
 
 /** A league is capped at 14 teams, so every per-league team read is bounded. */
-async function teamsOf(ctx: Ctx, leagueId: Id<"leagues">): Promise<Doc<"teams">[]> {
+async function teamsOf(
+  ctx: Ctx,
+  leagueId: Id<"leagues">,
+): Promise<Doc<"teams">[]> {
   // Bounded by construction: MIN_TEAMS..MAX_TEAMS rows per league.
   const teams = await ctx.db
     .query("teams")
@@ -85,7 +88,9 @@ export const get = query({
       membership: access.membership,
       role: access.membership?.role ?? null,
       isCommissioner: access.isCommissioner,
-      viewerTeamId: teams.find((t) => viewerUserId && t.ownerUserId === viewerUserId)?._id ?? null,
+      viewerTeamId:
+        teams.find((t) => viewerUserId && t.ownerUserId === viewerUserId)
+          ?._id ?? null,
     };
   },
 });
@@ -121,12 +126,16 @@ export const navContext = query({
     const league = await ctx.db.get("leagues", leagueId);
     if (!league) return null;
     const viewer = await optionalUser(ctx);
-    const membership = viewer ? await getMembership(ctx, leagueId, viewer.userId) : null;
+    const membership = viewer
+      ? await getMembership(ctx, leagueId, viewer.userId)
+      : null;
     if (!league.isPublic && !membership) return null;
     const team = viewer
       ? await ctx.db
           .query("teams")
-          .withIndex("by_ownerUserId", (q) => q.eq("ownerUserId", viewer.userId))
+          .withIndex("by_ownerUserId", (q) =>
+            q.eq("ownerUserId", viewer.userId),
+          )
           .filter((q) => q.eq(q.field("leagueId"), leagueId))
           .first()
       : null;
@@ -143,7 +152,10 @@ export const navContext = query({
   },
 });
 
-async function rulesOf(ctx: Ctx, leagueId: Id<"leagues">): Promise<Doc<"league_rules"> | null> {
+async function rulesOf(
+  ctx: Ctx,
+  leagueId: Id<"leagues">,
+): Promise<Doc<"league_rules"> | null> {
   return ctx.db
     .query("league_rules")
     .withIndex("by_leagueId", (q) => q.eq("leagueId", leagueId))
@@ -167,15 +179,24 @@ export const listMine = query({
       .withIndex("by_userId", (q) => q.eq("userId", viewer.userId))
       .take(50);
 
-    const rows: Array<Doc<"leagues"> & { role: Doc<"league_members">["role"]; teamCountActual: number }> =
-      [];
+    const rows: Array<
+      Doc<"leagues"> & {
+        role: Doc<"league_members">["role"];
+        teamCountActual: number;
+      }
+    > = [];
     for (const membership of memberships) {
       const league = await ctx.db.get("leagues", membership.leagueId);
       if (!league) continue;
-      rows.push({ ...league, role: membership.role, teamCountActual: league.teamCount });
+      rows.push({
+        ...league,
+        role: membership.role,
+        teamCountActual: league.teamCount,
+      });
     }
     return rows.sort(
-      (a, b) => (b.createdAt ?? b._creationTime) - (a.createdAt ?? a._creationTime),
+      (a, b) =>
+        (b.createdAt ?? b._creationTime) - (a.createdAt ?? a._creationTime),
     );
   },
 });
@@ -230,7 +251,9 @@ export const byJoinCode = query({
   handler: async (ctx, { code }) => {
     const league = await ctx.db
       .query("leagues")
-      .withIndex("by_joinCode", (q) => q.eq("joinCode", code.trim().toUpperCase()))
+      .withIndex("by_joinCode", (q) =>
+        q.eq("joinCode", code.trim().toUpperCase()),
+      )
       .unique();
     if (!league) return null;
 
@@ -287,7 +310,8 @@ export function randomJoinCode(length = 8): string {
   const bytes = new Uint8Array(length);
   crypto.getRandomValues(bytes);
   let out = "";
-  for (let i = 0; i < length; i++) out += CODE_ALPHABET[bytes[i] % CODE_ALPHABET.length];
+  for (let i = 0; i < length; i++)
+    out += CODE_ALPHABET[bytes[i] % CODE_ALPHABET.length];
   return out;
 }
 
@@ -309,22 +333,22 @@ export async function mintJoinCode(ctx: MutationCtx): Promise<string> {
 
 /** Everything `createLeague`/`create` accept. Optionals fall back to PRD defaults. */
 const createLeagueArgs = {
-    name: v.string(),
-    commissionerUserId: v.id("users"),
-    teamCount: v.optional(v.number()),
-    season: v.optional(v.number()),
-    scoringPreset: v.optional(scoringPreset),
-    draftType: v.optional(draftType),
-    isPublic: v.optional(v.boolean()),
-    superflex: v.optional(v.boolean()),
-    tePremium: v.optional(v.boolean()),
-    rosterSlots: v.optional(v.record(v.string(), v.number())),
-    faabBudget: v.optional(v.number()),
-    playoffTeams: v.optional(v.number()),
-    playoffStartWeek: v.optional(v.number()),
-    regularSeasonWeeks: v.optional(v.number()),
-    modelAllowlist: v.optional(v.array(v.string())),
-    draftScheduledAt: v.optional(v.number()),
+  name: v.string(),
+  commissionerUserId: v.id("users"),
+  teamCount: v.optional(v.number()),
+  season: v.optional(v.number()),
+  scoringPreset: v.optional(scoringPreset),
+  draftType: v.optional(draftType),
+  isPublic: v.optional(v.boolean()),
+  superflex: v.optional(v.boolean()),
+  tePremium: v.optional(v.boolean()),
+  rosterSlots: v.optional(v.record(v.string(), v.number())),
+  faabBudget: v.optional(v.number()),
+  playoffTeams: v.optional(v.number()),
+  playoffStartWeek: v.optional(v.number()),
+  regularSeasonWeeks: v.optional(v.number()),
+  modelAllowlist: v.optional(v.array(v.string())),
+  draftScheduledAt: v.optional(v.number()),
 } as const;
 
 type BuildLeagueArgs = {
@@ -356,88 +380,102 @@ type BuildLeagueArgs = {
 async function buildLeague(
   ctx: MutationCtx,
   args: BuildLeagueArgs,
-): Promise<{ leagueId: Id<"leagues">; rulesId: Id<"league_rules">; teamIds: Id<"teams">[]; slug: string }> {
-    const teamCount = args.teamCount ?? 12;
-    if (teamCount < MIN_TEAMS || teamCount > MAX_TEAMS) {
-      throw appError("BAD_REQUEST", `teamCount must be between ${MIN_TEAMS} and ${MAX_TEAMS}`);
-    }
-    const name = args.name.trim();
-    if (!name) throw appError("BAD_REQUEST", "League name is required");
+): Promise<{
+  leagueId: Id<"leagues">;
+  rulesId: Id<"league_rules">;
+  teamIds: Id<"teams">[];
+  slug: string;
+}> {
+  const teamCount = args.teamCount ?? 12;
+  if (teamCount < MIN_TEAMS || teamCount > MAX_TEAMS) {
+    throw appError(
+      "BAD_REQUEST",
+      `teamCount must be between ${MIN_TEAMS} and ${MAX_TEAMS}`,
+    );
+  }
+  const name = args.name.trim();
+  if (!name) throw appError("BAD_REQUEST", "League name is required");
 
-    const now = Date.now();
-    const season = args.season ?? currentSeason(now);
-    const faabBudget = args.faabBudget ?? DEFAULT_LEAGUE_RULES.faabBudget;
-    const regularSeasonWeeks = args.regularSeasonWeeks ?? DEFAULT_LEAGUE_RULES.regularSeasonWeeks;
-    const playoffStartWeek = args.playoffStartWeek ?? regularSeasonWeeks + 1;
-    const modelAllowlist = args.modelAllowlist ?? DEFAULT_MODEL_ALLOWLIST;
+  const now = Date.now();
+  const season = args.season ?? currentSeason(now);
+  const faabBudget = args.faabBudget ?? DEFAULT_LEAGUE_RULES.faabBudget;
+  const regularSeasonWeeks =
+    args.regularSeasonWeeks ?? DEFAULT_LEAGUE_RULES.regularSeasonWeeks;
+  const playoffStartWeek = args.playoffStartWeek ?? regularSeasonWeeks + 1;
+  const modelAllowlist = args.modelAllowlist ?? DEFAULT_MODEL_ALLOWLIST;
 
-    const slug = await uniqueSlug(ctx, name);
-    const leagueId = await ctx.db.insert("leagues", {
-      name,
-      slug,
-      commissionerUserId: args.commissionerUserId,
-      season,
-      teamCount,
-      isPublic: args.isPublic ?? true,
-      status: "setup",
-      draftType: args.draftType ?? "snake",
-      draftScheduledAt: args.draftScheduledAt,
-      joinCode: args.joinCode,
-      createdAt: now,
-      updatedAt: now,
-    });
+  const slug = await uniqueSlug(ctx, name);
+  const leagueId = await ctx.db.insert("leagues", {
+    name,
+    slug,
+    commissionerUserId: args.commissionerUserId,
+    season,
+    teamCount,
+    isPublic: args.isPublic ?? true,
+    status: "setup",
+    draftType: args.draftType ?? "snake",
+    draftScheduledAt: args.draftScheduledAt,
+    joinCode: args.joinCode,
+    createdAt: now,
+    updatedAt: now,
+  });
 
-    const rulesId = await ctx.db.insert("league_rules", {
-      ...DEFAULT_LEAGUE_RULES,
+  const rulesId = await ctx.db.insert("league_rules", {
+    ...DEFAULT_LEAGUE_RULES,
+    leagueId,
+    scoringPreset: args.scoringPreset ?? DEFAULT_LEAGUE_RULES.scoringPreset,
+    superflex: args.superflex ?? false,
+    tePremium: args.tePremium ?? false,
+    rosterSlots: args.rosterSlots ?? DEFAULT_ROSTER_SLOTS,
+    faabBudget,
+    playoffTeams: args.playoffTeams ?? DEFAULT_LEAGUE_RULES.playoffTeams,
+    playoffStartWeek,
+    regularSeasonWeeks,
+    seasonWeeks: SEASON_WEEKS,
+    modelAllowlist,
+    fallbackModelId: DEFAULT_FALLBACK_MODEL_ID,
+  });
+
+  await ctx.db.insert("league_members", {
+    leagueId,
+    userId: args.commissionerUserId,
+    role: "commissioner",
+    createdAt: now,
+  });
+
+  for (let i = 0; i < SEASON_WEEKS; i++) {
+    const weekNo = i + 1;
+    const { startsAt, endsAt } = weekBoundaries(season, weekNo);
+    await ctx.db.insert("weeks", {
       leagueId,
-      scoringPreset: args.scoringPreset ?? DEFAULT_LEAGUE_RULES.scoringPreset,
-      superflex: args.superflex ?? false,
-      tePremium: args.tePremium ?? false,
-      rosterSlots: args.rosterSlots ?? DEFAULT_ROSTER_SLOTS,
-      faabBudget,
-      playoffTeams: args.playoffTeams ?? DEFAULT_LEAGUE_RULES.playoffTeams,
-      playoffStartWeek,
-      regularSeasonWeeks,
-      seasonWeeks: SEASON_WEEKS,
-      modelAllowlist,
-      fallbackModelId: DEFAULT_FALLBACK_MODEL_ID,
+      weekNo,
+      startsAt,
+      endsAt,
+      isPlayoff: weekNo >= playoffStartWeek,
+      status: "upcoming",
     });
+  }
 
-    await ctx.db.insert("league_members", {
+  const teamIds: Id<"teams">[] = [];
+  for (let i = 0; i < teamCount; i++) {
+    const teamId = await ctx.db.insert("teams", {
       leagueId,
-      userId: args.commissionerUserId,
-      role: "commissioner",
+      name: defaultTeamName(i),
+      abbreviation: defaultTeamAbbreviation(i),
+      faabRemaining: faabBudget,
+      waiverPriority: i + 1,
+      karma: 0,
+      draftBudgetRemaining: DEFAULT_LEAGUE_RULES.draftBudget,
       createdAt: now,
     });
-
-    for (let i = 0; i < SEASON_WEEKS; i++) {
-      const weekNo = i + 1;
-      const { startsAt, endsAt } = weekBoundaries(season, weekNo);
-      await ctx.db.insert("weeks", {
-        leagueId,
-        weekNo,
-        startsAt,
-        endsAt,
-        isPlayoff: weekNo >= playoffStartWeek,
-        status: "upcoming",
-      });
-    }
-
-    const teamIds: Id<"teams">[] = [];
-    for (let i = 0; i < teamCount; i++) {
-      const teamId = await ctx.db.insert("teams", {
-        leagueId,
-        name: defaultTeamName(i),
-        abbreviation: defaultTeamAbbreviation(i),
-        faabRemaining: faabBudget,
-        waiverPriority: i + 1,
-        karma: 0,
-        draftBudgetRemaining: DEFAULT_LEAGUE_RULES.draftBudget,
-        createdAt: now,
-      });
-      teamIds.push(teamId);
-      await createAgentConfig(ctx, teamId, leagueId, modelAllowlist[0] ?? DEFAULT_MODEL_ID);
-    }
+    teamIds.push(teamId);
+    await createAgentConfig(
+      ctx,
+      teamId,
+      leagueId,
+      modelAllowlist[0] ?? DEFAULT_MODEL_ID,
+    );
+  }
 
   return { leagueId, rulesId, teamIds, slug };
 }
@@ -464,7 +502,10 @@ export const createLeague = internalMutation({
  * commissioner of a brand-new league skeleton and gets its invite code minted up
  * front, so the settings console can hand out a link immediately.
  *
- * Returns id + slug: that is all the client has ever used.
+ * The commissioner is also given the first team, so a fresh league has one
+ * owner and N-1 open seats. Returns id, slug, the claimed team, and the freshly
+ * minted join code so the create dialog can show a shareable invite link
+ * without a second round trip.
  */
 export const create = mutation({
   args: {
@@ -477,7 +518,13 @@ export const create = mutation({
     tePremium: v.optional(v.boolean()),
     faabBudget: v.optional(v.number()),
   },
-  returns: v.object({ leagueId: v.id("leagues"), slug: v.string() }),
+  returns: v.object({
+    leagueId: v.id("leagues"),
+    slug: v.string(),
+    joinCode: v.string(),
+    /** The team claimed for the commissioner. */
+    teamId: v.id("teams"),
+  }),
   handler: async (ctx, args) => {
     const viewer = await requireUser(ctx);
 
@@ -487,10 +534,14 @@ export const create = mutation({
     }
     const faabBudget = args.faabBudget ?? DEFAULT_LEAGUE_RULES.faabBudget;
     if (!Number.isInteger(faabBudget) || faabBudget < 0 || faabBudget > 1_000) {
-      throw appError("BAD_REQUEST", "FAAB budget must be a whole number between 0 and 1,000.");
+      throw appError(
+        "BAD_REQUEST",
+        "FAAB budget must be a whole number between 0 and 1,000.",
+      );
     }
 
-    const { leagueId, slug } = await buildLeague(ctx, {
+    const joinCode = await mintJoinCode(ctx);
+    const { leagueId, slug, teamIds } = await buildLeague(ctx, {
       name,
       commissionerUserId: viewer.userId,
       teamCount: args.teamCount ?? 12,
@@ -500,9 +551,15 @@ export const create = mutation({
       superflex: args.superflex ?? false,
       tePremium: args.tePremium ?? false,
       faabBudget,
-      joinCode: await mintJoinCode(ctx),
+      joinCode,
     });
-    return { leagueId, slug };
+
+    // The commissioner plays too: claim team 1 for them so the league is one
+    // owner short, not a spectator with N empty seats.
+    const teamId = teamIds[0];
+    await ctx.db.patch("teams", teamId, { ownerUserId: viewer.userId });
+
+    return { leagueId, slug, joinCode, teamId };
   },
 });
 
@@ -516,7 +573,10 @@ async function createAgentConfig(
   teamId: Id<"teams">,
   leagueId: Id<"leagues">,
   modelId: string,
-): Promise<{ configId: Id<"agent_configs">; versionId: Id<"config_versions"> }> {
+): Promise<{
+  configId: Id<"agent_configs">;
+  versionId: Id<"config_versions">;
+}> {
   const now = Date.now();
   const existing = await ctx.db
     .query("agent_configs")
@@ -525,11 +585,18 @@ async function createAgentConfig(
 
   const configId =
     existing?._id ??
-    (await ctx.db.insert("agent_configs", { teamId, leagueId, createdAt: now, updatedAt: now }));
+    (await ctx.db.insert("agent_configs", {
+      teamId,
+      leagueId,
+      createdAt: now,
+      updatedAt: now,
+    }));
 
   const v1 = await ctx.db
     .query("config_versions")
-    .withIndex("by_configId_versionNo", (q) => q.eq("configId", configId).eq("versionNo", 1))
+    .withIndex("by_configId_versionNo", (q) =>
+      q.eq("configId", configId).eq("versionNo", 1),
+    )
     .unique();
   if (v1) return { configId, versionId: v1._id };
 
@@ -546,13 +613,19 @@ async function createAgentConfig(
     changeSummary: "Initial configuration",
     createdAt: now,
   });
-  await ctx.db.patch("agent_configs", configId, { currentVersionId: versionId, updatedAt: now });
+  await ctx.db.patch("agent_configs", configId, {
+    currentVersionId: versionId,
+    updatedAt: now,
+  });
   return { configId, versionId };
 }
 
 export const createDefaultAgentConfig = internalMutation({
   args: { teamId: v.id("teams"), modelId: v.optional(v.string()) },
-  returns: v.object({ configId: v.id("agent_configs"), versionId: v.id("config_versions") }),
+  returns: v.object({
+    configId: v.id("agent_configs"),
+    versionId: v.id("config_versions"),
+  }),
   handler: async (ctx, { teamId, modelId }) => {
     const team = await ctx.db.get("teams", teamId);
     if (!team) throw appError("NOT_FOUND", "Team not found.");
@@ -578,11 +651,17 @@ async function joinLeague(
   ctx: MutationCtx,
   leagueId: Id<"leagues">,
   userId: Id<"users">,
-): Promise<{ leagueId: Id<"leagues">; membershipId: Id<"league_members">; teamId: Id<"teams"> | null }> {
+): Promise<{
+  leagueId: Id<"leagues">;
+  membershipId: Id<"league_members">;
+  teamId: Id<"teams"> | null;
+}> {
   const teams = await teamsOf(ctx, leagueId);
   const existing = await ctx.db
     .query("league_members")
-    .withIndex("by_leagueId_userId", (q) => q.eq("leagueId", leagueId).eq("userId", userId))
+    .withIndex("by_leagueId_userId", (q) =>
+      q.eq("leagueId", leagueId).eq("userId", userId),
+    )
     .unique();
 
   if (existing) {
@@ -614,7 +693,8 @@ export const join = mutation({
     const viewer = await requireUser(ctx);
     const league = await ctx.db.get("leagues", leagueId);
     if (!league) throw appError("NOT_FOUND", "League not found.");
-    if (!league.isPublic) throw appError("FORBIDDEN", "This league is invite-only.");
+    if (!league.isPublic)
+      throw appError("FORBIDDEN", "This league is invite-only.");
     return joinLeague(ctx, leagueId, viewer.userId);
   },
 });
@@ -627,9 +707,12 @@ export const joinByCode = mutation({
     const viewer = await requireUser(ctx);
     const league = await ctx.db
       .query("leagues")
-      .withIndex("by_joinCode", (q) => q.eq("joinCode", code.trim().toUpperCase()))
+      .withIndex("by_joinCode", (q) =>
+        q.eq("joinCode", code.trim().toUpperCase()),
+      )
       .unique();
-    if (!league) throw appError("BAD_REQUEST", "That invite code is not valid.");
+    if (!league)
+      throw appError("BAD_REQUEST", "That invite code is not valid.");
     return joinLeague(ctx, league._id, viewer.userId);
   },
 });

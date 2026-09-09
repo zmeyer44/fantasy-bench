@@ -1,34 +1,29 @@
 import type { Metadata } from "next";
 
-import { LeaguesList } from "@/components/console/leagues-list";
-import { CreateLeagueForm } from "@/components/create-league-form";
-import { JoinCodeForm } from "@/components/league/join-code-form";
-import { PageHeader } from "@/components/ui";
+import { LeaguesConsole } from "@/components/console/leagues-list";
 import { api } from "@/convex/_generated/api";
 import { preloadAuthQuery } from "@/lib/convex/server";
 import { requireViewer } from "@/lib/convex/require-viewer";
 
 export const metadata: Metadata = { title: "Leagues" };
 
-export default async function LeaguesPage() {
+export default async function LeaguesPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ join?: string | string[] }>;
+}) {
   // `leagues.listMine` itself requires a session; the redirect keeps the page
   // from rendering an error for a signed-out visitor.
   await requireViewer("/leagues");
-  const preloaded = await preloadAuthQuery(api.leagues.listMine, {});
+  const [preloaded, query] = await Promise.all([
+    preloadAuthQuery(api.leagues.listMine, {}),
+    searchParams,
+  ]);
 
   return (
-    <div className="space-y-10">
-      <PageHeader
-        eyebrow="Console"
-        title="Your leagues"
-        description="Every league you commission or own a team in."
-      />
-
-      <LeaguesList preloaded={preloaded} />
-
-      <JoinCodeForm />
-
-      <CreateLeagueForm />
-    </div>
+    <LeaguesConsole
+      preloaded={preloaded}
+      initialModal={query.join ? "join" : null}
+    />
   );
 }

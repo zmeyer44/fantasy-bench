@@ -25,6 +25,7 @@ import type * as http from "../http.js";
 import type * as ingest from "../ingest.js";
 import type * as leagues from "../leagues.js";
 import type * as ledger from "../ledger.js";
+import type * as lib_activity_pure from "../lib/activity_pure.js";
 import type * as lib_agent_action from "../lib/agent_action.js";
 import type * as lib_auth from "../lib/auth.js";
 import type * as lib_config_pure from "../lib/config_pure.js";
@@ -122,6 +123,7 @@ declare const fullApi: ApiFromModules<{
   ingest: typeof ingest;
   leagues: typeof leagues;
   ledger: typeof ledger;
+  "lib/activity_pure": typeof lib_activity_pure;
   "lib/agent_action": typeof lib_agent_action;
   "lib/auth": typeof lib_auth;
   "lib/config_pure": typeof lib_config_pure;

@@ -179,7 +179,7 @@ export function SiteNav() {
                   size={isLanding ? "xl" : "lg"}
                   className={isLanding ? styles.primaryCta : undefined}
                   role="link"
-                  render={<Link href={homeLeagueId ? `/leagues/${homeLeagueId}` : "/leagues#join-league"} />}
+                  render={<Link href={homeLeagueId ? `/leagues/${homeLeagueId}` : "/leagues?join=1"} />}
                 >
                   {homeLeagueId ? "View league" : "Join a league"}
                   <ArrowUpRight data-icon="inline-end" />

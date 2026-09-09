@@ -5,8 +5,15 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 
 import { mutationErrorMessage } from "@/components/league/convex-errors";
+import { InviteLink } from "@/components/league/invite-link";
 import {
   Button,
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
   Field,
   FieldLabel,
   Input,
@@ -14,18 +21,29 @@ import {
   NativeSelectOption,
 } from "@/components/ui";
 import { api } from "@/convex/_generated/api";
+import type { Id } from "@/convex/_generated/dataModel";
 
 const TEAM_COUNTS = [8, 10, 12, 14];
 
+type Created = { leagueId: Id<"leagues">; name: string; joinCode: string };
+
+/**
+ * Commission a league in two steps: the form, then the invite link. The link
+ * is the commissioner's one job after creating a league, so it is shown here
+ * rather than buried in settings (where it also lives, with a rotate button).
+ */
 export function CreateLeagueForm() {
   const router = useRouter();
 
   const [name, setName] = useState("");
   const [teamCount, setTeamCount] = useState(12);
-  const [scoringPreset, setScoringPreset] = useState<"ppr" | "half_ppr" | "standard">("ppr");
+  const [scoringPreset, setScoringPreset] = useState<
+    "ppr" | "half_ppr" | "standard"
+  >("ppr");
   const [draftType, setDraftType] = useState<"snake" | "auction">("snake");
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
+  const [created, setCreated] = useState<Created | null>(null);
 
   const createLeague = useMutation(api.leagues.create);
 
@@ -33,7 +51,7 @@ export function CreateLeagueForm() {
     setError(null);
     setPending(true);
     try {
-      const { leagueId } = await createLeague({
+      const { leagueId, joinCode } = await createLeague({
         name,
         teamCount,
         scoringPreset,
@@ -43,34 +61,63 @@ export function CreateLeagueForm() {
         tePremium: false,
         faabBudget: 100,
       });
-      // The league pages read Convex live; navigating is enough.
-      router.push(`/leagues/${leagueId}`);
+      setCreated({ leagueId, name: name.trim(), joinCode });
     } catch (err) {
       setError(mutationErrorMessage(err));
+    } finally {
       setPending(false);
     }
   }
 
-  return (
-    <section>
-      <div className="border-b border-border pb-3">
-        <h2 className="eyebrow text-foreground">Create a league</h2>
-        <p className="mt-2 text-sm text-muted-foreground">
-          You become the commissioner. Teams start unowned; invite owners with the league link.
+  if (created) {
+    return (
+      <>
+        <DialogHeader>
+          <DialogTitle>{created.name} is ready</DialogTitle>
+          <DialogDescription>
+            Send this link to everyone who should own a team. They will sign up
+            or log in, then claim a team from the invitation page.
+          </DialogDescription>
+        </DialogHeader>
+        <InviteLink code={created.joinCode} />
+        <p className="text-xs text-muted-foreground">
+          You can find this link again, or rotate it, under the league&apos;s
+          settings.
         </p>
-      </div>
+        <DialogFooter>
+          <Button
+            type="button"
+            onClick={() => router.push(`/leagues/${created.leagueId}`)}
+          >
+            Open league
+          </Button>
+        </DialogFooter>
+      </>
+    );
+  }
 
+  return (
+    <>
+      <DialogHeader>
+        <DialogTitle>Create a league</DialogTitle>
+        <DialogDescription>
+          You become the commissioner. Teams start unowned; you get an invite
+          link to share once the league exists.
+        </DialogDescription>
+      </DialogHeader>
       <form
-        className="mt-5 grid items-end gap-5 sm:grid-cols-2 lg:grid-cols-4"
+        id="create-league-form"
+        className="grid gap-4 sm:grid-cols-3"
         onSubmit={(event) => {
           event.preventDefault();
           void submit();
         }}
       >
-        <Field className="sm:col-span-2 lg:col-span-4">
+        <Field className="sm:col-span-3">
           <FieldLabel htmlFor="league-name">League name</FieldLabel>
           <Input
             id="league-name"
+            autoFocus
             required
             minLength={3}
             maxLength={60}
@@ -102,7 +149,9 @@ export function CreateLeagueForm() {
             id="scoring"
             className="w-full"
             value={scoringPreset}
-            onChange={(e) => setScoringPreset(e.target.value as typeof scoringPreset)}
+            onChange={(e) =>
+              setScoringPreset(e.target.value as typeof scoringPreset)
+            }
           >
             <NativeSelectOption value="ppr">PPR</NativeSelectOption>
             <NativeSelectOption value="half_ppr">Half PPR</NativeSelectOption>
@@ -123,19 +172,38 @@ export function CreateLeagueForm() {
           </NativeSelect>
         </Field>
 
-        <Button type="submit" disabled={pending} className="w-full">
-          {pending ? "Creating…" : "Create league"}
-        </Button>
-
         {error ? (
           <p
             role="alert"
-            className="rounded-lg border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive sm:col-span-2 lg:col-span-4"
+            className="rounded-lg border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive sm:col-span-3"
           >
             {error}
           </p>
         ) : null}
+
+        <DialogFooter className="sm:col-span-3" showCloseButton>
+          <Button type="submit" disabled={pending}>
+            {pending ? "Creating…" : "Create league"}
+          </Button>
+        </DialogFooter>
       </form>
-    </section>
+    </>
+  );
+}
+
+/** "Create a league" as a modal. Remounts the form on every open. */
+export function CreateLeagueDialog({
+  open,
+  onOpenChange,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+}) {
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-lg">
+        {open ? <CreateLeagueForm /> : null}
+      </DialogContent>
+    </Dialog>
   );
 }
