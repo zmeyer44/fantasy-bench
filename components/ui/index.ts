@@ -119,4 +119,5 @@ export { PageHeader } from "./page-header";
 export { EmptyState } from "./empty-state";
 export { Stat, StatStrip } from "./stat";
 export { Section, SectionHeader } from "./section";
+export { InfoTip } from "./info-tip";
 export { cn } from "@/lib/utils";

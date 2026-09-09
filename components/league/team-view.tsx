@@ -13,7 +13,7 @@ import {
 import { RunTags } from "@/components/traces/run-tags";
 import { KeyRound, Lock } from "lucide-react";
 
-import { Badge, Button, EmptyState, PageHeader, cn } from "@/components/ui";
+import { Badge, Button, EmptyState, InfoTip, cn } from "@/components/ui";
 import { COOLDOWN_DAYS } from "@/convex/lib/visibility";
 import { TOOL_CATALOG } from "@/convex/runtime/tools/catalog";
 import type { api } from "@/convex/_generated/api";
@@ -48,20 +48,57 @@ export function TeamView({
 
   return (
     <div className="space-y-5 sm:space-y-8">
-      <PageHeader
-        title={
-          <span className="flex items-center gap-3">
-            <TeamAvatar
-              name={page.team.name}
-              teamId={teamId}
-              avatarUrl={page.team.avatarUrl}
-              avatarTemplate={page.team.avatarTemplate}
-              size={56}
-            />
-            <span>{page.team.name}</span>
-          </span>
-        }
-      />
+      {/* Header: identity on the left, the season's four numbers on the right. */}
+      <header className="flex flex-wrap items-center justify-between gap-x-8 gap-y-4 border-b border-border pb-5">
+        <div className="flex min-w-0 items-center gap-3">
+          <TeamAvatar
+            name={page.team.name}
+            teamId={teamId}
+            avatarUrl={page.team.avatarUrl}
+            avatarTemplate={page.team.avatarTemplate}
+            size={56}
+          />
+          <div className="min-w-0">
+            <h1 className="truncate text-2xl font-semibold tracking-tight text-foreground">
+              {page.team.name}
+            </h1>
+            <p className="mt-0.5 font-mono text-[10px] tracking-wider text-muted-foreground uppercase">
+              {[page.team.abbreviation, `#${page.record.rank}`, page.record.streak]
+                .filter(Boolean)
+                .join(" · ")}
+            </p>
+          </div>
+        </div>
+
+        <dl className="grid w-full grid-cols-4 gap-x-6 sm:w-auto">
+          {[
+            { label: "Record", value: record },
+            { label: "Points for", value: page.record.pointsFor.toFixed(1) },
+            { label: "Karma", tip: "karma" as const, value: String(page.team.karma) },
+            {
+              label: "FAAB",
+              tip: "faab" as const,
+              value: `$${page.team.faabRemaining}`,
+              detail: `of $${page.team.faabBudget}`,
+            },
+          ].map((stat) => (
+            <div key={stat.label} className="min-w-0">
+              <dt className="inline-flex items-center gap-1 font-mono text-[10px] tracking-wider text-muted-foreground uppercase">
+                {stat.label}
+                {"tip" in stat && stat.tip ? <InfoTip term={stat.tip} /> : null}
+              </dt>
+              <dd className="mt-0.5 font-mono text-lg font-medium tabular-nums text-foreground">
+                {stat.value}
+                {"detail" in stat && stat.detail ? (
+                  <span className="block text-xs font-normal text-muted-foreground sm:ml-1 sm:inline">
+                    {stat.detail}
+                  </span>
+                ) : null}
+              </dd>
+            </div>
+          ))}
+        </dl>
+      </header>
 
       <nav
         aria-label="Team navigation"
@@ -86,41 +123,6 @@ export function TeamView({
           Players & waivers
         </Link>
       </nav>
-      <dl className="grid grid-cols-4 gap-3 border-b border-border pb-5">
-        {[
-          {
-            label: "Record",
-            value: record,
-            detail: `#${page.record.rank} · ${page.record.streak}`,
-          },
-          {
-            label: "Points for",
-            value: page.record.pointsFor.toFixed(1),
-            detail: "Season total",
-          },
-          {
-            label: "Karma",
-            value: String(page.team.karma),
-            detail: "Conduct score",
-          },
-          {
-            label: "FAAB",
-            value: `$${page.team.faabRemaining}`,
-            detail: `of $${page.team.faabBudget}`,
-          },
-        ].map((stat) => (
-          <div key={stat.label} className="min-w-0">
-            <dt className="text-[11px] text-muted-foreground">{stat.label}</dt>
-            <dd className="mt-1 font-mono text-lg tabular-nums sm:text-2xl">
-              {stat.value}
-            </dd>
-            <dd className="mt-1 text-[10px] text-muted-foreground sm:text-xs">
-              {stat.detail}
-            </dd>
-          </div>
-        ))}
-      </dl>
-
       <AgentPanel
         config={page.config}
         teamBase={teamBase}

@@ -101,8 +101,8 @@
   .menuTrigger { width: 36px; }
   .copy { padding-top: 42px; }
   .kicker { font-size: 10px; gap: 12px; letter-spacing: .08em; }
-  .heading { font-size: 20.7vw; margin-top: 29px; }
-  .heading span { transform: scaleX(1.1); }
+  .heading { font-size: 18.2vw; margin-top: 29px; }
+  .heading span { transform: scaleX(1.06); }
   .description { font-size: 16px; margin-top: 24px; }
   .actions { gap: 10px; }
   .signature { gap: 20px; margin-top: 26px; font-size: 9px; }

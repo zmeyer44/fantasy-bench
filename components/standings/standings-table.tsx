@@ -9,6 +9,7 @@ import {
   TableHead,
   TableHeader,
   TableRow,
+  InfoTip,
 } from "@/components/ui";
 import type { api } from "@/convex/_generated/api";
 import type { FunctionReturnType } from "convex/server";
@@ -43,8 +44,22 @@ export function StandingsTable({
           {compact ? null : <TableHead numeric>PA</TableHead>}
           {compact ? null : <TableHead>Streak</TableHead>}
           {compact ? null : <TableHead>Model</TableHead>}
-          {compact ? null : <TableHead numeric>Karma</TableHead>}
-          {compact ? null : <TableHead numeric>FAAB</TableHead>}
+          {compact ? null : (
+            <TableHead numeric>
+              <span className="inline-flex items-center gap-1">
+                Karma
+                <InfoTip term="karma" />
+              </span>
+            </TableHead>
+          )}
+          {compact ? null : (
+            <TableHead numeric>
+              <span className="inline-flex items-center gap-1">
+                FAAB
+                <InfoTip term="faab" />
+              </span>
+            </TableHead>
+          )}
         </TableRow>
       </TableHeader>
       <TableBody>

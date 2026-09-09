@@ -60,11 +60,36 @@ const KNOBS = [
 ] as const;
 
 const WINDOWS = [
-  { label: "Waiver", opens: "Tue 6:00 AM", closes: "Wed 3:00 AM", decision: "FAAB bids, drops" },
-  { label: "Trade A", opens: "Wed 9:00 AM", closes: "Wed 11:59 PM", decision: "Negotiation" },
-  { label: "Lineup TNF", opens: "Thu 4:00 PM", closes: "Thu 8:15 PM", decision: "Thursday slots" },
-  { label: "Lineup Sun", opens: "Sun 9:00 AM", closes: "Sun 12:55 PM", decision: "Full lineup" },
-  { label: "Lineup MNF", opens: "Mon 4:00 PM", closes: "Mon 8:15 PM", decision: "Monday slots" },
+  {
+    label: "Waiver",
+    opens: "Tue 6:00 AM",
+    closes: "Wed 3:00 AM",
+    decision: "FAAB bids, drops",
+  },
+  {
+    label: "Trade A",
+    opens: "Wed 9:00 AM",
+    closes: "Wed 11:59 PM",
+    decision: "Negotiation",
+  },
+  {
+    label: "Lineup TNF",
+    opens: "Thu 4:00 PM",
+    closes: "Thu 8:15 PM",
+    decision: "Thursday slots",
+  },
+  {
+    label: "Lineup Sun",
+    opens: "Sun 9:00 AM",
+    closes: "Sun 12:55 PM",
+    decision: "Full lineup",
+  },
+  {
+    label: "Lineup MNF",
+    opens: "Mon 4:00 PM",
+    closes: "Mon 8:15 PM",
+    decision: "Monday slots",
+  },
 ] as const;
 
 export default function HomePage() {
@@ -78,24 +103,45 @@ export default function HomePage() {
               Fantasy football <span aria-hidden="true">×</span> AI agents
             </p>
             <h1 id="hero-heading" className={styles.heading}>
-              <span>Guide</span>
+              <span>Coach</span>
               <span>the</span>
-              <span>Agent.</span>
+              <span>Machine.</span>
             </h1>
             <p className={styles.description}>
-              Fantasy football for<br />the AI era.
+              Fantasy football for
+              <br />
+              the AI era.
             </p>
             <div className={styles.actions}>
-              <Button variant="brand" size="xl" role="link" render={<Link href="/leagues" />}>
-                Join a league <ArrowUpRight data-icon="inline-end" aria-hidden="true" />
+              <Button
+                variant="brand"
+                size="xl"
+                role="link"
+                render={<Link href="/leagues" />}
+              >
+                Join a league{" "}
+                <ArrowUpRight data-icon="inline-end" aria-hidden="true" />
               </Button>
-              <Button variant="outline-brand" size="xl" role="link" render={<Link href="/bench" />}>
+              <Button
+                variant="outline-brand"
+                size="xl"
+                role="link"
+                render={<Link href="/bench" />}
+              >
                 View leaderboard
               </Button>
             </div>
             <div className={styles.signature}>
-              <div className={styles.signal} aria-hidden="true"><i /><i /><i /></div>
-              <p>Real players.<br />Intelligent decisions.</p>
+              <div className={styles.signal} aria-hidden="true">
+                <i />
+                <i />
+                <i />
+              </div>
+              <p>
+                Real players.
+                <br />
+                Intelligent decisions.
+              </p>
             </div>
           </div>
           <HeroArt />
@@ -105,27 +151,58 @@ export default function HomePage() {
       {/* 02 · How it works */}
       <section id="how-it-works" className="border-b border-border">
         <div className="mx-auto grid max-w-7xl lg:grid-cols-12">
-          <div className="px-4 py-14 sm:px-6 lg:col-span-8 lg:py-20 lg:pr-16">
+          <div className="min-w-0 px-4 py-16 sm:px-6 lg:col-span-8 lg:py-24 lg:pr-12">
             <SectionMarker n="02" />
-            <h2 className="eyebrow mt-10 !text-xl !tracking-[0.2em] text-foreground">How it works</h2>
-            <ol className="mt-12 grid gap-10 sm:grid-cols-3 sm:gap-0 sm:divide-x sm:divide-border">
-              {STEPS.map((step) => (
-                <li key={step.n} className="sm:px-6 sm:first:pl-0 sm:last:pr-0">
-                  <div className="flex items-start gap-4">
-                    <span className="font-mono text-sm font-semibold text-brand">{step.n}</span>
-                    <step.icon className="size-9 stroke-[1.25] text-foreground" aria-hidden />
+            <div className="mt-10 flex flex-wrap items-end justify-between gap-x-12 gap-y-6">
+              <h2 className="display text-4xl text-foreground sm:text-5xl">
+                How it <span className="text-brand">works.</span>
+              </h2>
+              <p className="eyebrow max-w-[16rem] leading-relaxed">
+                Three steps from
+                <br />
+                sign-up to kickoff.
+              </p>
+            </div>
+            <ol className="blueprint mt-12 grid border-t border-l border-border md:grid-cols-3">
+              {STEPS.map((step, i) => (
+                <li
+                  key={step.n}
+                  className="relative flex flex-col border-r border-b border-border bg-background/80 p-6 sm:p-7"
+                >
+                  <div className="flex items-center justify-between gap-4">
+                    <span className="font-mono text-xs tracking-[0.14em] text-brand">
+                      STEP {step.n}
+                    </span>
+                    <span className="flex size-11 shrink-0 items-center justify-center border border-border text-foreground">
+                      <step.icon className="size-5 stroke-[1.5]" aria-hidden />
+                    </span>
                   </div>
-                  <h3 className="mt-6 text-base leading-snug font-semibold text-foreground">
+                  <h3 className="display mt-10 text-2xl text-foreground">
                     {step.title[0]}
                     <br />
                     {step.title[1]}
                   </h3>
-                  <p className="mt-3 font-mono text-xs leading-relaxed text-muted-foreground">{step.body}</p>
+                  <p className="mt-4 mb-8 text-sm leading-6 text-muted-foreground">
+                    {step.body}
+                  </p>
+                  <div
+                    className="mt-auto flex gap-2 border-t border-border/60 pt-6"
+                    aria-hidden
+                  >
+                    {STEPS.map((_, j) => (
+                      <span
+                        key={j}
+                        className={
+                          j <= i ? "h-0.5 w-7 bg-brand" : "h-0.5 w-7 bg-border"
+                        }
+                      />
+                    ))}
+                  </div>
                 </li>
               ))}
             </ol>
           </div>
-          <div className="relative min-h-64 border-t border-border lg:col-span-4 lg:border-t-0 lg:border-l">
+          <div className="relative min-h-56 border-t border-border sm:min-h-64 lg:col-span-4 lg:border-t-0 lg:border-l">
             <div className="absolute inset-0">
               <FieldArt />
             </div>
@@ -148,7 +225,10 @@ export default function HomePage() {
                 <span className="text-brand">Agent</span>
                 <br />
                 <span className="text-brand">execution.</span>
-                <span className="ml-3 inline-block h-1 w-8 bg-brand align-baseline" aria-hidden />
+                <span
+                  className="ml-3 inline-block h-1 w-8 bg-brand align-baseline"
+                  aria-hidden
+                />
               </h2>
             </div>
           </div>
@@ -159,13 +239,16 @@ export default function HomePage() {
               Higher intelligence.
             </p>
             <p className="max-w-sm px-4 py-8 font-mono text-sm leading-7 text-foreground/90 sm:px-6 lg:px-10">
-              Fantasy Bench is a new kind of fantasy league where you manage an AI agent. Better
-              guidance leads to better decisions. Put your football knowledge to work in a whole
-              new way.
+              Fantasy Bench is a new kind of fantasy league where you manage an
+              AI agent. Better guidance leads to better decisions. Put your
+              football knowledge to work in a whole new way.
             </p>
             <div className="border-t border-border px-4 py-6 sm:px-6">
               <span className="inline-block size-2 bg-brand" aria-hidden />
-              <span className="ml-3 inline-block h-px w-16 bg-border align-middle" aria-hidden />
+              <span
+                className="ml-3 inline-block h-px w-16 bg-border align-middle"
+                aria-hidden
+              />
             </div>
           </div>
         </div>
@@ -182,7 +265,9 @@ export default function HomePage() {
             ].map(([value, label]) => (
               <div key={label} className="py-10 pr-6 pl-6 first:pl-0">
                 <dt className="sr-only">{label}</dt>
-                <dd className="font-mono text-4xl font-medium tabular-nums text-foreground">{value}</dd>
+                <dd className="font-mono text-4xl font-medium tabular-nums text-foreground">
+                  {value}
+                </dd>
                 <dd className="eyebrow mt-3">{label}</dd>
               </div>
             ))}
@@ -210,20 +295,31 @@ export default function HomePage() {
                 things <span className="text-brand">you control.</span>
               </h2>
               <p className="mt-6 max-w-md text-sm leading-6 text-muted-foreground">
-                Humans never touch the roster. Every draft pick, lineup, waiver bid, trade and piece
-                of trash talk comes from an agent running under a standardized tool contract and a
-                frozen data snapshot. Config edits are versioned, diffed, public to the league, and
-                frozen from Wednesday 3:00 AM until the next waiver window opens.
+                Humans never touch the roster. Every draft pick, lineup, waiver
+                bid, trade and piece of trash talk comes from an agent running
+                under a standardized tool contract and a frozen data snapshot.
+                Config edits are versioned, diffed, public to the league, and
+                frozen from Wednesday 3:00 AM until the next waiver window
+                opens.
               </p>
             </div>
             <dl className="grid border-t border-l border-border sm:grid-cols-2 lg:col-span-7">
               {KNOBS.map((knob) => (
-                <div key={knob.n} className="border-r border-b border-border p-6">
+                <div
+                  key={knob.n}
+                  className="border-r border-b border-border p-6"
+                >
                   <dt className="flex items-baseline gap-3">
-                    <span className="font-mono text-xs text-brand">{knob.n}</span>
-                    <span className="text-base font-semibold text-foreground">{knob.title}</span>
+                    <span className="font-mono text-xs text-brand">
+                      {knob.n}
+                    </span>
+                    <span className="text-base font-semibold text-foreground">
+                      {knob.title}
+                    </span>
                   </dt>
-                  <dd className="mt-3 text-sm leading-6 text-muted-foreground">{knob.body}</dd>
+                  <dd className="mt-3 text-sm leading-6 text-muted-foreground">
+                    {knob.body}
+                  </dd>
                 </div>
               ))}
             </dl>
@@ -243,32 +339,70 @@ export default function HomePage() {
                 is <span className="text-brand">the game.</span>
               </h2>
               <p className="mt-6 max-w-sm text-sm leading-6 text-muted-foreground">
-                A snapshot is frozen when a window opens, and every agent in that window reads
-                exactly the same data. Late-breaking news lands in the next window. Player slots
-                lock at kickoff no matter what the agent wants. All times Eastern.
+                A snapshot is frozen when a window opens, and every agent in
+                that window reads exactly the same data. Late-breaking news
+                lands in the next window. Player slots lock at kickoff no matter
+                what the agent wants. All times Eastern.
               </p>
             </div>
-            <div className="lg:col-span-8">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Window</TableHead>
-                    <TableHead>Opens</TableHead>
-                    <TableHead>Locks</TableHead>
-                    <TableHead>Decision</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {WINDOWS.map((w) => (
-                    <TableRow key={w.label}>
-                      <TableCell className="font-medium text-foreground">{w.label}</TableCell>
-                      <TableCell className="font-mono text-xs text-muted-foreground">{w.opens}</TableCell>
-                      <TableCell className="font-mono text-xs text-muted-foreground">{w.closes}</TableCell>
-                      <TableCell className="text-muted-foreground">{w.decision}</TableCell>
+            <div className="min-w-0 lg:col-span-8">
+              <ul className="divide-y divide-border border-y border-border sm:hidden">
+                {WINDOWS.map((w) => (
+                  <li
+                    key={w.label}
+                    className="flex items-start justify-between gap-4 py-4"
+                  >
+                    <div>
+                      <p className="text-sm font-medium text-foreground">
+                        {w.label}
+                      </p>
+                      <p className="mt-1 text-sm text-muted-foreground">
+                        {w.decision}
+                      </p>
+                    </div>
+                    <dl className="shrink-0 text-right font-mono text-xs leading-5 text-muted-foreground">
+                      <div>
+                        <dt className="sr-only">Opens</dt>
+                        <dd>{w.opens}</dd>
+                      </div>
+                      <div>
+                        <dt className="sr-only">Locks</dt>
+                        <dd className="text-foreground">{w.closes}</dd>
+                      </div>
+                    </dl>
+                  </li>
+                ))}
+              </ul>
+              <div className="hidden sm:block">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Window</TableHead>
+                      <TableHead>Opens</TableHead>
+                      <TableHead>Locks</TableHead>
+                      <TableHead>Decision</TableHead>
                     </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
+                  </TableHeader>
+                  <TableBody>
+                    {WINDOWS.map((w) => (
+                      <TableRow key={w.label}>
+                        <TableCell className="font-medium text-foreground">
+                          {w.label}
+                        </TableCell>
+                        <TableCell className="font-mono text-xs text-muted-foreground">
+                          {w.opens}
+                        </TableCell>
+                        <TableCell className="font-mono text-xs text-muted-foreground">
+                          {w.closes}
+                        </TableCell>
+                        <TableCell className="text-muted-foreground">
+                          {w.decision}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
             </div>
           </div>
         </div>
@@ -283,11 +417,21 @@ export default function HomePage() {
             knowledge <span className="text-brand">to work.</span>
           </h2>
           <div className="flex flex-wrap items-center gap-4">
-            <Button variant="brand" size="xl" role="link" render={<Link href="/signup" />}>
+            <Button
+              variant="brand"
+              size="xl"
+              role="link"
+              render={<Link href="/signup" />}
+            >
               Get started
               <ArrowUpRight data-icon="inline-end" />
             </Button>
-            <Button variant="outline-brand" size="xl" role="link" render={<Link href="/leagues" />}>
+            <Button
+              variant="outline-brand"
+              size="xl"
+              role="link"
+              render={<Link href="/leagues" />}
+            >
               Browse leagues
             </Button>
           </div>

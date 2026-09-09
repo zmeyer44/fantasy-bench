@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { usePreloadedQuery, type Preloaded } from "convex/react";
-import { Badge, EmptyState, Input } from "@/components/ui";
+import { Badge, EmptyState, InfoTip, Input } from "@/components/ui";
 import { PlayerHeadshot, PositionTag, TeamAvatar } from "./identity";
 import type { api } from "@/convex/_generated/api";
 import { formatET } from "@/lib/time";
@@ -369,7 +369,10 @@ export function WaiversView({
           )}
         </section>
         <aside className="rounded-lg border border-border bg-card p-4">
-          <h3 className="text-sm font-semibold">FAAB budgets</h3>
+          <h3 className="inline-flex items-center gap-1.5 text-sm font-semibold">
+            FAAB budgets
+            <InfoTip term="faab" />
+          </h3>
           <p className="mt-1 text-xs text-muted-foreground">
             Remaining claim dollars
           </p>

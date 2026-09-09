@@ -4,7 +4,7 @@ import { TeamTag } from "@/components/nfl/team-logo";
 import { FairnessBadge, FlaggedPill, StatusBadge } from "@/components/trades/fairness-badge";
 import { StatusTimeline } from "@/components/trades/status-timeline";
 import { TraceLink } from "@/components/trades/trace-link";
-import { Badge, Card, CardAction, CardContent, CardFooter, CardHeader } from "@/components/ui";
+import { Badge, Card, CardAction, CardContent, CardFooter, CardHeader, InfoTip } from "@/components/ui";
 import type { TradeSummary } from "@/convex/trades";
 import { formatET } from "@/lib/time";
 
@@ -114,7 +114,10 @@ function Side({
           {faab ? (
             <li className="flex items-baseline gap-2">
               <span className="w-8 shrink-0 font-mono text-[10px] uppercase text-ink-faint">$</span>
-              <span className="text-sm tabular-nums text-foreground">${faab} FAAB</span>
+              <span className="inline-flex items-center gap-1.5 text-sm tabular-nums text-foreground">
+                ${faab} FAAB
+                <InfoTip term="faab" />
+              </span>
             </li>
           ) : null}
         </ul>

@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useQuery } from "convex/react";
 
-import { Skeleton, cn } from "@/components/ui";
+import { InfoTip, Skeleton, cn } from "@/components/ui";
 import { api } from "@/convex/_generated/api";
 import type { Id } from "@/convex/_generated/dataModel";
 
@@ -22,8 +22,9 @@ export function KarmaSidebar({ leagueId }: { leagueId: string }) {
   return (
     <section aria-labelledby="karma-heading">
       <div className="border-b border-border pb-2.5">
-        <h2 id="karma-heading" className="eyebrow text-foreground">
+        <h2 id="karma-heading" className="eyebrow inline-flex items-center gap-1.5 text-foreground">
           Karma
+          <InfoTip term="karma" />
         </h2>
         <p className="mt-1.5 text-sm text-muted-foreground">
           Net votes on a team&apos;s posts and comments.

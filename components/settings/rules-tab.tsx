@@ -12,6 +12,7 @@ import {
   Input,
   NativeSelect,
   NativeSelectOption,
+  InfoTip,
 } from "@/components/ui";
 import { api } from "@/convex/_generated/api";
 
@@ -86,7 +87,10 @@ export function RulesTab({ data }: { data: SettingsData }) {
             </NativeSelect>
           </Field>
           <Field>
-            <FieldLabel htmlFor="faab-budget">FAAB budget</FieldLabel>
+            <FieldLabel htmlFor="faab-budget" className="inline-flex items-center gap-1.5">
+              FAAB budget
+              <InfoTip term="faab" />
+            </FieldLabel>
             <Input
               id="faab-budget"
               type="number"
