@@ -11,10 +11,9 @@ import {
   TEAM_AVATARS,
 } from "./identity";
 import { RunTags } from "@/components/traces/run-tags";
-import { KeyRound, Lock } from "lucide-react";
+import { ArrowRight, KeyRound, Lock } from "lucide-react";
 
 import { Badge, Button, EmptyState, InfoTip, cn } from "@/components/ui";
-import { COOLDOWN_DAYS } from "@/convex/lib/visibility";
 import { TOOL_CATALOG } from "@/convex/runtime/tools/catalog";
 import type { api } from "@/convex/_generated/api";
 import type { FunctionReturnType } from "convex/server";
@@ -108,38 +107,8 @@ export function TeamView({
         </dl>
       </header>
 
-      <nav
-        aria-label="Team navigation"
-        className="flex gap-5 border-b border-border text-sm"
-      >
-        <span
-          aria-current="page"
-          className="border-b-2 border-brand pb-3 font-medium"
-        >
-          Roster
-        </span>
-        <Link
-          className="pb-3 text-muted-foreground hover:text-foreground"
-          href={`${base}/matchups/${page.weekNo}`}
-        >
-          Matchups
-        </Link>
-        <Link
-          className="pb-3 text-muted-foreground hover:text-foreground"
-          href={`${base}/waivers`}
-        >
-          Players & waivers
-        </Link>
-      </nav>
-      <AgentPanel
-        config={page.config}
-        teamBase={teamBase}
-        base={base}
-        canEditAgent={canEditAgent}
-      />
-
-      <div className="grid gap-10 lg:grid-cols-3">
-        <div className="space-y-10 lg:col-span-2">
+      <div className="grid gap-10 lg:grid-cols-3 lg:grid-rows-[auto_1fr]">
+        <div className="space-y-10 lg:col-span-2 lg:row-span-2">
           <section>
             <SectionRule
               title={`Week ${page.weekNo} lineup`}
@@ -233,7 +202,33 @@ export function TeamView({
           </section>
         </div>
 
-        <div className="space-y-10">
+        <div className="order-first space-y-6 lg:order-none lg:col-start-3">
+          <AgentPanel
+            config={page.config}
+            teamBase={teamBase}
+            canEditAgent={canEditAgent}
+          />
+          <nav aria-label="Team navigation" className="grid grid-cols-2 gap-2">
+            <Button
+              variant="outline"
+              className="justify-between"
+              render={<Link href={`${base}/matchups/${page.weekNo}`} />}
+            >
+              Matchups
+              <ArrowRight data-icon="inline-end" />
+            </Button>
+            <Button
+              variant="outline"
+              className="justify-between"
+              render={<Link href={`${base}/waivers`} />}
+            >
+              Players &amp; waivers
+              <ArrowRight data-icon="inline-end" />
+            </Button>
+          </nav>
+        </div>
+
+        <div className="space-y-10 lg:col-start-3">
           <section className="rounded-lg border border-border bg-card p-4">
             <h2 className="text-sm font-semibold">Team identity</h2>
             <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
@@ -311,12 +306,10 @@ export function TeamView({
 function AgentPanel({
   config,
   teamBase,
-  base,
   canEditAgent,
 }: {
   config: TeamPage["config"];
   teamBase: string;
-  base: string;
   canEditAgent: boolean;
 }) {
   const defaultTools = TOOL_CATALOG.length - config.toolsDisabled;
@@ -333,178 +326,147 @@ function AgentPanel({
     .trim();
   const href = `${teamBase}/config`;
 
+  const facts: { label: string; value: string; detail: string }[] = [
+    {
+      label: "Tools",
+      value: privateUntil ? "—" : String(totalTools),
+      detail: privateUntil
+        ? `revealed ${revealLabel}`
+        : `${defaultTools}/${TOOL_CATALOG.length} default${
+            config.customTools.length
+              ? ` · ${config.customTools.length} custom`
+              : ""
+          }${config.toolsGuided ? ` · ${config.toolsGuided} guided` : ""}`,
+    },
+    {
+      label: "Skills",
+      value: privateUntil ? "—" : String(config.skillNames.length),
+      detail: privateUntil
+        ? `revealed ${revealLabel}`
+        : config.skillNames.length
+          ? config.skillNames.join(", ")
+          : "context only",
+    },
+    {
+      label: "Max steps",
+      value: String(config.harness?.maxSteps ?? "—"),
+      detail: config.harness?.tokenBudget
+        ? `${config.harness.tokenBudget.toLocaleString()} tokens / run`
+        : "platform default",
+    },
+    {
+      label: "Context",
+      value: config.contextChars.toLocaleString(),
+      detail: `chars${config.harness ? ` · temp ${config.harness.temperature}` : ""}`,
+    },
+  ];
+
   return (
     <section
       aria-labelledby="agent-panel-title"
-      className="rounded-lg border border-line-strong bg-card"
+      className="rounded-lg border border-line-strong bg-card p-4"
     >
-      <div className="grid gap-6 p-5 lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)] lg:gap-10">
-        <div className="min-w-0">
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="eyebrow-caps text-brand">Agent</span>
-            {hasVersion ? (
-              <Badge variant="outline">v{config.versionNo} live</Badge>
-            ) : (
-              <Badge variant="outline">No version</Badge>
-            )}
-            {config.hasPendingVersion ? (
-              <Badge variant="warning">Edit queued</Badge>
-            ) : null}
-            {privateUntil ? (
-              <Badge variant="secondary">
-                <Lock data-icon="inline-start" /> private until {revealLabel}
-              </Badge>
-            ) : null}
-            {config.ownKey ? (
-              <Badge variant="info">
-                <KeyRound data-icon="inline-start" /> own key
-              </Badge>
-            ) : null}
-          </div>
-          <h2
-            id="agent-panel-title"
-            className="mt-2 text-xl font-semibold tracking-tight"
-          >
-            {config.modelLabel}
-          </h2>
-          <p className="mt-1 text-sm text-muted-foreground">
-            {config.changeSummary
-              ? `Last change: ${config.changeSummary}`
-              : hasVersion
-                ? "Runs every window on this configuration."
-                : "This team has not configured its agent yet. It runs on platform defaults."}
-            {config.createdAt
-              ? ` · saved ${formatET(config.createdAt, "MMM d HH:mm")} ET`
-              : ""}
-          </p>
-
-          <div className="mt-4 border-l-2 border-border pl-3">
-            <div className="eyebrow">System prompt</div>
-            {privateUntil ? (
-              <p className="mt-1.5 text-sm leading-relaxed text-muted-foreground">
-                The owner&apos;s context, skills and tool customizations are
-                private until {revealLabel}. Every customization becomes public{" "}
-                {COOLDOWN_DAYS} days after it is saved, so the league can learn
-                from what worked.
-              </p>
-            ) : (
-              <p
-                className={cn(
-                  "mt-1.5 line-clamp-3 text-sm leading-relaxed",
-                  excerpt ? "text-foreground" : "text-muted-foreground",
-                )}
-              >
-                {excerpt ||
-                  "No owner context written yet. The agent plays a conventional game."}
-              </p>
-            )}
-          </div>
-
-          <div className="mt-5 flex flex-wrap items-center gap-2">
-            <Button
-              size="lg"
-              variant={canEditAgent ? "default" : "outline"}
-              render={<Link href={href} />}
-            >
-              {canEditAgent ? "Edit agent" : "View agent"}
-            </Button>
-            <Button
-              size="lg"
-              variant="ghost"
-              render={<Link href={`${href}?tab=tools`} />}
-            >
-              Tools
-            </Button>
-            <Button
-              size="lg"
-              variant="ghost"
-              render={<Link href={`${teamBase}/config/versions`} />}
-            >
-              Versions
-            </Button>
-          </div>
-        </div>
-
-        <dl className="grid grid-cols-2 gap-x-6 gap-y-5 border-t border-border pt-5 lg:border-t-0 lg:border-l lg:pt-0 lg:pl-10">
-          <div className="min-w-0">
-            <dt className="text-[11px] text-muted-foreground">Tools</dt>
-            <dd className="mt-1 font-mono text-2xl tabular-nums">
-              {privateUntil ? "—" : totalTools}
-            </dd>
-            <dd className="mt-1 text-[11px] text-muted-foreground">
-              {privateUntil
-                ? `revealed ${revealLabel}`
-                : `${defaultTools}/${TOOL_CATALOG.length} default${
-                    config.customTools.length
-                      ? ` · ${config.customTools.length} custom`
-                      : ""
-                  }${config.toolsGuided ? ` · ${config.toolsGuided} guided` : ""}`}
-            </dd>
-          </div>
-          <div className="min-w-0">
-            <dt className="text-[11px] text-muted-foreground">Skills</dt>
-            <dd className="mt-1 font-mono text-2xl tabular-nums">
-              {privateUntil ? "—" : config.skillNames.length}
-            </dd>
-            <dd className="mt-1 truncate text-[11px] text-muted-foreground">
-              {privateUntil
-                ? `revealed ${revealLabel}`
-                : config.skillNames.length
-                  ? config.skillNames.join(", ")
-                  : "context only"}
-            </dd>
-          </div>
-          <div className="min-w-0">
-            <dt className="text-[11px] text-muted-foreground">Max steps</dt>
-            <dd className="mt-1 font-mono text-2xl tabular-nums">
-              {config.harness?.maxSteps ?? "—"}
-            </dd>
-            <dd className="mt-1 text-[11px] text-muted-foreground">
-              {config.harness?.tokenBudget
-                ? `${config.harness.tokenBudget.toLocaleString()} tokens / run`
-                : "platform default"}
-            </dd>
-          </div>
-          <div className="min-w-0">
-            <dt className="text-[11px] text-muted-foreground">Context</dt>
-            <dd className="mt-1 font-mono text-2xl tabular-nums">
-              {config.contextChars.toLocaleString()}
-            </dd>
-            <dd className="mt-1 text-[11px] text-muted-foreground">
-              chars
-              {config.harness ? ` · temp ${config.harness.temperature}` : ""}
-            </dd>
-          </div>
-          {config.customTools.length > 0 ? (
-            <div className="col-span-2 min-w-0">
-              <dt className="text-[11px] text-muted-foreground">
-                Custom tools
-              </dt>
-              <dd className="mt-1 flex flex-wrap gap-1.5">
-                {config.customTools.map((name) => (
-                  <span
-                    key={name}
-                    className="rounded-sm border border-brand/30 bg-brand-soft px-1.5 py-0.5 font-mono text-[11px] text-brand"
-                  >
-                    {name}
-                  </span>
-                ))}
-              </dd>
-            </div>
-          ) : null}
-        </dl>
+      <div className="flex flex-wrap items-center gap-1.5">
+        <span className="eyebrow-caps text-brand">Agent</span>
+        {hasVersion ? (
+          <Badge variant="outline">v{config.versionNo} live</Badge>
+        ) : (
+          <Badge variant="outline">No version</Badge>
+        )}
+        {config.hasPendingVersion ? (
+          <Badge variant="warning">Edit queued</Badge>
+        ) : null}
+        {privateUntil ? (
+          <Badge variant="secondary">
+            <Lock data-icon="inline-start" /> until {revealLabel}
+          </Badge>
+        ) : null}
+        {config.ownKey ? (
+          <Badge variant="info">
+            <KeyRound data-icon="inline-start" /> own key
+          </Badge>
+        ) : null}
       </div>
-      <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border px-5 py-2.5 text-xs text-muted-foreground">
-        <span>
-          Customizations become public to the league {COOLDOWN_DAYS} days after
-          they are saved.
-        </span>
-        <Link
-          href={`${base}/traces`}
-          className="eyebrow transition-colors hover:text-foreground"
+      <h2
+        id="agent-panel-title"
+        className="mt-2 truncate text-base font-semibold tracking-tight"
+      >
+        {config.modelLabel}
+      </h2>
+      <p className="mt-0.5 line-clamp-1 text-xs text-muted-foreground">
+        {config.changeSummary
+          ? config.changeSummary
+          : hasVersion
+            ? "Runs every window on this configuration."
+            : "Not configured yet — runs on platform defaults."}
+        {config.createdAt
+          ? ` · ${formatET(config.createdAt, "MMM d HH:mm")} ET`
+          : ""}
+      </p>
+
+      <p
+        className={cn(
+          "mt-3 line-clamp-2 border-l-2 border-border pl-3 text-xs leading-relaxed",
+          excerpt && !privateUntil
+            ? "text-foreground"
+            : "text-muted-foreground",
+        )}
+      >
+        {privateUntil
+          ? `The owner's context, skills and tool customizations are private until ${revealLabel}.`
+          : excerpt ||
+            "No owner context written yet. The agent plays a conventional game."}
+      </p>
+
+      <dl className="mt-4 grid grid-cols-2 gap-x-4 gap-y-3 border-t border-border pt-3">
+        {facts.map((fact) => (
+          <div key={fact.label} className="min-w-0">
+            <dt className="text-[11px] text-muted-foreground">{fact.label}</dt>
+            <dd className="mt-0.5 font-mono text-base tabular-nums">
+              {fact.value}
+            </dd>
+            <dd className="truncate text-[11px] text-muted-foreground">
+              {fact.detail}
+            </dd>
+          </div>
+        ))}
+      </dl>
+      {config.customTools.length > 0 ? (
+        <div className="mt-3 flex flex-wrap gap-1.5">
+          {config.customTools.map((name) => (
+            <span
+              key={name}
+              className="rounded-sm border border-brand/30 bg-brand-soft px-1.5 py-0.5 font-mono text-[11px] text-brand"
+            >
+              {name}
+            </span>
+          ))}
+        </div>
+      ) : null}
+
+      <div className="mt-4 flex items-center gap-1">
+        <Button
+          size="sm"
+          variant={canEditAgent ? "default" : "outline"}
+          className="flex-1"
+          render={<Link href={href} />}
         >
-          Recent traces →
-        </Link>
+          {canEditAgent ? "Edit agent" : "View agent"}
+        </Button>
+        <Button
+          size="sm"
+          variant="ghost"
+          render={<Link href={`${href}?tab=tools`} />}
+        >
+          Tools
+        </Button>
+        <Button
+          size="sm"
+          variant="ghost"
+          render={<Link href={`${teamBase}/config/versions`} />}
+        >
+          Versions
+        </Button>
       </div>
     </section>
   );

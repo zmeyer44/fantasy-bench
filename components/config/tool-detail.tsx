@@ -159,19 +159,16 @@ export function ToolDetail({
                 />
               }
             />
-            <p className="text-sm text-muted-foreground">
+            <p className="flex items-center gap-1.5 text-sm text-muted-foreground">
+              {tool.locked ? (
+                <Lock className="size-3.5 shrink-0" aria-hidden />
+              ) : null}
               {tool.locked
-                ? tool.lockedReason
+                ? "Required. Every agent keeps this tool on."
                 : enabled
-                  ? "Advertised and callable whenever the window allows it. Switch it off to hide it from your agent in every window — it cannot call what it cannot see."
-                  : "Hidden from your agent in every window. It cannot call what it cannot see."}
+                  ? "On. Your agent can call it in the windows below."
+                  : "Off. Hidden from your agent in every window."}
             </p>
-            {tool.locked ? (
-              <p className="mt-2 flex items-center gap-1.5 text-xs text-muted-foreground">
-                <Lock className="size-3" aria-hidden />
-                Required — every agent keeps this tool on.
-              </p>
-            ) : null}
           </Section>
 
           {/* ---------------------------------------------------- guidance */}
@@ -179,7 +176,7 @@ export function ToolDetail({
             <SectionHeader
               eyebrow="Customize"
               title="Owner guidance"
-              description="Appended to the tool's description, so the model reads it as part of the contract every time this tool is on the table."
+              description="A note the model reads with the tool's description."
               action={
                 <span className="tabular-nums">
                   {guidance.length}/{MAX_TOOL_GUIDANCE_CHARS}
@@ -203,11 +200,11 @@ export function ToolDetail({
                 }
                 onChange={(e) => setGuidance(e.target.value)}
               />
-              <FieldDescription>
-                {!enabled
-                  ? "Guidance is ignored while the tool is off."
-                  : "Be concrete: when to call it, what to do with the result, and what to avoid. The model sees it verbatim."}
-              </FieldDescription>
+              {!enabled ? (
+                <FieldDescription>
+                  Ignored while the tool is off.
+                </FieldDescription>
+              ) : null}
             </Field>
           </Section>
 
@@ -216,7 +213,6 @@ export function ToolDetail({
             <SectionHeader
               eyebrow="Contract"
               title="What the model reads"
-              description="The tool description exactly as your agent receives it, with your guidance appended."
               action={
                 customized ? (
                   <Badge variant="info">Customized</Badge>
@@ -241,9 +237,7 @@ export function ToolDetail({
               eyebrow="Interface"
               title="Inputs"
               description={
-                tool.inputs.length === 0
-                  ? "This tool takes no arguments."
-                  : "Arguments the agent passes when it calls the tool. Required ones are marked."
+                tool.inputs.length === 0 ? "Takes no arguments." : undefined
               }
             />
             {tool.inputs.length > 0 ? (
@@ -287,11 +281,11 @@ export function ToolDetail({
         <aside className="min-w-0 space-y-10">
           {/* ----------------------------------------------------- windows */}
           <Section>
-            <SectionHeader eyebrow="Windows" title="Where it is on" />
-            <p className="text-sm text-muted-foreground">
-              {availabilityLabel(tool.windows)}
-            </p>
-            <ul className="mt-3 flex flex-wrap gap-1.5">
+            <SectionHeader
+              eyebrow="Windows"
+              title={availabilityLabel(tool.windows)}
+            />
+            <ul className="flex flex-wrap gap-1.5">
               {ALL_WINDOWS.map((w) => {
                 const on = tool.windows.includes(w);
                 return (
@@ -314,9 +308,8 @@ export function ToolDetail({
           {/* ------------------------------------------------------- group */}
           <Section>
             <SectionHeader eyebrow="Group" title={group.title} />
-            <p className="text-sm text-muted-foreground">{group.description}</p>
             {siblings.length > 0 ? (
-              <ul className="mt-3 divide-y divide-border border-y border-border">
+              <ul className="divide-y divide-border border-y border-border">
                 {siblings.map((sibling) => (
                   <li key={sibling.name}>
                     <Link
@@ -363,8 +356,8 @@ export function ToolDetail({
       {/* ------------------------------------------------------- save bar */}
       {!canEdit ? (
         <p className="border-t border-border pt-5 text-sm text-muted-foreground">
-          You are reading {teamName}&apos;s agent. Every config in the league is
-          public; only its owner (or the commissioner) can change it.
+          Read-only. Only {teamName}&apos;s owner or the commissioner can change
+          this tool.
         </p>
       ) : dirty || error ? (
         <div className="sticky bottom-4 z-20">
@@ -436,10 +429,7 @@ export function ToolDetail({
         </div>
       ) : customized ? (
         <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border pt-5">
-          <p className="text-sm text-muted-foreground">
-            This tool is customized. Resetting restores the default contract on
-            your next save.
-          </p>
+          <p className="text-sm text-muted-foreground">Customized.</p>
           <Button type="button" variant="outline" size="sm" onClick={reset}>
             Reset to default
           </Button>
