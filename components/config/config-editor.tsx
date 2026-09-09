@@ -37,7 +37,7 @@ import {
   type AttachedSkill,
 } from "./skill-picker";
 import { Toast, type ToastTone } from "./toast";
-import { sameOverrides, toolCounts } from "./tool-model";
+import { toolCounts } from "./tool-model";
 import { ToolsPanel } from "./tools-panel";
 
 export type EditorTab = "prompt" | "tools" | "model";
@@ -92,9 +92,9 @@ export function ConfigEditor(props: ConfigEditorProps) {
   const [skills, setSkills] = useState<AttachedSkill[]>(initial.skills);
   const [modelId, setModelId] = useState(initial.modelId);
   const [harness, setHarness] = useState<HarnessSettings>(initial.harness);
-  const [toolOverrides, setToolOverrides] = useState<ToolOverride[]>(
-    initial.toolOverrides,
-  );
+  // Tool customisation is saved from each tool's own page; the editor only
+  // carries the newest overrides forward so a prompt or model save keeps them.
+  const toolOverrides: ToolOverride[] = initial.toolOverrides;
   const [changeSummary, setChangeSummary] = useState("");
 
   const [attachOpen, setAttachOpen] = useState(false);
@@ -164,14 +164,12 @@ export function ConfigEditor(props: ConfigEditorProps) {
     modelId: initial.modelId,
     harness: initial.harness,
     skillIds: initial.skills.map((s) => s.id),
-    toolOverrides: initial.toolOverrides,
   }));
   const dirty =
     contextMd !== baseline.contextMd ||
     modelId !== baseline.modelId ||
     JSON.stringify(effectiveHarness) !== JSON.stringify(baseline.harness) ||
-    skillIds.join("|") !== baseline.skillIds.join("|") ||
-    !sameOverrides(toolOverrides, baseline.toolOverrides);
+    skillIds.join("|") !== baseline.skillIds.join("|");
 
   const saveNote = useMutation(api.configs.setNote);
   const save = useMutation(api.configs.save);
@@ -216,7 +214,6 @@ export function ConfigEditor(props: ConfigEditorProps) {
         modelId,
         harness: effectiveHarness,
         skillIds,
-        toolOverrides,
       });
       clearDraft(draftKey);
       notify(
@@ -340,7 +337,6 @@ export function ConfigEditor(props: ConfigEditorProps) {
             teamId={props.teamId}
             overrides={toolOverrides}
             canEdit={canEdit}
-            onOverridesChange={setToolOverrides}
             onToast={notify}
           />
         </TabsContent>

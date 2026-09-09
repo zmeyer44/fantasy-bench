@@ -40,9 +40,14 @@ import { diffVersionRows } from "./lib/config_pure";
 import { appError } from "./lib/errors";
 import { configVersionDoc, skillDoc } from "./lib/validators";
 import { COOLDOWN_MS, isPrivateAt, revealAtFor } from "./lib/visibility";
-import { normalizeToolOverrides, validateToolOverrides } from "./runtime/tools/catalog";
+import { DEFAULT_AGENT_CONTEXT, DEFAULT_HARNESS } from "./lib/defaults";
+import {
+  normalizeToolOverrides,
+  validateToolOverrides,
+  type ToolOverride,
+} from "./runtime/tools/catalog";
 import { reasoningEffort, toolOverride } from "./schema";
-import { findModel } from "@/lib/models";
+import { DEFAULT_MODEL_ID, findModel } from "@/lib/models";
 import { isWithinEditWindow } from "@/lib/time";
 
 type Ctx = QueryCtx | MutationCtx;
@@ -516,6 +521,16 @@ const harnessInput = v.object({
   deliberateMode: v.optional(v.boolean()),
 });
 
+const saveResult = v.object({
+  versionId: v.id("config_versions"),
+  versionNo: v.number(),
+  applied: v.boolean(),
+  queued: v.boolean(),
+  /** Epoch ms the queued version goes live; null when it applied already. */
+  appliesAt: v.union(v.number(), v.null()),
+  noteAppended: v.union(v.string(), v.null()),
+});
+
 /**
  * Create a new immutable version for a team (`config.save`).
  *
@@ -541,15 +556,7 @@ export const save = mutation({
     toolOverrides: v.optional(v.array(toolOverride)),
     changeSummary: v.optional(v.string()),
   },
-  returns: v.object({
-    versionId: v.id("config_versions"),
-    versionNo: v.number(),
-    applied: v.boolean(),
-    queued: v.boolean(),
-    /** Epoch ms the queued version goes live; null when it applied already. */
-    appliesAt: v.union(v.number(), v.null()),
-    noteAppended: v.union(v.string(), v.null()),
-  }),
+  returns: saveResult,
   handler: async (ctx, args) => {
     const access = await requireOwnerOrCommissioner(ctx, args.teamId);
     await assertTeamInLeague(access.team, args.leagueId);
@@ -603,61 +610,165 @@ export const save = mutation({
 
     if (issues.length > 0) throw validationError(issues);
 
-    // ---- append the immutable version --------------------------------------
-    const [latest] = await ctx.db
-      .query("config_versions")
-      .withIndex("by_configId_versionNo", (q) => q.eq("configId", config._id))
-      .order("desc")
-      .take(1);
-    const versionNo = (latest?.versionNo ?? 0) + 1;
-
-    const lock = toEditLock(rules?.editLock);
-    const open = isWithinEditWindow(new Date(now), lock);
-    const summary = args.changeSummary?.trim();
-
-    const versionId = await ctx.db.insert("config_versions", {
-      configId: config._id,
-      teamId: access.team._id,
-      leagueId: access.team.leagueId,
-      versionNo,
+    const result = await appendVersion(ctx, access, config, rules, {
+      now,
       contextMd,
       modelId: args.modelId,
       harness,
       skillIds,
-      toolOverrides: toolOverrides.length > 0 ? toolOverrides : undefined,
-      createdByUserId: access.viewer.userId,
-      appliedAt: open ? now : undefined,
-      changeSummary: summary ? summary : undefined,
-      createdAt: now,
+      toolOverrides,
+      changeSummary: args.changeSummary,
+      consumeNote: true,
     });
-
-    // ---- apply or queue -----------------------------------------------------
-    if (open) {
-      await shiftSkillUsage(ctx, await currentSkillIds(ctx, config), skillIds);
-      await ctx.db.patch("agent_configs", config._id, {
-        currentVersionId: versionId,
-        pendingVersionId: undefined,
-        noteToAgent: undefined,
-        updatedAt: now,
-      });
-    } else {
-      await ctx.db.patch("agent_configs", config._id, {
-        pendingVersionId: versionId,
-        noteToAgent: undefined,
-        updatedAt: now,
-      });
-    }
-
-    return {
-      versionId,
-      versionNo,
-      applied: open,
-      queued: !open,
-      appliesAt: open ? null : editLockStatusFor(lock, now).nextChange,
-      noteAppended: note ? note : null,
-    };
+    return { ...result, noteAppended: note ? note : null };
   },
 });
+
+/**
+ * Change one default tool's customisation — on/off and owner guidance — without
+ * touching anything else. Appends a version copied from the newest one (queued
+ * first, then live; the platform defaults when the team has none) with that
+ * single override replaced, then applies or queues it exactly as `save` does.
+ * The owner's note is left for the next full save.
+ */
+export const saveToolOverride = mutation({
+  args: {
+    leagueId: v.id("leagues"),
+    teamId: v.id("teams"),
+    override: toolOverride,
+    changeSummary: v.optional(v.string()),
+  },
+  returns: saveResult,
+  handler: async (ctx, args) => {
+    const access = await requireOwnerOrCommissioner(ctx, args.teamId);
+    await assertTeamInLeague(access.team, args.leagueId);
+    if ((args.changeSummary ?? "").length > MAX_CHANGE_SUMMARY_CHARS) {
+      throw appError("BAD_REQUEST", `Change summaries are at most ${MAX_CHANGE_SUMMARY_CHARS} characters.`);
+    }
+
+    const now = Date.now();
+    const config = await ensureConfig(ctx, access.team);
+    const rules = await ctx.db
+      .query("league_rules")
+      .withIndex("by_leagueId", (q) => q.eq("leagueId", args.leagueId))
+      .unique();
+
+    const baseId = config.pendingVersionId ?? config.currentVersionId;
+    const base = baseId ? await ctx.db.get("config_versions", baseId) : null;
+    const contextMd = base?.contextMd ?? DEFAULT_AGENT_CONTEXT;
+    const modelId = base?.modelId ?? rules?.modelAllowlist?.[0] ?? DEFAULT_MODEL_ID;
+    const harness = base ? parseHarness(base.harness) : DEFAULT_HARNESS;
+    const skillIds = base?.skillIds ?? [];
+
+    const toolOverrides = normalizeToolOverrides([
+      ...(base?.toolOverrides ?? []).filter((o) => o.name !== args.override.name),
+      args.override,
+    ]);
+    const issues = validateAgainstRules({
+      contextMd,
+      modelId,
+      harness,
+      skillIds,
+      rules,
+      noteWasAppended: false,
+    });
+    issues.push(...validateToolOverrides(toolOverrides));
+    if (issues.length > 0) throw validationError(issues);
+
+    const result = await appendVersion(ctx, access, config, rules, {
+      now,
+      contextMd,
+      modelId,
+      harness,
+      skillIds,
+      toolOverrides,
+      changeSummary: args.changeSummary,
+      consumeNote: false,
+    });
+    return { ...result, noteAppended: null };
+  },
+});
+
+/**
+ * Append an immutable version and apply it (inside the edit window) or queue it
+ * (outside), replacing any earlier queued version. `consumeNote` clears the
+ * owner's note once a save has folded it into the context.
+ */
+async function appendVersion(
+  ctx: MutationCtx,
+  access: Awaited<ReturnType<typeof requireOwnerOrCommissioner>>,
+  config: Doc<"agent_configs">,
+  rules: Doc<"league_rules"> | null,
+  input: {
+    now: number;
+    contextMd: string;
+    modelId: string;
+    harness: HarnessSettings;
+    skillIds: Id<"skills">[];
+    toolOverrides: ToolOverride[];
+    changeSummary: string | undefined;
+    consumeNote: boolean;
+  },
+): Promise<{
+  versionId: Id<"config_versions">;
+  versionNo: number;
+  applied: boolean;
+  queued: boolean;
+  appliesAt: number | null;
+}> {
+  const { now } = input;
+  const [latest] = await ctx.db
+    .query("config_versions")
+    .withIndex("by_configId_versionNo", (q) => q.eq("configId", config._id))
+    .order("desc")
+    .take(1);
+  const versionNo = (latest?.versionNo ?? 0) + 1;
+
+  const lock = toEditLock(rules?.editLock);
+  const open = isWithinEditWindow(new Date(now), lock);
+  const summary = input.changeSummary?.trim();
+
+  const versionId = await ctx.db.insert("config_versions", {
+    configId: config._id,
+    teamId: access.team._id,
+    leagueId: access.team.leagueId,
+    versionNo,
+    contextMd: input.contextMd,
+    modelId: input.modelId,
+    harness: input.harness,
+    skillIds: input.skillIds,
+    toolOverrides: input.toolOverrides.length > 0 ? input.toolOverrides : undefined,
+    createdByUserId: access.viewer.userId,
+    appliedAt: open ? now : undefined,
+    changeSummary: summary ? summary : undefined,
+    createdAt: now,
+  });
+
+  const note = input.consumeNote ? { noteToAgent: undefined } : {};
+  if (open) {
+    await shiftSkillUsage(ctx, await currentSkillIds(ctx, config), input.skillIds);
+    await ctx.db.patch("agent_configs", config._id, {
+      currentVersionId: versionId,
+      pendingVersionId: undefined,
+      ...note,
+      updatedAt: now,
+    });
+  } else {
+    await ctx.db.patch("agent_configs", config._id, {
+      pendingVersionId: versionId,
+      ...note,
+      updatedAt: now,
+    });
+  }
+
+  return {
+    versionId,
+    versionNo,
+    applied: open,
+    queued: !open,
+    appliesAt: open ? null : editLockStatusFor(lock, now).nextChange,
+  };
+}
 
 /**
  * The owner's scratchpad (`config.setNote`). The text is folded into the context

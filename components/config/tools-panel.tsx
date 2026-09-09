@@ -1,7 +1,8 @@
 "use client";
 
 import { useMutation, useQuery } from "convex/react";
-import { Lock, Pencil, Plus, Trash2 } from "lucide-react";
+import { ArrowUpRight, Lock, Pencil, Plus, Trash2 } from "lucide-react";
+import Link from "next/link";
 import { useMemo, useState } from "react";
 
 import { mutationErrorMessage } from "@/components/league/convex-errors";
@@ -29,14 +30,7 @@ import {
 import { formatET } from "@/lib/time";
 
 import { CustomToolDialog } from "./custom-tool-dialog";
-import { ToolInspector } from "./tool-inspector";
-import {
-  availabilityLabel,
-  setOverride,
-  toolCounts,
-  toolRows,
-  type ToolRow,
-} from "./tool-model";
+import { availabilityLabel, toolCounts, toolRows } from "./tool-model";
 
 const GROUP_ORDER: ToolGroup[] = [
   "read",
@@ -49,9 +43,9 @@ const GROUP_ORDER: ToolGroup[] = [
 /**
  * The Tools tab. Two clearly separated inventories:
  *
- *  - **Default tools** — the platform contract every agent shares. An owner can
- *    switch one off or attach guidance; both are versioned with the config and
- *    take effect when the version applies.
+ *  - **Default tools** — the platform contract every agent shares. Each card
+ *    links to the tool's own page, where an owner can switch it off or attach
+ *    guidance; both are saved as a config version from there.
  *  - **Custom tools** — HTTP/JSON sources this team registered. They are the
  *    team's own, apply to the next run immediately, and are not versioned.
  */
@@ -60,20 +54,17 @@ export function ToolsPanel({
   teamId,
   overrides,
   canEdit,
-  onOverridesChange,
   onToast,
 }: {
   leagueId: string;
   teamId: string;
   overrides: ToolOverride[];
   canEdit: boolean;
-  onOverridesChange: (next: ToolOverride[]) => void;
   onToast: (message: string, tone: "success" | "error" | "info") => void;
 }) {
   const rows = useMemo(() => toolRows(overrides), [overrides]);
   const counts = useMemo(() => toolCounts(overrides), [overrides]);
-  const [inspecting, setInspecting] = useState<string | null>(null);
-  const inspected = rows.find((r) => r.name === inspecting) ?? null;
+  const toolBase = `/leagues/${leagueId}/teams/${teamId}/config/tools`;
 
   const custom = useQuery(api.custom_tools.listForTeam, {
     leagueId: leagueId as Id<"leagues">,
@@ -91,16 +82,6 @@ export function ToolsPanel({
 
   const own = (custom?.tools ?? []).filter((t) => !t.inherited);
   const inherited = (custom?.tools ?? []).filter((t) => t.inherited);
-
-  function toggle(row: ToolRow, enabled: boolean) {
-    onOverridesChange(
-      setOverride(overrides, {
-        name: row.name,
-        enabled,
-        guidance: row.guidance,
-      }),
-    );
-  }
 
   async function toggleCustom(tool: CustomToolView, enabled: boolean) {
     try {
@@ -140,10 +121,9 @@ export function ToolsPanel({
               Default tools
             </h2>
             <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
-              The contract every agent in the league shares, word for word.
-              Switch a tool off to hide it from your agent, or open one to add
-              guidance the model reads alongside its description. Both are saved
-              with the version.
+              The contract every agent in the league shares, word for word. Open
+              a tool to switch it off or add guidance the model reads alongside
+              its description. Each change is saved as a version.
             </p>
           </div>
           <dl className="flex items-baseline gap-4 font-mono text-xs tabular-nums text-muted-foreground">
@@ -187,13 +167,12 @@ export function ToolsPanel({
                       >
                         <CardHeader>
                           <CardTitle className="flex min-w-0 items-center gap-2 font-mono text-sm">
-                            <button
-                              type="button"
-                              onClick={() => setInspecting(row.name)}
+                            <Link
+                              href={`${toolBase}/${row.name}`}
                               className="truncate text-left after:absolute after:inset-0 after:rounded-lg hover:text-brand focus-visible:outline-none focus-visible:after:ring-2 focus-visible:after:ring-ring"
                             >
                               {row.name}
-                            </button>
+                            </Link>
                             {row.locked ? (
                               <Lock
                                 className="size-3 shrink-0 text-muted-foreground"
@@ -204,15 +183,10 @@ export function ToolsPanel({
                           <CardDescription className="line-clamp-2">
                             {row.summary}
                           </CardDescription>
-                          <CardAction className="relative z-10">
-                            <Switch
-                              size="sm"
-                              aria-label={`Enable ${row.name}`}
-                              checked={row.enabled}
-                              disabled={!canEdit || row.locked}
-                              onCheckedChange={(checked) =>
-                                toggle(row, Boolean(checked))
-                              }
+                          <CardAction>
+                            <ArrowUpRight
+                              className="size-4 text-ink-faint"
+                              aria-hidden
                             />
                           </CardAction>
                         </CardHeader>
@@ -221,7 +195,7 @@ export function ToolsPanel({
                             {availabilityLabel(row.windows)}
                           </span>
                           <div className="flex shrink-0 gap-1.5">
-                            {row.guidance ? (
+                            {row.enabled && row.guidance ? (
                               <Badge variant="info">Guided</Badge>
                             ) : null}
                             {!row.enabled ? (
@@ -394,15 +368,6 @@ export function ToolsPanel({
         ) : null}
       </section>
 
-      <ToolInspector
-        tool={inspected}
-        open={inspected !== null}
-        canEdit={canEdit}
-        onClose={() => setInspecting(null)}
-        onChange={(override) =>
-          onOverridesChange(setOverride(overrides, override))
-        }
-      />
       <CustomToolDialog
         open={dialog.open}
         leagueId={leagueId}

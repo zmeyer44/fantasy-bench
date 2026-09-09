@@ -1044,3 +1044,136 @@ describe("configs.save — tool overrides", () => {
     ]);
   });
 });
+
+describe("configs.saveToolOverride", () => {
+  afterEach(() => vi.useRealTimers());
+
+  const GUIDED = { name: "set_lineup", enabled: true, guidance: "Favor floor over ceiling." };
+
+  it("appends a version that copies the newest one with a single override changed", async () => {
+    at(TUE_10_ET);
+    const { owner, leagueId, teamId } = await writeFixture();
+    const full = await owner.session.mutation(api.configs.save, {
+      ...BASE,
+      leagueId,
+      teamId,
+      toolOverrides: [{ name: "get_news", enabled: false }],
+    });
+
+    const result = await owner.session.mutation(api.configs.saveToolOverride, {
+      leagueId,
+      teamId,
+      override: GUIDED,
+      changeSummary: "Guide the lineup tool",
+    });
+    expect(result.applied).toBe(true);
+    expect(result.versionNo).toBe(full.versionNo + 1);
+    expect(result.noteAppended).toBeNull();
+
+    const view = await owner.session.query(api.configs.get, { leagueId, teamId });
+    expect(view.current?._id).toBe(result.versionId);
+    expect(view.current?.contextMd).toBe(BASE.contextMd);
+    expect(view.current?.modelId).toBe(BASE.modelId);
+    expect(view.current?.harness.maxSteps).toBe(BASE.harness.maxSteps);
+    expect(view.current?.toolOverrides).toEqual([{ name: "get_news", enabled: false }, GUIDED]);
+    expect(view.current?.changeSummary).toBe("Guide the lineup tool");
+  });
+
+  it("drops the override once the tool is back at its default", async () => {
+    at(TUE_10_ET);
+    const { owner, leagueId, teamId } = await writeFixture();
+    await owner.session.mutation(api.configs.save, {
+      ...BASE,
+      leagueId,
+      teamId,
+      toolOverrides: [{ name: "get_news", enabled: false }, GUIDED],
+    });
+    await owner.session.mutation(api.configs.saveToolOverride, {
+      leagueId,
+      teamId,
+      override: { name: "set_lineup", enabled: true, guidance: "   " },
+    });
+    const view = await owner.session.query(api.configs.get, { leagueId, teamId });
+    expect(view.current?.toolOverrides).toEqual([{ name: "get_news", enabled: false }]);
+  });
+
+  it("starts from the platform defaults when the team has no version", async () => {
+    at(TUE_10_ET);
+    const { t, other, leagueId, otherTeamId } = await writeFixture();
+    // Joining seeds a first version; detach it so neither a live nor a queued one exists.
+    await t.run(async (ctx) => {
+      const config = (await ctx.db
+        .query("agent_configs")
+        .withIndex("by_teamId", (q) => q.eq("teamId", otherTeamId))
+        .unique())!;
+      await ctx.db.patch("agent_configs", config._id, {
+        currentVersionId: undefined,
+        pendingVersionId: undefined,
+      });
+    });
+    expect((await configRow(t, otherTeamId))?.currentVersionId).toBeUndefined();
+
+    const result = await other.session.mutation(api.configs.saveToolOverride, {
+      leagueId,
+      teamId: otherTeamId,
+      override: { name: "get_news", enabled: false },
+    });
+    expect(result.applied).toBe(true);
+    const view = await other.session.query(api.configs.get, { leagueId, teamId: otherTeamId });
+    expect(view.current?._id).toBe(result.versionId);
+    expect(view.current?.contextMd.length).toBeGreaterThan(0);
+    expect(view.current?.modelId.length).toBeGreaterThan(0);
+    expect(view.current?.toolOverrides).toEqual([{ name: "get_news", enabled: false }]);
+  });
+
+  it("refuses to switch off a locked tool", async () => {
+    at(TUE_10_ET);
+    const { owner, leagueId, teamId } = await writeFixture();
+    expect(
+      await errorCode(
+        owner.session.mutation(api.configs.saveToolOverride, {
+          leagueId,
+          teamId,
+          override: { name: "set_rationale", enabled: false },
+        }),
+      ),
+    ).toBe("BAD_REQUEST");
+  });
+
+  it("queues outside the edit window and leaves the owner's note for the next full save", async () => {
+    at(TUE_10_ET);
+    const { t, owner, leagueId, teamId } = await writeFixture();
+    await owner.session.mutation(api.configs.save, { ...BASE, leagueId, teamId });
+    await owner.session.mutation(api.configs.setNote, { leagueId, teamId, text: "Bench the rookie." });
+
+    at(FRI_10_ET);
+    const result = await owner.session.mutation(api.configs.saveToolOverride, {
+      leagueId,
+      teamId,
+      override: GUIDED,
+    });
+    expect(result.queued).toBe(true);
+    expect(result.appliesAt).not.toBeNull();
+
+    const row = await configRow(t, teamId);
+    expect(row?.pendingVersionId).toBe(result.versionId);
+    expect(row?.noteToAgent).toBe("Bench the rookie.");
+    // The queued version's context is untouched by the note.
+    const view = await owner.session.query(api.configs.get, { leagueId, teamId });
+    expect(view.pending?.contextMd).toBe(BASE.contextMd);
+  });
+
+  it("is FORBIDDEN for another owner", async () => {
+    at(TUE_10_ET);
+    const { other, leagueId, teamId } = await writeFixture();
+    expect(
+      await errorCode(
+        other.session.mutation(api.configs.saveToolOverride, {
+          leagueId,
+          teamId,
+          override: GUIDED,
+        }),
+      ),
+    ).toBe("FORBIDDEN");
+  });
+});
