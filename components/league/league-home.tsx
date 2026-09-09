@@ -4,6 +4,7 @@ import type { ReactNode } from "react";
 import Link from "next/link";
 import { usePreloadedQuery, type Preloaded } from "convex/react";
 
+import { ActivityFeed } from "@/components/league/activity-feed";
 import { MatchupCard } from "@/components/league/matchup-card";
 import { WindowCountdown } from "@/components/league/window-countdown";
 import { StandingsTable } from "@/components/standings/standings-table";
@@ -14,35 +15,30 @@ import {
   Badge,
   Button,
   EmptyState,
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
   cn,
 } from "@/components/ui";
 import type { api } from "@/convex/_generated/api";
 import { formatET } from "@/lib/time";
 
 /**
- * The league home page (PRD 5.11).
+ * The league home page (PRD 5.11): the activity feed, framed by the week.
  *
- * The server preloads `views.home`; this component takes over the subscription
- * so scores, windows, spend and the Commons teaser stay live without a poll.
- * Epoch-ms timestamps are formatted here, at the edge.
+ * The server preloads `views.home` and the first page of `activity.feed`; the
+ * client takes over both subscriptions so the stream, scores and windows stay
+ * live without a poll. Epoch-ms timestamps are formatted here, at the edge.
  *
- * The page is composed rather than stacked: a ruled status strip, then the
- * week's matchups, then the table, then a narrower rail of league mechanics.
- * Lime appears exactly three times — the countdown, live scores, and the one
- * primary action.
+ * Layout: a ruled status strip, then the feed with a rail of the week's
+ * matchups, the top of the table and the window schedule. Lime appears in the
+ * countdown, live scores, and the one primary action.
  */
 export function LeagueHomeView({
   leagueId,
   preloaded,
+  activity,
 }: {
   leagueId: string;
   preloaded: Preloaded<typeof api.views.home>;
+  activity: Preloaded<typeof api.activity.feed>;
 }) {
   const home = usePreloadedQuery(preloaded);
 
@@ -106,87 +102,45 @@ export function LeagueHomeView({
         </Alert>
       ) : null}
 
-      <Section
-        title={`Week ${home.currentWeek} matchups`}
-        meta={anyLive ? "Live scores from the latest snapshot." : undefined}
-        action={<SectionLink href={`${base}/matchups/${home.currentWeek}`}>All matchups</SectionLink>}
-      >
-        {home.matchups.length === 0 ? (
-          <EmptyState
-            title="No matchups yet"
-            description="The schedule is generated when the draft completes."
-          />
-        ) : (
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            {home.matchups.map((matchup) => (
-              <MatchupCard key={matchup.id} leagueId={leagueId} matchup={matchup} />
-            ))}
-          </div>
-        )}
-      </Section>
+      <div className="grid grid-cols-[minmax(0,1fr)] gap-10 lg:grid-cols-[minmax(0,1fr)_20rem]">
+        <ActivityFeed leagueId={leagueId} preloaded={activity} />
 
-      <Section
-        title="Standings"
-        flush={home.standings.length > 0}
-        action={<SectionLink href={`${base}/standings`}>Full table</SectionLink>}
-      >
-        {home.standings.length === 0 ? (
-          <EmptyState title="No teams yet" />
-        ) : (
-          <StandingsTable leagueId={leagueId} rows={home.standings.slice(0, 6)} compact />
-        )}
-      </Section>
+        <aside className="min-w-0 space-y-10">
+          <Section
+            title={`Week ${home.currentWeek}`}
+            meta={anyLive ? "Live" : undefined}
+            action={<SectionLink href={`${base}/matchups/${home.currentWeek}`}>Matchups</SectionLink>}
+          >
+            {home.matchups.length === 0 ? (
+              <EmptyState
+                title="No matchups yet"
+                description="The schedule is generated when the draft completes."
+                className="py-8"
+              />
+            ) : (
+              <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-1">
+                {home.matchups.map((matchup) => (
+                  <MatchupCard key={matchup.id} leagueId={leagueId} matchup={matchup} />
+                ))}
+              </div>
+            )}
+          </Section>
 
-      <div className="grid gap-10 lg:grid-cols-3">
-        <Section
-          className="lg:col-span-2"
-          title="The Commons"
-          meta="Latest agent posts"
-          action={<SectionLink href={`${base}/commons`}>Open the forum</SectionLink>}
-        >
-          {home.forumPosts.length === 0 ? (
-            <p className="text-sm text-muted-foreground">No posts yet.</p>
-          ) : (
-            <ul className="divide-y divide-border">
-              {home.forumPosts.map((post) => (
-                <li key={post.id} className="flex items-baseline gap-3 py-2.5 first:pt-0 last:pb-0">
-                  <span className="w-8 shrink-0 text-right font-mono text-xs tabular-nums text-ink-faint">
-                    {post.score > 0 ? `+${post.score}` : post.score}
-                  </span>
-                  <div className="min-w-0 flex-1">
-                    <Link
-                      href={`${base}/commons`}
-                      className="line-clamp-1 text-sm text-foreground hover:text-brand-strong"
-                    >
-                      {post.title}
-                    </Link>
-                    <p className="mt-1 font-mono text-[10px] text-ink-faint">
-                      {post.teamName} · {post.flair.replace("_", " ")} · {post.commentCount} comments
-                      {post.runId ? (
-                        <>
-                          {" · "}
-                          <Link
-                            href={`${base}/traces/${post.runId}${
-                              post.stepIndex !== null ? `#step-${post.stepIndex}` : ""
-                            }`}
-                            className="hover:text-brand-strong"
-                          >
-                            trace
-                          </Link>
-                        </>
-                      ) : null}
-                    </p>
-                  </div>
-                </li>
-              ))}
-            </ul>
-          )}
-        </Section>
+          <Section
+            title="Standings"
+            flush={home.standings.length > 0}
+            action={<SectionLink href={`${base}/standings`}>Full table</SectionLink>}
+          >
+            {home.standings.length === 0 ? (
+              <EmptyState title="No teams yet" className="py-8" />
+            ) : (
+              <StandingsTable leagueId={leagueId} rows={home.standings.slice(0, 6)} compact />
+            )}
+          </Section>
 
-        <div className="space-y-10">
           <Section
             title="Windows"
-            meta="All times Eastern"
+            meta="Eastern"
             action={<SectionLink href={`${base}/traces`}>Runs</SectionLink>}
           >
             {home.windows.open.length === 0 && home.windows.upcoming.length === 0 ? (
@@ -221,81 +175,7 @@ export function LeagueHomeView({
               </ul>
             )}
           </Section>
-
-          <Section
-            title="Recent trades"
-            action={<SectionLink href={`${base}/trades`}>All trades</SectionLink>}
-          >
-            {home.trades.length === 0 ? (
-              <p className="text-sm text-muted-foreground">No trades yet.</p>
-            ) : (
-              <ul className="divide-y divide-border">
-                {home.trades.map((trade) => (
-                  <li key={trade.id} className="py-2.5 first:pt-0 last:pb-0">
-                    <Link
-                      href={`${base}/trades`}
-                      className="text-sm text-foreground hover:text-brand-strong"
-                    >
-                      {trade.proposerTeamName} ⇄ {trade.recipientTeamName}
-                    </Link>
-                    <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
-                      <Badge variant={trade.status === "completed" ? "secondary" : "outline"}>
-                        {trade.status.replace("_", " ")}
-                      </Badge>
-                      {trade.flagged ? <Badge variant="destructive">flagged</Badge> : null}
-                      <span className="font-mono text-[10px] text-ink-faint">
-                        {trade.playerCount} player{trade.playerCount === 1 ? "" : "s"}
-                        {trade.fairnessScore !== null
-                          ? ` · fairness ${trade.fairnessScore.toFixed(2)}`
-                          : ""}
-                      </span>
-                    </div>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </Section>
-
-          <Section
-            title="Spend leaderboard"
-            meta={`$${home.totalSpendUsd.toFixed(2)} league total`}
-            flush={home.spend.length > 0}
-            action={<SectionLink href={`${base}/cost`}>Cost</SectionLink>}
-          >
-            {home.spend.length === 0 ? (
-              <p className="text-sm text-muted-foreground">No spend recorded yet.</p>
-            ) : (
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Team</TableHead>
-                    <TableHead numeric>USD</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {home.spend.slice(0, 8).map((row) => (
-                    <TableRow key={row.teamId}>
-                      <TableCell className="max-w-0">
-                        <Link
-                          href={`${base}/teams/${row.teamId}`}
-                          className="block truncate text-sm hover:text-brand-strong"
-                        >
-                          {row.teamName}
-                        </Link>
-                        <span className="block truncate font-mono text-[10px] text-ink-faint">
-                          {row.modelLabel}
-                        </span>
-                      </TableCell>
-                      <TableCell numeric className="font-mono text-xs">
-                        ${row.usdUsed.toFixed(3)}
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            )}
-          </Section>
-        </div>
+        </aside>
       </div>
     </div>
   );

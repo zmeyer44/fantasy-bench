@@ -49,7 +49,6 @@ export function TeamView({
   return (
     <div className="space-y-5 sm:space-y-8">
       <PageHeader
-        eyebrow={`${page.team.abbreviation} · ${page.team.ownerName ?? "unowned"}`}
         title={
           <span className="flex items-center gap-3">
             <TeamAvatar

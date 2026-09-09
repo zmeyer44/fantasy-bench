@@ -21,10 +21,11 @@ export default async function LeagueHomePage({ params }: PageProps<"/leagues/[le
   const { leagueId } = await params;
 
   // Preload for the first paint, then `usePreloadedQuery` keeps the page live.
-  const preloaded = await readOrNull(() =>
-    preloadAuthQuery(api.views.home, { leagueId: leagueId as Id<"leagues"> }),
-  );
-  if (!preloaded) notFound();
+  const [preloaded, activity] = await Promise.all([
+    readOrNull(() => preloadAuthQuery(api.views.home, { leagueId: leagueId as Id<"leagues"> })),
+    readOrNull(() => preloadAuthQuery(api.activity.feed, { leagueId: leagueId as Id<"leagues"> })),
+  ]);
+  if (!preloaded || !activity) notFound();
 
-  return <LeagueHomeView leagueId={leagueId} preloaded={preloaded} />;
+  return <LeagueHomeView leagueId={leagueId} preloaded={preloaded} activity={activity} />;
 }

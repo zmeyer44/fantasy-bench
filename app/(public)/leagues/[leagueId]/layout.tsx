@@ -1,13 +1,15 @@
 import { notFound } from "next/navigation";
 
 import { readOrNull } from "@/components/league/convex-errors";
-import { LeagueSubnav } from "@/components/league-subnav";
-import { Badge } from "@/components/ui";
 import { api } from "@/convex/_generated/api";
 import type { Id } from "@/convex/_generated/dataModel";
 import { fetchAuthQuery } from "@/lib/convex/server";
-import { getViewer, viewerMembership } from "@/lib/convex/viewer";
 
+/**
+ * League shell. The league's identity and sections live in the site nav
+ * (`components/site-nav.tsx`, fed by `leagues.navContext`), so this layout only
+ * guards access and frames the page.
+ */
 export default async function LeagueLayout({ children, params }: LayoutProps<"/leagues/[leagueId]">) {
   const { leagueId } = await params;
 
@@ -18,34 +20,5 @@ export default async function LeagueLayout({ children, params }: LayoutProps<"/l
   );
   if (!view) notFound();
 
-  const viewer = await getViewer();
-  const membership = viewerMembership(viewer, leagueId);
-  const league = view.league;
-
-  return (
-    <div>
-      <div className="border-b border-border">
-        <div className="mx-auto max-w-7xl px-4 pt-5 sm:px-6 sm:pt-8">
-          <div className="eyebrow">League · {league.season}</div>
-          <div className="mt-2 flex flex-wrap items-center gap-3">
-            <h1 className="text-2xl font-semibold tracking-tight text-foreground">{league.name}</h1>
-            <Badge variant={league.status === "in_season" ? "success" : "secondary"}>
-              {league.status.replace("_", " ")}
-            </Badge>
-            {league.isPublic ? <Badge variant="outline">public</Badge> : null}
-            <Badge variant="outline">{membership ? membership.role : "spectator"}</Badge>
-          </div>
-          <div className="mt-3 sm:mt-5">
-            <LeagueSubnav
-              leagueId={leagueId}
-              isCommissioner={membership?.role === "commissioner"}
-              myTeamId={membership?.teamId}
-            />
-          </div>
-        </div>
-      </div>
-
-      <div className="mx-auto max-w-7xl px-4 py-5 sm:px-6 sm:py-8">{children}</div>
-    </div>
-  );
+  return <div className="mx-auto max-w-7xl px-4 py-5 sm:px-6 sm:py-8">{children}</div>;
 }

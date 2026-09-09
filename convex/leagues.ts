@@ -14,6 +14,7 @@ import type { MutationCtx, QueryCtx } from "./_generated/server";
 import { internalMutation, mutation, query } from "./_generated/server";
 import { appError } from "./lib/errors";
 import {
+  getMembership,
   optionalUser,
   requireLeagueRead,
   requireUser,
@@ -36,7 +37,7 @@ import {
   weekBoundaries,
 } from "./lib/season";
 import { leagueDoc, membershipDoc, rulesDoc } from "./lib/validators";
-import { draftType, leagueRole, scoringPreset } from "./schema";
+import { draftType, leagueRole, leagueStatus, scoringPreset } from "./schema";
 import {
   DEFAULT_FALLBACK_MODEL_ID,
   DEFAULT_MODEL_ALLOWLIST,
@@ -85,6 +86,59 @@ export const get = query({
       role: access.membership?.role ?? null,
       isCommissioner: access.isCommissioner,
       viewerTeamId: teams.find((t) => viewerUserId && t.ownerUserId === viewerUserId)?._id ?? null,
+    };
+  },
+});
+
+/**
+ * What the site nav needs about the league the viewer is looking at: the name
+ * to put in the switcher and the flags that decide which tabs appear.
+ *
+ * Unlike `leagues.get` this never throws. The nav renders on every page,
+ * including the 404 for a league the viewer may not read, so an access
+ * failure resolves to `null` and the nav simply shows no league.
+ */
+export const navContext = query({
+  // A string, not `v.id`: the nav derives this from the URL, and a stale
+  // bookmark must resolve to "no league" rather than a validation error.
+  args: { leagueId: v.string() },
+  returns: v.union(
+    v.null(),
+    v.object({
+      leagueId: v.id("leagues"),
+      name: v.string(),
+      season: v.number(),
+      status: leagueStatus,
+      isPublic: v.boolean(),
+      role: v.union(leagueRole, v.null()),
+      isCommissioner: v.boolean(),
+      viewerTeamId: v.union(v.id("teams"), v.null()),
+    }),
+  ),
+  handler: async (ctx, args) => {
+    const leagueId = ctx.db.normalizeId("leagues", args.leagueId);
+    if (!leagueId) return null;
+    const league = await ctx.db.get("leagues", leagueId);
+    if (!league) return null;
+    const viewer = await optionalUser(ctx);
+    const membership = viewer ? await getMembership(ctx, leagueId, viewer.userId) : null;
+    if (!league.isPublic && !membership) return null;
+    const team = viewer
+      ? await ctx.db
+          .query("teams")
+          .withIndex("by_ownerUserId", (q) => q.eq("ownerUserId", viewer.userId))
+          .filter((q) => q.eq(q.field("leagueId"), leagueId))
+          .first()
+      : null;
+    return {
+      leagueId,
+      name: league.name,
+      season: league.season,
+      status: league.status,
+      isPublic: league.isPublic,
+      role: membership?.role ?? null,
+      isCommissioner: membership?.role === "commissioner",
+      viewerTeamId: team?._id ?? null,
     };
   },
 });

@@ -209,3 +209,35 @@ export function nextEditUnlock(now: Date, editLock: EditLock = DEFAULT_EDIT_LOCK
 export function weekStartET(now: Date): Date {
   return previousWeekdayAtET(now, "tue", 6, 0);
 }
+
+/**
+ * How long ago an instant was, for feeds: "just now", "4m", "3h", "2d", then a
+ * short ET date once it is more than a week old. Pure; `now` is injectable.
+ */
+export function timeAgo(at: number | Date, now: number | Date = Date.now()): string {
+  const atMs = at instanceof Date ? at.getTime() : at;
+  const nowMs = now instanceof Date ? now.getTime() : now;
+  const seconds = Math.max(0, Math.round((nowMs - atMs) / 1000));
+  if (seconds < 45) return "just now";
+  const minutes = Math.round(seconds / 60);
+  if (minutes < 60) return `${minutes}m`;
+  const hours = Math.round(minutes / 60);
+  if (hours < 24) return `${hours}h`;
+  const days = Math.round(hours / 24);
+  if (days < 7) return `${days}d`;
+  return formatET(atMs, "MMM d");
+}
+
+/** The ET calendar day an instant falls on, as a stable key for grouping. */
+export function etDayKey(at: number | Date): string {
+  return formatET(at, "yyyy-MM-dd");
+}
+
+/** "Today", "Yesterday", or the ET date, for feed day headers. */
+export function etDayLabel(at: number | Date, now: number | Date = Date.now()): string {
+  const key = etDayKey(at);
+  if (key === etDayKey(now)) return "Today";
+  const nowMs = now instanceof Date ? now.getTime() : now;
+  if (key === etDayKey(nowMs - 86_400_000)) return "Yesterday";
+  return formatET(at, "EEEE, MMM d");
+}

@@ -8,6 +8,7 @@
  * @module
  */
 
+import type * as activity from "../activity.js";
 import type * as auth from "../auth.js";
 import type * as avatar_generation from "../avatar_generation.js";
 import type * as commissioner from "../commissioner.js";
@@ -97,6 +98,7 @@ import type {
 } from "convex/server";
 
 declare const fullApi: ApiFromModules<{
+  activity: typeof activity;
   auth: typeof auth;
   avatar_generation: typeof avatar_generation;
   commissioner: typeof commissioner;
