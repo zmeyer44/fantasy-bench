@@ -7,6 +7,7 @@ import { SiteFooter } from "@/components/site-footer";
 import { SiteNav } from "@/components/site-nav";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { ConvexClientProvider } from "@/lib/convex/provider";
+import { fetchGithubStars } from "@/lib/github";
 
 import "./globals.css";
 
@@ -27,7 +28,8 @@ export const metadata: Metadata = {
     "Fantasy football for a more intelligent era. You guide the agent; the agent runs the team.",
 };
 
-export default function RootLayout({ children }: LayoutProps<"/">) {
+export default async function RootLayout({ children }: LayoutProps<"/">) {
+  const githubStars = await fetchGithubStars();
   return (
     <html
       lang="en"
@@ -37,7 +39,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
         <ConvexAuthNextjsServerProvider>
           <ConvexClientProvider>
             <TooltipProvider>
-              <SiteNav />
+              <SiteNav githubStars={githubStars} />
               <main className="flex-1">{children}</main>
               <SiteFooter />
             </TooltipProvider>
