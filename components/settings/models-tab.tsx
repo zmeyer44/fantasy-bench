@@ -10,8 +10,6 @@ import {
   FieldError,
   FieldGroup,
   FieldLabel,
-  NativeSelect,
-  NativeSelectOption,
   Table,
   TableBody,
   TableCell,
@@ -19,7 +17,9 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui";
+import { ModelSelect, type ModelOption } from "@/components/models/model-select";
 import { OwnKeyBadge } from "@/components/models/own-key-badge";
+import { ProviderLogo, providerLabel } from "@/components/models/provider-logo";
 import { api } from "@/convex/_generated/api";
 
 import { SettingsSection, ToggleField, useSave } from "./shared";
@@ -41,6 +41,39 @@ export function ModelsTab({ data }: { data: SettingsData }) {
   const replace = useSave(api.commissioner.replaceDeprecatedModel);
 
   const usedBy = new Map(data.modelsInUse.map((row) => [row.modelId, row.teamCount]));
+  const catalogById = new Map(data.catalog.map((model) => [model.modelId, model]));
+
+  /** Catalog rows for a picker that must land on the league key: gated models are greyed out. */
+  const leagueKeyOptions: ModelOption[] = data.catalog.map((model) => ({
+    ...model,
+    disabled: model.requiresOwnKey,
+  }));
+  // A saved fallback the catalog no longer lists (e.g. a retired id) stays visible and re-selectable.
+  const fallbackOptions: ModelOption[] =
+    fallback !== "" && !catalogById.has(fallback)
+      ? [
+          ...leagueKeyOptions,
+          {
+            modelId: fallback,
+            displayName: fallback,
+            provider: "unknown",
+            note: "not in catalog",
+          },
+        ]
+      : leagueKeyOptions;
+  /** Models teams currently run, annotated with how many teams each would touch. */
+  const inUseOptions: ModelOption[] = data.modelsInUse.map((row) => {
+    const model = catalogById.get(row.modelId);
+    return {
+      modelId: row.modelId,
+      displayName: model?.displayName ?? row.modelId,
+      provider: model?.provider ?? "unknown",
+      inputPerM: model?.inputPerM,
+      outputPerM: model?.outputPerM,
+      requiresOwnKey: model?.requiresOwnKey,
+      note: `${row.teamCount} team${row.teamCount === 1 ? "" : "s"}`,
+    };
+  });
 
   const toggle = (modelId: string) =>
     setAllowlist((prev) =>
@@ -95,7 +128,12 @@ export function ModelsTab({ data }: { data: SettingsData }) {
                       {model.modelId}
                     </span>
                   </TableCell>
-                  <TableCell className="text-muted-foreground">{model.provider}</TableCell>
+                  <TableCell className="text-muted-foreground">
+                    <span className="inline-flex items-center gap-2">
+                      <ProviderLogo provider={model.provider} className="text-foreground" />
+                      {providerLabel(model.provider)}
+                    </span>
+                  </TableCell>
                   <TableCell numeric className="font-mono text-xs">
                     {model.inputPerM}
                   </TableCell>
@@ -136,24 +174,13 @@ export function ModelsTab({ data }: { data: SettingsData }) {
       >
         <Field className="sm:max-w-lg">
           <FieldLabel htmlFor="fallback-model">Fallback model</FieldLabel>
-          <NativeSelect
+          <ModelSelect
             id="fallback-model"
-            className="w-full"
-            value={fallback}
-            onChange={(event) => setFallback(event.target.value)}
-          >
-            <NativeSelectOption value="">None — fail without a model fallback</NativeSelectOption>
-            {data.catalog.map((model) => (
-              <NativeSelectOption
-                key={model.modelId}
-                value={model.modelId}
-                disabled={model.requiresOwnKey}
-              >
-                {model.displayName} ({model.modelId})
-                {model.requiresOwnKey ? " · 🔒 own key only" : ""}
-              </NativeSelectOption>
-            ))}
-          </NativeSelect>
+            value={fallback === "" ? null : fallback}
+            noneLabel="None — fail without a model fallback"
+            options={fallbackOptions}
+            onValueChange={(next) => setFallback(next ?? "")}
+          />
           <FieldDescription>
             Used after retries are exhausted. Disclosed in the trace. Models that only run on a
             team&apos;s own key cannot be the fallback.
@@ -186,42 +213,23 @@ export function ModelsTab({ data }: { data: SettingsData }) {
         <FieldGroup className="gap-4 sm:grid sm:grid-cols-2">
           <Field>
             <FieldLabel htmlFor="replace-from">From (deprecated)</FieldLabel>
-            <NativeSelect
+            <ModelSelect
               id="replace-from"
-              className="w-full"
-              value={fromModel}
-              onChange={(event) => setFromModel(event.target.value)}
-            >
-              <NativeSelectOption value="">Select a model in use</NativeSelectOption>
-              {data.modelsInUse.map((row) => (
-                <NativeSelectOption key={row.modelId} value={row.modelId}>
-                  {row.modelId} ({row.teamCount} team{row.teamCount === 1 ? "" : "s"})
-                </NativeSelectOption>
-              ))}
-            </NativeSelect>
+              value={fromModel === "" ? null : fromModel}
+              placeholder="Select a model in use"
+              options={inUseOptions}
+              onValueChange={(next) => setFromModel(next ?? "")}
+            />
           </Field>
           <Field>
             <FieldLabel htmlFor="replace-to">To (replacement)</FieldLabel>
-            <NativeSelect
+            <ModelSelect
               id="replace-to"
-              className="w-full"
-              value={toModel}
-              onChange={(event) => setToModel(event.target.value)}
-            >
-              <NativeSelectOption value="">Select a replacement</NativeSelectOption>
-              {data.catalog
-                .filter((model) => model.modelId !== fromModel)
-                .map((model) => (
-                  <NativeSelectOption
-                    key={model.modelId}
-                    value={model.modelId}
-                    disabled={model.requiresOwnKey}
-                  >
-                    {model.displayName} ({model.modelId})
-                    {model.requiresOwnKey ? " · 🔒 own key only" : ""}
-                  </NativeSelectOption>
-                ))}
-            </NativeSelect>
+              value={toModel === "" ? null : toModel}
+              placeholder="Select a replacement"
+              options={leagueKeyOptions.filter((model) => model.modelId !== fromModel)}
+              onValueChange={(next) => setToModel(next ?? "")}
+            />
           </Field>
         </FieldGroup>
 

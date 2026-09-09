@@ -3,15 +3,20 @@
 import { useQuery } from "convex/react";
 
 import { formatUsd } from "@/components/cost/format";
+import { ModelSelect, type ModelOption } from "@/components/models/model-select";
 import { OwnKeyBadge } from "@/components/models/own-key-badge";
+import { ProviderLogo, providerLabel } from "@/components/models/provider-logo";
 import {
   Checkbox,
   Field,
   FieldDescription,
   FieldLabel,
   Input,
-  NativeSelect,
-  NativeSelectOption,
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
   cn,
 } from "@/components/ui";
 import type { HarnessSettings } from "@/convex/lib/config_pure";
@@ -66,32 +71,36 @@ export function ModelPanel({
     rules.modelAllowlist.length > 0
       ? MODEL_CATALOG.filter((m) => rules.modelAllowlist.includes(m.modelId))
       : MODEL_CATALOG;
+  const options: ModelOption[] = allowed.map((m) => ({
+    ...m,
+    // A gated model stays selectable only while it is already the saved choice.
+    disabled: m.requiresOwnKey && !hasOwnKey && m.modelId !== modelId,
+  }));
+  if (!allowed.some((m) => m.modelId === modelId)) {
+    options.push({
+      modelId,
+      displayName: model?.displayName ?? modelId,
+      provider: model?.provider ?? "unknown",
+      inputPerM: model?.inputPerM,
+      outputPerM: model?.outputPerM,
+      requiresOwnKey: model?.requiresOwnKey,
+      note: "not allowlisted",
+    });
+  }
 
   return (
     <div className="grid gap-10 lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
       <div className="space-y-10">
         <Section title="Model" description="Version-pinned gateway id. Prices per million tokens.">
-          <NativeSelect
-            className="w-full"
+          <ModelSelect
             value={modelId}
             disabled={disabled}
             aria-label="Model"
-            onChange={(e) => onModelChange(e.target.value)}
-          >
-            {allowed.map((m) => (
-              <NativeSelectOption
-                key={m.modelId}
-                value={m.modelId}
-                disabled={m.requiresOwnKey && !hasOwnKey && m.modelId !== modelId}
-              >
-                {m.displayName} — {m.provider}
-                {m.requiresOwnKey ? " · 🔒 own key" : ""}
-              </NativeSelectOption>
-            ))}
-            {!allowed.some((m) => m.modelId === modelId) ? (
-              <NativeSelectOption value={modelId}>{modelId} (not allowlisted)</NativeSelectOption>
-            ) : null}
-          </NativeSelect>
+            options={options}
+            onValueChange={(next) => {
+              if (next) onModelChange(next);
+            }}
+          />
 
           {model?.requiresOwnKey ? (
             <div
@@ -112,10 +121,21 @@ export function ModelPanel({
           {model ? (
             <dl className="mt-4">
               <SpecRow label="Gateway id" value={model.modelId} />
-              <SpecRow label="Provider" value={model.provider} />
+              <SpecRow
+                label="Provider"
+                value={
+                  <span className="inline-flex items-center gap-1.5">
+                    <ProviderLogo provider={model.provider} className="size-3.5" />
+                    {providerLabel(model.provider)}
+                  </span>
+                }
+              />
               <SpecRow label="$ / M in" value={`$${model.inputPerM}`} />
               <SpecRow label="$ / M out" value={`$${model.outputPerM}`} />
-              <SpecRow label="Reasoning" value={model.supportsReasoning ? "supported" : "not supported"} />
+              <SpecRow
+                label="Reasoning"
+                value={model.supportsReasoning ? "supported" : "not supported"}
+              />
             </dl>
           ) : (
             <p className="mt-3 text-sm text-destructive">
@@ -149,7 +169,10 @@ export function ModelPanel({
                 className="font-mono tabular-nums"
                 value={harness.tokenBudget}
                 onChange={(e) =>
-                  onHarnessChange((h) => ({ ...h, tokenBudget: Number(e.target.value) || 0 }))
+                  onHarnessChange((h) => ({
+                    ...h,
+                    tokenBudget: Number(e.target.value) || 0,
+                  }))
                 }
               />
               <FieldDescription>
@@ -174,7 +197,10 @@ export function ModelPanel({
                 disabled={disabled}
                 format={(v) => v.toFixed(1)}
                 onChange={(v) =>
-                  onHarnessChange((h) => ({ ...h, temperature: Math.round(v * 10) / 10 }))
+                  onHarnessChange((h) => ({
+                    ...h,
+                    temperature: Math.round(v * 10) / 10,
+                  }))
                 }
               />
             )}
@@ -182,23 +208,28 @@ export function ModelPanel({
             {model?.supportsReasoning ? (
               <Field>
                 <FieldLabel htmlFor="reasoning-effort">Reasoning effort</FieldLabel>
-                <NativeSelect
-                  id="reasoning-effort"
-                  className="w-full"
+                <Select
+                  value={harness.reasoningEffort ?? "off"}
                   disabled={disabled}
-                  value={harness.reasoningEffort ?? ""}
-                  onChange={(e) =>
+                  onValueChange={(next) =>
                     onHarnessChange((h) => ({
                       ...h,
-                      reasoningEffort: (e.target.value || null) as HarnessSettings["reasoningEffort"],
+                      reasoningEffort: (next === "off"
+                        ? null
+                        : next) as HarnessSettings["reasoningEffort"],
                     }))
                   }
                 >
-                  <NativeSelectOption value="">Off</NativeSelectOption>
-                  <NativeSelectOption value="low">Low</NativeSelectOption>
-                  <NativeSelectOption value="medium">Medium</NativeSelectOption>
-                  <NativeSelectOption value="high">High</NativeSelectOption>
-                </NativeSelect>
+                  <SelectTrigger id="reasoning-effort" className="w-full">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent align="start" alignItemWithTrigger={false}>
+                    <SelectItem value="off">Off</SelectItem>
+                    <SelectItem value="low">Low</SelectItem>
+                    <SelectItem value="medium">Medium</SelectItem>
+                    <SelectItem value="high">High</SelectItem>
+                  </SelectContent>
+                </Select>
               </Field>
             ) : (
               <p className="text-sm text-ink-faint">
@@ -212,7 +243,10 @@ export function ModelPanel({
                 disabled={disabled}
                 checked={harness.deliberateMode}
                 onCheckedChange={(checked) =>
-                  onHarnessChange((h) => ({ ...h, deliberateMode: Boolean(checked) }))
+                  onHarnessChange((h) => ({
+                    ...h,
+                    deliberateMode: Boolean(checked),
+                  }))
                 }
               />
               <FieldLabel htmlFor="deliberate-mode" className="font-normal">
@@ -263,7 +297,10 @@ export function ModelPanel({
           {estimate ? (
             <dl className="mt-4">
               <SpecRow label="Base prompt" value={estimate.breakdown.baseTokens.toLocaleString()} />
-              <SpecRow label="Your context" value={estimate.breakdown.contextTokens.toLocaleString()} />
+              <SpecRow
+                label="Your context"
+                value={estimate.breakdown.contextTokens.toLocaleString()}
+              />
               <SpecRow label="Skills" value={estimate.breakdown.skillTokens.toLocaleString()} />
             </dl>
           ) : null}
@@ -298,7 +335,7 @@ function Section({
 }
 
 /** Label / value pair on a hairline rule. Values are mono because they are read as data. */
-function SpecRow({ label, value }: { label: string; value: string }) {
+function SpecRow({ label, value }: { label: string; value: React.ReactNode }) {
   return (
     <div className="flex items-baseline justify-between gap-3 border-b border-border py-1.5 last:border-b-0">
       <dt className="eyebrow">{label}</dt>
