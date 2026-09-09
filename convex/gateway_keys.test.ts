@@ -89,10 +89,10 @@ describe("gateway_keys", () => {
       apiKey: KEY,
       skipVerification: true,
     });
-    expect(result).toEqual({ last4: "mnop", verified: false });
+    expect(result).toEqual({ last4: "mnop", verified: false, provider: "vercel" });
 
     const mine = await owner.session.query(api.gateway_keys.status, { leagueId, teamId });
-    expect(mine).toMatchObject({ hasKey: true, canManage: true, last4: "mnop" });
+    expect(mine).toMatchObject({ hasKey: true, canManage: true, last4: "mnop", provider: "vercel" });
     expect(typeof mine.addedAt).toBe("number");
 
     const commissioners = await commish.session.query(api.gateway_keys.status, { leagueId, teamId });
@@ -140,6 +140,72 @@ describe("gateway_keys", () => {
     await owner.session.mutation(api.gateway_keys.remove, { teamId });
     expect((await owner.session.query(api.gateway_keys.status, { leagueId, teamId })).hasKey).toBe(false);
     expect((await t.query(api.views.team, { teamId }))?.config.ownKey).toBe(false);
+  });
+});
+
+const OPENROUTER_KEY = "sk-or-v1-0123456789abcdef0123456789abcdef";
+
+describe("gateway_keys — OpenRouter", () => {
+  it("stores an OpenRouter key with its provider, visible to the whole league", async () => {
+    const { t, owner, other, leagueId, teamId } = await fixture();
+    const result = await owner.session.action(api.gateway_keys.set, {
+      teamId,
+      apiKey: OPENROUTER_KEY,
+      provider: "openrouter",
+      skipVerification: true,
+    });
+    expect(result).toEqual({ last4: "cdef", verified: false, provider: "openrouter" });
+
+    // Which vendor issued the key decides which models the team can run, so
+    // the league sees it; the tail stays private.
+    const theirs = await other.session.query(api.gateway_keys.status, { leagueId, teamId });
+    expect(theirs).toMatchObject({ hasKey: true, provider: "openrouter", last4: null });
+
+    const runtime = await t.query(internal.gateway_keys.forTeam, { teamId });
+    expect(runtime?.provider).toBe("openrouter");
+    expect(await decryptSecret({ ciphertext: runtime!.ciphertext, iv: runtime!.iv })).toBe(OPENROUTER_KEY);
+
+    // Replacing with a Vercel key switches vendors on the same row.
+    await owner.session.action(api.gateway_keys.set, { teamId, apiKey: KEY, skipVerification: true });
+    expect((await t.query(internal.gateway_keys.forTeam, { teamId }))?.provider).toBe("vercel");
+    expect(await t.run((ctx) => ctx.db.query("team_gateway_keys").collect())).toHaveLength(1);
+  });
+
+  it("catches a key pasted into the wrong vendor's slot", async () => {
+    const { owner, teamId } = await fixture();
+    await expect(
+      owner.session.action(api.gateway_keys.set, {
+        teamId,
+        apiKey: KEY,
+        provider: "openrouter",
+        skipVerification: true,
+      }),
+    ).rejects.toThrow(/looks like a Vercel AI Gateway key, not an OpenRouter key/);
+    await expect(
+      owner.session.action(api.gateway_keys.set, {
+        teamId,
+        apiKey: OPENROUTER_KEY,
+        provider: "vercel",
+        skipVerification: true,
+      }),
+    ).rejects.toThrow(/looks like an OpenRouter key, not a Vercel AI Gateway key/);
+  });
+
+  it("reads a row written before OpenRouter support as a Vercel key", async () => {
+    const { t, owner, leagueId, teamId } = await fixture();
+    await t.run(async (ctx) => {
+      const sealed = await encryptSecret(KEY);
+      await ctx.db.insert("team_gateway_keys", {
+        leagueId,
+        teamId,
+        ...sealed,
+        last4: keyTail(KEY),
+        addedByUserId: owner.userId,
+        createdAt: Date.now(),
+      });
+    });
+    expect((await owner.session.query(api.gateway_keys.status, { leagueId, teamId })).provider).toBe("vercel");
+    expect((await t.query(internal.gateway_keys.forTeam, { teamId }))?.provider).toBe("vercel");
   });
 });
 

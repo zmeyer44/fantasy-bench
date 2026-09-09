@@ -1,16 +1,17 @@
 /**
- * Bring-your-own Vercel AI Gateway keys (one per team).
+ * Bring-your-own keys (one per team): a Vercel AI Gateway key or an OpenRouter key.
  *
  * The commissioner's spend caps protect the league's shared key. An owner who
- * wants to spend more can register their own gateway key: their agent's runs
- * are then billed to that key and bypass every cap, while the ledger keeps
- * metering them exactly like everyone else's (cost dashboards, benchmarks and
- * the league's USD total all still include them).
+ * wants to spend more can register their own key: their agent's runs are then
+ * billed to that key and bypass every cap, while the ledger keeps metering
+ * them exactly like everyone else's (cost dashboards, benchmarks and the
+ * league's USD total all still include them).
  *
- * Secrets never leave the server: `set` verifies the key against the gateway,
+ * Secrets never leave the server: `set` verifies the key against its vendor,
  * encrypts it (`convex/lib/secrets.ts`) and stores ciphertext; every read model
  * returns the last four characters at most. The plaintext is decrypted only in
- * the run action.
+ * the run action. `lib/key-providers.ts` lists the vendors; `lib/models.ts`
+ * says which catalog models OpenRouter serves.
  */
 import { createGateway } from "@ai-sdk/gateway";
 import { v } from "convex/values";
@@ -26,6 +27,13 @@ import {
   type MutationCtx,
   type QueryCtx,
 } from "./_generated/server";
+import {
+  DEFAULT_KEY_PROVIDER,
+  KEY_PROVIDER_INFO,
+  keyProviderFromPrefix,
+  keyProviderOf,
+  type KeyProvider,
+} from "../lib/key-providers";
 import { requireLeagueRead, requireOwnerOrCommissioner } from "./lib/auth";
 import { appError } from "./lib/errors";
 import { encryptSecret, keyTail, secretsConfigured } from "./lib/secrets";
@@ -33,9 +41,15 @@ import { encryptSecret, keyTail, secretsConfigured } from "./lib/secrets";
 const MIN_KEY_CHARS = 16;
 const MAX_KEY_CHARS = 512;
 
+const OPENROUTER_KEY_ENDPOINT = "https://openrouter.ai/api/v1/key";
+
+const keyProviderValidator = v.union(v.literal("vercel"), v.literal("openrouter"));
+
 export type GatewayKeyStatus = {
   /** True when the team runs on its owner's own key. Visible to the whole league. */
   hasKey: boolean;
+  /** Which vendor issued the key. Visible to the whole league: it decides which models the team can run. */
+  provider: KeyProvider | null;
   /** The rest is for the owner and commissioner only. */
   canManage: boolean;
   last4: string | null;
@@ -68,6 +82,7 @@ export const status = query({
     const hidden = { last4: null, addedAt: null, verifiedAt: null, lastUsedAt: null, lastError: null };
     return {
       hasKey: row !== null,
+      provider: row ? keyProviderOf(row) : null,
       canManage,
       configured: secretsConfigured(),
       ...(row && canManage
@@ -103,6 +118,7 @@ export const store = internalMutation({
     teamId: v.id("teams"),
     leagueId: v.id("leagues"),
     userId: v.id("users"),
+    provider: keyProviderValidator,
     ciphertext: v.string(),
     iv: v.string(),
     last4: v.string(),
@@ -114,6 +130,7 @@ export const store = internalMutation({
     const existing = await rowFor(ctx, args.teamId);
     if (existing) {
       await ctx.db.patch("team_gateway_keys", existing._id, {
+        provider: args.provider,
         ciphertext: args.ciphertext,
         iv: args.iv,
         last4: args.last4,
@@ -128,6 +145,7 @@ export const store = internalMutation({
     return ctx.db.insert("team_gateway_keys", {
       leagueId: args.leagueId,
       teamId: args.teamId,
+      provider: args.provider,
       ciphertext: args.ciphertext,
       iv: args.iv,
       last4: args.last4,
@@ -156,13 +174,51 @@ export async function verifyGatewayKey(apiKey: string): Promise<{ ok: true } | {
 }
 
 /**
- * Register the team's own gateway key. Verifies it, encrypts it, stores it.
- * The plaintext is never persisted and never returned.
+ * Check an OpenRouter key: `GET /api/v1/key` describes the key (label, limit,
+ * usage) and costs nothing. A bad key answers 401. The model list is public
+ * there too, so it is no probe either.
+ */
+export async function verifyOpenRouterKey(apiKey: string): Promise<{ ok: true } | { ok: false; error: string }> {
+  try {
+    const response = await fetch(OPENROUTER_KEY_ENDPOINT, {
+      headers: { Authorization: `Bearer ${apiKey}` },
+    });
+    if (response.ok) return { ok: true };
+    let detail = `HTTP ${response.status}`;
+    try {
+      const body = (await response.json()) as { error?: { message?: string } };
+      if (body?.error?.message) detail = `${detail}: ${body.error.message}`;
+    } catch {
+      // A non-JSON error body is fine; the status code is the message.
+    }
+    return { ok: false, error: detail.slice(0, 300) };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    return { ok: false, error: message.slice(0, 300) };
+  }
+}
+
+export function verifyKey(provider: KeyProvider, apiKey: string) {
+  return provider === "openrouter" ? verifyOpenRouterKey(apiKey) : verifyGatewayKey(apiKey);
+}
+
+/**
+ * Register the team's own key. Verifies it with its vendor, encrypts it,
+ * stores it. The plaintext is never persisted and never returned. Replacing a
+ * key may switch vendors; the team's saved model may then be one the new
+ * vendor does not serve, which the editor flags and the next run reports.
  */
 export const set = action({
-  args: { teamId: v.id("teams"), apiKey: v.string(), skipVerification: v.optional(v.boolean()) },
-  returns: v.object({ last4: v.string(), verified: v.boolean() }),
-  handler: async (ctx, { teamId, apiKey, skipVerification }) => {
+  args: {
+    teamId: v.id("teams"),
+    apiKey: v.string(),
+    /** Defaults to Vercel for callers that predate OpenRouter support. */
+    provider: v.optional(keyProviderValidator),
+    skipVerification: v.optional(v.boolean()),
+  },
+  returns: v.object({ last4: v.string(), verified: v.boolean(), provider: keyProviderValidator }),
+  handler: async (ctx, { teamId, apiKey, provider: requestedProvider, skipVerification }) => {
+    const provider: KeyProvider = requestedProvider ?? DEFAULT_KEY_PROVIDER;
     const access: { leagueId: Id<"leagues">; userId: Id<"users"> } | null = await ctx.runQuery(
       internal.gateway_keys.canManageTeam,
       { teamId },
@@ -172,26 +228,37 @@ export const set = action({
       throw appError("BAD_REQUEST", "This deployment cannot store keys yet (BYOK_ENCRYPTION_KEY is not set).");
     }
     const key = apiKey.trim();
+    const vendor = KEY_PROVIDER_INFO[provider];
     if (key.length < MIN_KEY_CHARS || key.length > MAX_KEY_CHARS || /\s/.test(key)) {
-      throw appError("BAD_REQUEST", "That does not look like a gateway key.");
+      throw appError("BAD_REQUEST", `That does not look like ${aOrAn(vendor.name)} key.`);
     }
-    // Tests and offline dev may skip the gateway call, but only on deployments
+    // A key pasted into the wrong vendor's slot would fail verification anyway,
+    // but the vendor's error would not say why.
+    const looksLike = keyProviderFromPrefix(key);
+    if (looksLike !== null && looksLike !== provider) {
+      throw appError(
+        "BAD_REQUEST",
+        `That looks like ${aOrAn(KEY_PROVIDER_INFO[looksLike].name)} key, not ${aOrAn(vendor.name)} key.`,
+      );
+    }
+    // Tests and offline dev may skip the vendor call, but only on deployments
     // that opt in — a client cannot talk its way past verification otherwise.
     const mayskip = skipVerification === true && process.env.BYOK_ALLOW_UNVERIFIED === "1";
-    const verified = mayskip ? { ok: true as const } : await verifyGatewayKey(key);
+    const verified = mayskip ? { ok: true as const } : await verifyKey(provider, key);
     if (!verified.ok) {
-      throw appError("BAD_REQUEST", `The gateway rejected that key: ${verified.error}`);
+      throw appError("BAD_REQUEST", `${vendor.name} rejected that key: ${verified.error}`);
     }
     const sealed = await encryptSecret(key);
     await ctx.runMutation(internal.gateway_keys.store, {
       teamId,
       leagueId: access.leagueId,
       userId: access.userId,
+      provider,
       ...sealed,
       last4: keyTail(key),
       verifiedAt: mayskip ? undefined : Date.now(),
     });
-    return { last4: keyTail(key), verified: !mayskip };
+    return { last4: keyTail(key), verified: !mayskip, provider };
   },
 });
 
@@ -212,13 +279,25 @@ export const forTeam = internalQuery({
   args: { teamId: v.id("teams") },
   returns: v.union(
     v.null(),
-    v.object({ id: v.id("team_gateway_keys"), ciphertext: v.string(), iv: v.string(), last4: v.string() }),
+    v.object({
+      id: v.id("team_gateway_keys"),
+      provider: keyProviderValidator,
+      ciphertext: v.string(),
+      iv: v.string(),
+      last4: v.string(),
+    }),
   ),
   handler: async (ctx, { teamId }) => {
     const row = await rowFor(ctx, teamId);
-    return row ? { id: row._id, ciphertext: row.ciphertext, iv: row.iv, last4: row.last4 } : null;
+    return row
+      ? { id: row._id, provider: keyProviderOf(row), ciphertext: row.ciphertext, iv: row.iv, last4: row.last4 }
+      : null;
   },
 });
+
+function aOrAn(noun: string): string {
+  return `${/^[aeiou]/i.test(noun) ? "an" : "a"} ${noun}`;
+}
 
 /** Stamp usage or a failure on the key row, from the run action. */
 export const markUsed = internalMutation({

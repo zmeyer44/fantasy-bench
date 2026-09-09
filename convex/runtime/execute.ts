@@ -73,7 +73,13 @@ import { estimateNextStepCostUsd, type ResolvedModelPrice } from "../lib/pricing
 
 import { decryptSecret } from "../lib/secrets";
 import { readGatewayCostUsd, resolveModel } from "./model";
-import { modelRequiresOwnKey, modelSupportsTemperature, modelSupportsReasoningEffort } from "../../lib/models";
+import { KEY_PROVIDER_INFO } from "../../lib/key-providers";
+import {
+  modelAvailableOnKeyProvider,
+  modelRequiresOwnKey,
+  modelSupportsTemperature,
+  modelSupportsReasoningEffort,
+} from "../../lib/models";
 import { buildPrompt, estimateTokens, type PromptWindow } from "./prompt";
 import { buildTools, guidanceByTool, type ToolOverride } from "./tools";
 import {
@@ -384,6 +390,7 @@ export const executeRun = internalAction({
     }
     const bypassCaps = ownApiKey !== null;
     const keySource: "league" | "team" = bypassCaps ? "team" : "league";
+    const ownKeyProvider = ownApiKey !== null && loaded.teamKey ? loaded.teamKey.provider : null;
 
     // The priciest tier never runs on the league's shared key. Throwing (rather
     // than returning a summary) is deliberate: `internal.runs.onComplete` then
@@ -392,6 +399,14 @@ export const executeRun = internalAction({
     if (modelRequiresOwnKey(primaryModelId) && ownApiKey === null) {
       throw new Error(
         `${primaryModelId} requires the team's own gateway key and none is on file`,
+      );
+    }
+    // Same treatment for a model the team's own vendor does not serve (an
+    // OpenRouter key and a model only the gateway carries): fail before any
+    // spend so the fallback model gets its turn and the trace says why.
+    if (ownKeyProvider !== null && !modelAvailableOnKeyProvider(primaryModelId, ownKeyProvider)) {
+      throw new Error(
+        `${primaryModelId} is not available through ${KEY_PROVIDER_INFO[ownKeyProvider].name}, which issued the team's own key`,
       );
     }
 
@@ -676,15 +691,17 @@ export const executeRun = internalAction({
       // previous attempt wrote under the `(runId, stepIndex)` key.
       let stepOffset = persistedCount;
 
+      const reasoningEffort =
+        harness.reasoningEffort && modelSupportsReasoningEffort(modelId, harness.reasoningEffort)
+          ? harness.reasoningEffort
+          : null;
       const shared = {
-        model: resolveModel(modelId, { apiKey: ownApiKey }),
+        model: resolveModel(modelId, { apiKey: ownApiKey, keyProvider: ownKeyProvider, reasoningEffort }),
         tools,
         ...(modelSupportsTemperature(modelId) ? { temperature: harness.temperature } : {}),
         maxRetries: 3,
         abortSignal: controller.signal,
-        ...(harness.reasoningEffort && modelSupportsReasoningEffort(modelId, harness.reasoningEffort)
-          ? { reasoning: harness.reasoningEffort }
-          : {}),
+        ...(reasoningEffort ? { reasoning: reasoningEffort } : {}),
         onStepEnd: makeOnStepEnd(modelId, () => stepOffset),
       };
 

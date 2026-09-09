@@ -18,6 +18,7 @@
  */
 import { v } from "convex/values";
 
+import { keyProviderOf, type KeyProvider } from "../../lib/key-providers";
 import { findModel } from "../../lib/models";
 import {
   emptyDigest,
@@ -62,8 +63,14 @@ export type RunContext = {
   snapshot: SnapshotPayload | null;
   digest: SnapshotDigest;
   customProviders: Doc<"custom_providers">[];
-  /** The team's own gateway key, still encrypted; the action decrypts it. Null = league key. */
-  teamKey: { id: Id<"team_gateway_keys">; ciphertext: string; iv: string; last4: string } | null;
+  /** The team's own key (Vercel or OpenRouter), still encrypted; the action decrypts it. Null = league key. */
+  teamKey: {
+    id: Id<"team_gateway_keys">;
+    provider: KeyProvider;
+    ciphertext: string;
+    iv: string;
+    last4: string;
+  } | null;
   /**
    * What previous attempts of this run already did, so a resumed attempt can
    * rebuild its in-memory tool state instead of concluding the agent never
@@ -174,7 +181,13 @@ export const runContext = internalQuery({
           .unique()
       : null;
     const teamKey = teamKeyRow
-      ? { id: teamKeyRow._id, ciphertext: teamKeyRow.ciphertext, iv: teamKeyRow.iv, last4: teamKeyRow.last4 }
+      ? {
+          id: teamKeyRow._id,
+          provider: keyProviderOf(teamKeyRow),
+          ciphertext: teamKeyRow.ciphertext,
+          iv: teamKeyRow.iv,
+          last4: teamKeyRow.last4,
+        }
       : null;
 
     // Bounded: one run's actions.

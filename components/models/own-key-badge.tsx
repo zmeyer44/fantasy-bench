@@ -41,7 +41,7 @@ export function OwnKeyBadge({
           shared key.{" "}
           {hasKey
             ? "Your team has a key on file, so it runs on yours."
-            : "Add a Vercel AI Gateway key under Spend to unlock it."}
+            : "Add a Vercel AI Gateway or OpenRouter key under Spend to unlock it."}
         </span>
       </TooltipContent>
     </Tooltip>

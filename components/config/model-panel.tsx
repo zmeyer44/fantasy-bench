@@ -23,7 +23,15 @@ import type { HarnessSettings } from "@/convex/lib/config_pure";
 import type { PromptEstimate } from "@/convex/lib/config_pure";
 import { api } from "@/convex/_generated/api";
 import type { Id } from "@/convex/_generated/dataModel";
-import { MODEL_CATALOG, findModel, modelReasoningEfforts, modelSupportsReasoningEffort } from "@/lib/models";
+import { KEY_PROVIDER_INFO } from "@/lib/key-providers";
+import {
+  MODEL_CATALOG,
+  findModel,
+  modelAvailableOnKeyProvider,
+  modelReasoningEfforts,
+  modelSupportsReasoningEffort,
+  openRouterModelIdFor,
+} from "@/lib/models";
 
 import { SpendPanel } from "./spend-panel";
 
@@ -66,16 +74,25 @@ export function ModelPanel({
     teamId: teamId as Id<"teams">,
   });
   const hasOwnKey = keyStatus?.hasKey === true;
+  const keyProvider = hasOwnKey ? (keyStatus?.provider ?? null) : null;
+  const keyVendor = keyProvider ? KEY_PROVIDER_INFO[keyProvider] : null;
   const lockedOut = model?.requiresOwnKey === true && keyStatus !== undefined && !hasOwnKey;
+  // The team's own vendor does not serve the saved model (an OpenRouter key and
+  // a gateway-only model): the run would fail before spending, and save refuses.
+  const notServed = keyProvider !== null && !modelAvailableOnKeyProvider(modelId, keyProvider);
   const allowed =
     rules.modelAllowlist.length > 0
       ? MODEL_CATALOG.filter((m) => rules.modelAllowlist.includes(m.modelId))
       : MODEL_CATALOG;
-  const options: ModelOption[] = allowed.map((m) => ({
-    ...m,
-    // A gated model stays selectable only while it is already the saved choice.
-    disabled: m.requiresOwnKey && !hasOwnKey && m.modelId !== modelId,
-  }));
+  const options: ModelOption[] = allowed.map((m) => {
+    const unavailable = keyProvider !== null && !modelAvailableOnKeyProvider(m.modelId, keyProvider);
+    return {
+      ...m,
+      // A gated or unserved model stays selectable only while it is already the saved choice.
+      disabled: ((m.requiresOwnKey && !hasOwnKey) || unavailable) && m.modelId !== modelId,
+      ...(unavailable && keyVendor ? { note: `not on ${keyVendor.label}` } : {}),
+    };
+  });
   if (!allowed.some((m) => m.modelId === modelId)) {
     options.push({
       modelId,
@@ -118,15 +135,26 @@ export function ModelPanel({
               <OwnKeyBadge hasKey={hasOwnKey} className="mt-0.5" />
               <span>
                 {lockedOut
-                  ? "Your team has no gateway key on file. Add one under Spend or pick another model; this one will not save."
-                  : "Runs on your team's own gateway key and bypasses the league's caps."}
+                  ? "Your team has no key on file. Add one under Spend or pick another model; this one will not save."
+                  : `Runs on your team's own ${keyVendor?.name ?? "gateway"} key and bypasses the league's caps.`}
               </span>
             </div>
+          ) : null}
+
+          {notServed && keyVendor ? (
+            <p className="mt-3 text-sm text-warning">
+              {model?.displayName ?? modelId} is not available through {keyVendor.name}, which issued
+              your team&apos;s key. Pick another model or replace the key under Spend; this one will not
+              save.
+            </p>
           ) : null}
 
           {model ? (
             <dl className="mt-4">
               <SpecRow label="Gateway id" value={model.modelId} />
+              {keyProvider === "openrouter" && model.provider !== "mock" ? (
+                <SpecRow label="OpenRouter id" value={openRouterModelIdFor(model.modelId) ?? "not served"} />
+              ) : null}
               <SpecRow
                 label="Provider"
                 value={

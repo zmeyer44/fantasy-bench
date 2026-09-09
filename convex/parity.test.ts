@@ -3161,6 +3161,8 @@ describe("commissioner.* (was commissioner.*)", () => {
       ...additiveColumn("commissioner.settings.catalog[0].supportsTemperature"),
       // …and whether it only runs on a team's own gateway key.
       ...additiveColumn("commissioner.settings.catalog[0].requiresOwnKey"),
+      // …and its id on OpenRouter, for teams whose own key is an OpenRouter key.
+      ...additiveColumn("commissioner.settings.catalog[0].openRouterModelId"),
     ]);
 
     // DEVIATION (Phase 2, documented): the old `commissioner.settings` *minted* a

@@ -7,16 +7,33 @@ import { useState } from "react";
 import { CapMeter } from "@/components/cost/charts";
 import { formatUsd } from "@/components/cost/format";
 import { mutationErrorMessage } from "@/components/league/convex-errors";
-import { Badge, Button, Field, FieldDescription, FieldLabel, Input } from "@/components/ui";
+import {
+  Badge,
+  Button,
+  Field,
+  FieldDescription,
+  FieldLabel,
+  Input,
+  ToggleGroup,
+  ToggleGroupItem,
+} from "@/components/ui";
 import { api } from "@/convex/_generated/api";
 import type { Id } from "@/convex/_generated/dataModel";
+import {
+  DEFAULT_KEY_PROVIDER,
+  KEY_PROVIDERS,
+  KEY_PROVIDER_INFO,
+  isKeyProvider,
+  type KeyProvider,
+} from "@/lib/key-providers";
 import { formatET } from "@/lib/time";
 
 /**
- * Spend against the commissioner's caps, and the owner's own gateway key.
+ * Spend against the commissioner's caps, and the owner's own key.
  *
- * A team on its own key is billed to that key and bypasses every cap; the
- * ledger still meters it, so the figures here keep moving either way.
+ * A team on its own key (Vercel AI Gateway or OpenRouter) is billed to that
+ * key and bypasses every cap; the ledger still meters it, so the figures here
+ * keep moving either way.
  */
 export function SpendPanel({
   leagueId,
@@ -44,19 +61,25 @@ export function SpendPanel({
   const removeKey = useMutation(api.gateway_keys.remove);
 
   const [draft, setDraft] = useState("");
+  const [provider, setProvider] = useState<KeyProvider>(DEFAULT_KEY_PROVIDER);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const budget = dashboard?.budget;
   const ownKey = key?.hasKey === true;
+  const vendor = KEY_PROVIDER_INFO[provider];
+  const keyVendor = key?.provider ? KEY_PROVIDER_INFO[key.provider] : null;
 
   async function submit() {
     setPending(true);
     setError(null);
     try {
-      const result = await setKey({ teamId: teamId as Id<"teams">, apiKey: draft });
+      const result = await setKey({ teamId: teamId as Id<"teams">, apiKey: draft, provider });
       setDraft("");
-      onToast(`Key ending in ${result.last4} verified and saved. Your next run bills to it.`, "success");
+      onToast(
+        `Key ending in ${result.last4} verified with ${KEY_PROVIDER_INFO[result.provider].name} and saved. Your next run bills to it.`,
+        "success",
+      );
     } catch (err) {
       setError(mutationErrorMessage(err));
     } finally {
@@ -65,7 +88,7 @@ export function SpendPanel({
   }
 
   async function remove() {
-    if (!window.confirm("Remove your gateway key? Future runs use the league key and its spend caps again.")) return;
+    if (!window.confirm("Remove your key? Future runs use the league key and its spend caps again.")) return;
     try {
       await removeKey({ teamId: teamId as Id<"teams"> });
       onToast("Key removed. The league's caps apply from the next run.", "info");
@@ -122,16 +145,17 @@ export function SpendPanel({
 
       {/* ------------------------------------------------------------ key */}
       <div className="mt-8 border-t border-border pt-5">
-        <h3 className="text-sm font-medium">Your gateway key</h3>
+        <h3 className="text-sm font-medium">Your own key</h3>
         <p className="mt-1 text-sm text-muted-foreground">
-          Want to spend past the caps? Add your own Vercel AI Gateway key. Runs bill to it, every
-          cap is bypassed, and the league still sees exactly what your agent spends.
+          Want to spend past the caps? Add your own Vercel AI Gateway or OpenRouter key. Runs bill
+          to it, every cap is bypassed, and the league still sees exactly what your agent spends.
         </p>
 
         {key === undefined ? null : ownKey ? (
           <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-md border border-border px-3 py-2.5">
             <div className="min-w-0">
-              <div className="font-mono text-sm">
+              <div className="flex items-center gap-2 font-mono text-sm">
+                {keyVendor ? <Badge variant="outline">{keyVendor.label}</Badge> : null}
                 {key.canManage && key.last4 ? `•••• ${key.last4}` : "Key on file"}
               </div>
               {key.canManage ? (
@@ -154,21 +178,44 @@ export function SpendPanel({
         ) : canEdit ? (
           key.configured ? (
             <div className="mt-4 space-y-3">
+              <ToggleGroup
+                value={[provider]}
+                onValueChange={(next) => {
+                  const chosen = next[0];
+                  if (isKeyProvider(chosen)) {
+                    setProvider(chosen);
+                    setError(null);
+                  }
+                }}
+                size="sm"
+                spacing={0}
+                variant="outline"
+                aria-label="Key vendor"
+              >
+                {KEY_PROVIDERS.map((id) => (
+                  <ToggleGroupItem key={id} value={id} className="px-3">
+                    {KEY_PROVIDER_INFO[id].label}
+                  </ToggleGroupItem>
+                ))}
+              </ToggleGroup>
               <Field>
-                <FieldLabel htmlFor="gateway-key">Vercel AI Gateway key</FieldLabel>
+                <FieldLabel htmlFor="gateway-key">{vendor.name} key</FieldLabel>
                 <Input
                   id="gateway-key"
                   type="password"
                   autoComplete="off"
                   spellCheck={false}
                   className="font-mono text-xs"
-                  placeholder="vck_…"
+                  placeholder={vendor.placeholder}
                   value={draft}
                   onChange={(e) => setDraft(e.target.value)}
                 />
                 <FieldDescription>
-                  Verified against the gateway before it is stored, encrypted at rest, never shown
+                  Verified with {vendor.name} before it is stored, encrypted at rest, never shown
                   again. You can remove it at any time.
+                  {provider === "openrouter"
+                    ? " A few catalog models are not on OpenRouter; the model picker greys them out."
+                    : ""}
                 </FieldDescription>
               </Field>
               {error ? (

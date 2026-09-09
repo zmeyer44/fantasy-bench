@@ -66,6 +66,7 @@ const catalogEntry = v.object({
   supportsReasoning: v.boolean(),
   supportsTemperature: v.boolean(),
   requiresOwnKey: v.boolean(),
+  openRouterModelId: v.union(v.string(), v.null()),
 });
 
 const ruleChangeWithUser = v.object({

@@ -9,7 +9,13 @@
  */
 import { structuredPatch } from "diff";
 
-import { findModel, modelRequiresOwnKey, modelSupportsReasoningEffort } from "../../lib/models";
+import { KEY_PROVIDER_INFO, type KeyProvider } from "../../lib/key-providers";
+import {
+  findModel,
+  modelAvailableOnKeyProvider,
+  modelRequiresOwnKey,
+  modelSupportsReasoningEffort,
+} from "../../lib/models";
 import {
   DEFAULT_EDIT_LOCK,
   WEEKDAYS,
@@ -469,6 +475,8 @@ export type ValidationContext = {
   noteWasAppended?: boolean;
   /** Whether the team has its own gateway key on file; gates `requiresOwnKey` models. */
   hasOwnKey?: boolean;
+  /** Which vendor issued that key; an OpenRouter key rules out models OpenRouter does not serve. */
+  ownKeyProvider?: KeyProvider | null;
 };
 
 /**
@@ -502,6 +510,18 @@ export function validateAgainstRules(ctx: ValidationContext): ConfigIssue[] {
     issues.push({
       field: "modelId",
       message: `${findModel(ctx.modelId)!.displayName} requires your own gateway key. Add one under Spend, then pick it.`,
+    });
+  } else if (
+    ctx.hasOwnKey &&
+    ctx.ownKeyProvider &&
+    !modelAvailableOnKeyProvider(ctx.modelId, ctx.ownKeyProvider)
+  ) {
+    issues.push({
+      field: "modelId",
+      message:
+        `${findModel(ctx.modelId)!.displayName} is not available through ` +
+        `${KEY_PROVIDER_INFO[ctx.ownKeyProvider].name}, which issued your team's key. ` +
+        "Pick another model, or replace the key under Spend.",
     });
   }
 

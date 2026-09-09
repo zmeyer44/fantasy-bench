@@ -219,6 +219,8 @@ export type FixtureOptions = {
   weeklyUsdCapPerTeam?: number | null;
   /** Register an encrypted gateway key for team A (bring-your-own-key). */
   teamKey?: string;
+  /** Which vendor issued `teamKey`; omitted = a legacy row with no provider (Vercel). */
+  teamKeyProvider?: "vercel" | "openrouter";
   runWallclockSeconds?: number;
   runStatus?: Doc<"runs">["status"];
   /** Skip the mock model price row (so the ledger falls back to the catalog). */
@@ -300,6 +302,7 @@ export async function seedFixture(
       await ctx.db.insert("team_gateway_keys", {
         leagueId,
         teamId: teamAId,
+        ...(options.teamKeyProvider ? { provider: options.teamKeyProvider } : {}),
         ...sealed,
         last4: options.teamKey.slice(-4),
         addedByUserId: userId,

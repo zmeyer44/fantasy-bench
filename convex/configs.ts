@@ -47,6 +47,7 @@ import {
   type ToolOverride,
 } from "./runtime/tools/catalog";
 import { reasoningEffort, toolOverride } from "./schema";
+import { keyProviderOf, type KeyProvider } from "@/lib/key-providers";
 import { findModel, leagueDefaultModelId } from "@/lib/models";
 import { isWithinEditWindow } from "@/lib/time";
 
@@ -453,13 +454,16 @@ function validationError(issues: ConfigIssue[]): ConvexError<{
 }
 
 /** The team's `agent_configs` row, created on first write if a team predates it. */
-/** Whether the team runs on its owner's own gateway key (`gateway_keys`). */
-async function teamHasOwnKey(ctx: QueryCtx | MutationCtx, teamId: Id<"teams">): Promise<boolean> {
+/** The team's own key (`gateway_keys`), as the validator wants it: whether one exists and who issued it. */
+async function teamOwnKey(
+  ctx: QueryCtx | MutationCtx,
+  teamId: Id<"teams">,
+): Promise<{ hasOwnKey: boolean; ownKeyProvider: KeyProvider | null }> {
   const row = await ctx.db
     .query("team_gateway_keys")
     .withIndex("by_teamId", (q) => q.eq("teamId", teamId))
     .unique();
-  return row !== null;
+  return { hasOwnKey: row !== null, ownKeyProvider: row ? keyProviderOf(row) : null };
 }
 
 async function ensureConfig(
@@ -604,7 +608,7 @@ export const save = mutation({
       skillIds,
       rules,
       noteWasAppended: note.length > 0,
-      hasOwnKey: await teamHasOwnKey(ctx, access.team._id),
+      ...(await teamOwnKey(ctx, access.team._id)),
     });
 
     const toolOverrides = normalizeToolOverrides(args.toolOverrides ?? []);
@@ -681,7 +685,7 @@ export const saveToolOverride = mutation({
       skillIds,
       rules,
       noteWasAppended: false,
-      hasOwnKey: await teamHasOwnKey(ctx, access.team._id),
+      ...(await teamOwnKey(ctx, access.team._id)),
     });
     issues.push(...validateToolOverrides(toolOverrides));
     if (issues.length > 0) throw validationError(issues);

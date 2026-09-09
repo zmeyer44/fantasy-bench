@@ -593,6 +593,36 @@ describe("configs.save — validation against league rules", () => {
     expect(version?.modelId).toBe("anthropic/claude-fable-5.1");
   });
 
+  it("rejects a model OpenRouter does not serve while the team's key is an OpenRouter key", async () => {
+    at(TUE_10_ET);
+    const { t, owner, leagueId, teamId } = await writeFixture();
+    await t.run(async (ctx) => {
+      await ctx.db.insert("team_gateway_keys", {
+        leagueId,
+        teamId,
+        provider: "openrouter",
+        ciphertext: "ciphertext",
+        iv: "iv",
+        last4: "cdef",
+        addedByUserId: owner.userId,
+        createdAt: Date.now(),
+      });
+    });
+    await expectIssue(
+      owner.session.mutation(api.configs.save, { ...BASE, leagueId, teamId, modelId: "deepseek/deepseek-v4.1-flash-beta" }),
+      "modelId",
+      /not available through OpenRouter/,
+    );
+    // A model OpenRouter serves saves, including the key-gated tier.
+    const saved = await owner.session.mutation(api.configs.save, {
+      ...BASE,
+      leagueId,
+      teamId,
+      modelId: "anthropic/claude-fable-5.1",
+    });
+    expect(saved.versionNo).toBeGreaterThan(0);
+  });
+
   it("rejects max steps above the league cap and above the platform ceiling", async () => {
     at(TUE_10_ET);
     const { t, owner, leagueId, teamId } = await writeFixture();

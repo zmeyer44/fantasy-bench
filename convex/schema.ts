@@ -584,6 +584,8 @@ export default defineSchema({
   team_gateway_keys: defineTable({
     leagueId: v.id("leagues"),
     teamId: v.id("teams"),
+    /** Which vendor issued the key. Absent on rows written before OpenRouter support: Vercel. */
+    provider: v.optional(v.union(v.literal("vercel"), v.literal("openrouter"))),
     ciphertext: v.string(),
     iv: v.string(),
     last4: v.string(),

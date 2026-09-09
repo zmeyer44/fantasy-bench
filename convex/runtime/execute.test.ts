@@ -437,6 +437,31 @@ describe("executeRun — team spend cap and bring-your-own-key", () => {
     expect(platform).toMatch(/weekly spend cap: \$0\.00/);
   });
 
+  test("a team on its own OpenRouter key runs the same way", async () => {
+    const t = makeTest();
+    const fx = await seedFixture(t, {
+      weeklyUsdCapPerTeam: 0,
+      teamKey: "sk-or-v1-0123456789abcdef0123456789abcdef",
+      teamKeyProvider: "openrouter",
+    });
+    const result = await t.action(internal.runtime.execute.executeRun, { runId: fx.runId, now: NOW });
+    expect(result.status).toBe("succeeded");
+    expect((await runDoc(t, fx.runId))!.keySource).toBe("team");
+  });
+
+  test("a model OpenRouter does not serve fails before any spend on an OpenRouter key", async () => {
+    const t = makeTest();
+    const fx = await seedFixture(t, {
+      modelId: "deepseek/deepseek-v4.1-flash-beta",
+      teamKey: "sk-or-v1-0123456789abcdef0123456789abcdef",
+      teamKeyProvider: "openrouter",
+    });
+    await expect(
+      t.action(internal.runtime.execute.executeRun, { runId: fx.runId, now: NOW }),
+    ).rejects.toThrow(/not available through OpenRouter/);
+    expect(await usageOf(t, fx.runId)).toHaveLength(0);
+  });
+
   test("a league-key run records keySource=league", async () => {
     const t = makeTest();
     const fx = await seedFixture(t);
