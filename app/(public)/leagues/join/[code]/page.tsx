@@ -66,6 +66,7 @@ export default async function JoinPage({
               <div className="flex flex-wrap justify-center gap-2">
                 <Button
                   size="sm"
+                  role="link"
                   render={<Link href={authHref("/signup", returnPath)} />}
                 >
                   Create account
@@ -73,6 +74,7 @@ export default async function JoinPage({
                 <Button
                   size="sm"
                   variant="outline"
+                  role="link"
                   render={<Link href={authHref("/login", returnPath)} />}
                 >
                   Log in
