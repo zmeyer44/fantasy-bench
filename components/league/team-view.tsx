@@ -4,23 +4,18 @@ import type { ReactNode } from "react";
 import Link from "next/link";
 import { usePreloadedQuery, type Preloaded } from "convex/react";
 
-import { OpponentTag, TeamLogo } from "@/components/nfl/team-logo";
-import { RunTags } from "@/components/traces/run-tags";
 import {
-  Badge,
-  Button,
-  EmptyState,
-  PageHeader,
-  Stat,
-  StatStrip,
-  Table,
-  TableBody,
-  TableCell,
-  TableFooter,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui";
+  PlayerHeadshot,
+  PositionTag,
+  TeamAvatar,
+  TEAM_AVATARS,
+} from "./identity";
+import { RunTags } from "@/components/traces/run-tags";
+import { KeyRound, Lock } from "lucide-react";
+
+import { Badge, Button, EmptyState, PageHeader, cn } from "@/components/ui";
+import { COOLDOWN_DAYS } from "@/convex/lib/visibility";
+import { TOOL_CATALOG } from "@/convex/runtime/tools/catalog";
 import type { api } from "@/convex/_generated/api";
 import type { FunctionReturnType } from "convex/server";
 import { formatET } from "@/lib/time";
@@ -33,10 +28,12 @@ export function TeamView({
   leagueId,
   teamId,
   preloaded,
+  canEditAgent = false,
 }: {
   leagueId: string;
   teamId: string;
   preloaded: Preloaded<typeof api.views.team>;
+  canEditAgent?: boolean;
 }) {
   const page = usePreloadedQuery(preloaded);
   if (!page) return <EmptyState title="Team not found" />;
@@ -50,46 +47,87 @@ export function TeamView({
   }`;
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-5 sm:space-y-8">
       <PageHeader
         eyebrow={`${page.team.abbreviation} · ${page.team.ownerName ?? "unowned"}`}
-        title={page.team.name}
-        actions={
-          <>
-            <Button size="sm" variant="outline" render={<Link href={`${teamBase}/config`} />}>
-              Config
-            </Button>
-            <Button
-              size="sm"
-              variant="outline"
-              render={<Link href={`${teamBase}/config/versions`} />}
-            >
-              Version history
-            </Button>
-            <Button size="sm" variant="outline" render={<Link href={`${teamBase}/film-room`} />}>
-              Film room
-            </Button>
-            <Button
-              size="sm"
-              variant="ghost"
-              render={<a href={`/api/leagues/${leagueId}/teams/${teamId}/traces/export`} />}
-            >
-              Export traces
-            </Button>
-          </>
+        title={
+          <span className="flex items-center gap-3">
+            <TeamAvatar
+              name={page.team.name}
+              teamId={teamId}
+              avatarUrl={page.team.avatarUrl}
+              avatarTemplate={page.team.avatarTemplate}
+              size={56}
+            />
+            <span>{page.team.name}</span>
+          </span>
         }
       />
 
-      <StatStrip>
-        <Stat label="Record" value={record} detail={`#${page.record.rank} · ${page.record.streak}`} />
-        <Stat label="Points for" value={page.record.pointsFor.toFixed(1)} detail="Season total" />
-        <Stat label="Karma" value={String(page.team.karma)} detail="Conduct score" />
-        <Stat
-          label="FAAB"
-          value={`$${page.team.faabRemaining}`}
-          detail={`of $${page.team.faabBudget}`}
-        />
-      </StatStrip>
+      <nav
+        aria-label="Team navigation"
+        className="flex gap-5 border-b border-border text-sm"
+      >
+        <span
+          aria-current="page"
+          className="border-b-2 border-brand pb-3 font-medium"
+        >
+          Roster
+        </span>
+        <Link
+          className="pb-3 text-muted-foreground hover:text-foreground"
+          href={`${base}/matchups/${page.weekNo}`}
+        >
+          Matchups
+        </Link>
+        <Link
+          className="pb-3 text-muted-foreground hover:text-foreground"
+          href={`${base}/waivers`}
+        >
+          Players & waivers
+        </Link>
+      </nav>
+      <dl className="grid grid-cols-4 gap-3 border-b border-border pb-5">
+        {[
+          {
+            label: "Record",
+            value: record,
+            detail: `#${page.record.rank} · ${page.record.streak}`,
+          },
+          {
+            label: "Points for",
+            value: page.record.pointsFor.toFixed(1),
+            detail: "Season total",
+          },
+          {
+            label: "Karma",
+            value: String(page.team.karma),
+            detail: "Conduct score",
+          },
+          {
+            label: "FAAB",
+            value: `$${page.team.faabRemaining}`,
+            detail: `of $${page.team.faabBudget}`,
+          },
+        ].map((stat) => (
+          <div key={stat.label} className="min-w-0">
+            <dt className="text-[11px] text-muted-foreground">{stat.label}</dt>
+            <dd className="mt-1 font-mono text-lg tabular-nums sm:text-2xl">
+              {stat.value}
+            </dd>
+            <dd className="mt-1 text-[10px] text-muted-foreground sm:text-xs">
+              {stat.detail}
+            </dd>
+          </div>
+        ))}
+      </dl>
+
+      <AgentPanel
+        config={page.config}
+        teamBase={teamBase}
+        base={base}
+        canEditAgent={canEditAgent}
+      />
 
       <div className="grid gap-10 lg:grid-cols-3">
         <div className="space-y-10 lg:col-span-2">
@@ -123,7 +161,10 @@ export function TeamView({
             ) : (
               <SlotTable
                 rows={starters}
-                totals={{ projected: page.projectedTotal, live: page.liveTotal }}
+                totals={{
+                  projected: page.projectedTotal,
+                  live: page.liveTotal,
+                }}
               />
             )}
           </section>
@@ -131,7 +172,9 @@ export function TeamView({
           <section>
             <SectionRule title="Bench" meta={`${bench.length} players`} />
             {bench.length === 0 ? (
-              <p className="mt-4 text-sm text-muted-foreground">Nobody on the bench.</p>
+              <p className="mt-4 text-sm text-muted-foreground">
+                Nobody on the bench.
+              </p>
             ) : (
               <SlotTable rows={bench} />
             )}
@@ -151,7 +194,9 @@ export function TeamView({
             />
             <div className="mt-4">
               {page.recentRuns.length === 0 ? (
-                <p className="text-sm text-muted-foreground">This agent has not run yet.</p>
+                <p className="text-sm text-muted-foreground">
+                  This agent has not run yet.
+                </p>
               ) : (
                 <ul className="divide-y divide-border">
                   {page.recentRuns.map((run) => (
@@ -164,7 +209,11 @@ export function TeamView({
                         {run.weekNo ? ` · wk ${run.weekNo}` : ""}
                       </Link>
                       <div className="mt-2">
-                        <RunTags run={run} leagueId={leagueId} showTeam={false} />
+                        <RunTags
+                          run={run}
+                          leagueId={leagueId}
+                          showTeam={false}
+                        />
                       </div>
                       {run.rationale ? (
                         <p className="mt-2 line-clamp-2 text-sm leading-relaxed text-muted-foreground">
@@ -180,42 +229,42 @@ export function TeamView({
         </div>
 
         <div className="space-y-10">
-          <section>
-            <SectionRule
-              title="Agent config"
-              meta={page.config.versionNo ? `Version ${page.config.versionNo}` : "No config version"}
-              action={
-                <Link
-                  href={`${teamBase}/config`}
-                  className="eyebrow transition-colors hover:text-foreground"
-                >
-                  Edit →
-                </Link>
-              }
-            />
-            <dl className="mt-4 divide-y divide-border">
-              <Row label="Model" value={page.config.modelLabel} />
-              <Row label="Max steps" value={String(page.config.harness?.maxSteps ?? "—")} />
-              <Row
-                label="Token budget"
-                value={page.config.harness?.tokenBudget?.toLocaleString() ?? "—"}
-              />
-              <Row label="Temperature" value={String(page.config.harness?.temperature ?? "—")} />
-              <Row label="Context" value={`${page.config.contextChars.toLocaleString()} chars`} />
-              {page.config.changeSummary ? (
-                <Row label="Last change" value={page.config.changeSummary} />
-              ) : null}
-              {page.config.createdAt ? (
-                <Row label="Saved" value={`${formatET(page.config.createdAt, "MMM d HH:mm")} ET`} />
-              ) : null}
-            </dl>
-            {page.config.hasPendingVersion ? (
-              <div className="mt-3">
-                <Badge variant="warning">edit queued for next unlock</Badge>
-              </div>
+          <section className="rounded-lg border border-border bg-card p-4">
+            <h2 className="text-sm font-semibold">Team identity</h2>
+            <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
+              The agent chooses the team name and crest. Owners can guide its style
+              by editing the agent.
+            </p>
+            <div className="mt-4 flex flex-wrap gap-2">
+              {TEAM_AVATARS.map((template) => (
+                <span key={template} title={template}>
+                  <TeamAvatar
+                    name={template}
+                    avatarTemplate={template}
+                    size={36}
+                  />
+                </span>
+              ))}
+            </div>
+            {page.team.avatarStatus === "generating" ? (
+              <p role="status" className="mt-3 text-xs text-brand">
+                Your agent is creating a custom avatar…
+              </p>
+            ) : null}
+            {page.team.avatarStatus === "failed" ? (
+              <p role="status" className="mt-3 text-xs text-muted-foreground">
+                {page.team.avatarError}
+              </p>
+            ) : null}
+            {page.team.identityRunId ? (
+              <Link
+                className="mt-3 block text-xs text-brand hover:underline"
+                href={`${base}/traces/${page.team.identityRunId}`}
+              >
+                Identity decision →
+              </Link>
             ) : null}
           </section>
-
           <section>
             <SectionRule
               title="Cost"
@@ -229,15 +278,198 @@ export function TeamView({
               }
             />
             <dl className="mt-4 divide-y divide-border">
-              <Row label="Season" value={`$${page.cost.seasonUsd.toFixed(4)}`} />
-              <Row label={`Week ${page.weekNo}`} value={`$${page.cost.weekUsd.toFixed(4)}`} />
-              <Row label="Tokens" value={page.cost.seasonTokens.toLocaleString()} />
+              <Row
+                label="Season"
+                value={`$${page.cost.seasonUsd.toFixed(4)}`}
+              />
+              <Row
+                label={`Week ${page.weekNo}`}
+                value={`$${page.cost.weekUsd.toFixed(4)}`}
+              />
+              <Row
+                label="Tokens"
+                value={page.cost.seasonTokens.toLocaleString()}
+              />
               <Row label="Runs" value={String(page.cost.runCount)} />
             </dl>
           </section>
         </div>
       </div>
     </div>
+  );
+}
+
+/**
+ * The agent, front and centre: what runs this team, what it reads and what it
+ * can do — with the one lime action on the page leading into the editor.
+ */
+function AgentPanel({
+  config,
+  teamBase,
+  base,
+  canEditAgent,
+}: {
+  config: TeamPage["config"];
+  teamBase: string;
+  base: string;
+  canEditAgent: boolean;
+}) {
+  const defaultTools = TOOL_CATALOG.length - config.toolsDisabled;
+  const totalTools = defaultTools + config.customTools.length;
+  const hasVersion = config.versionNo !== null;
+  const privateUntil = config.privateUntil;
+  const revealLabel = privateUntil ? `${formatET(privateUntil, "MMM d")}` : null;
+  const excerpt = config.contextExcerpt
+    .replace(/^#+\s*/gm, "")
+    .replace(/^\s*[-*]\s+/gm, "")
+    .replace(/\s+/g, " ")
+    .trim();
+  const href = `${teamBase}/config`;
+
+  return (
+    <section
+      aria-labelledby="agent-panel-title"
+      className="rounded-lg border border-line-strong bg-card"
+    >
+      <div className="grid gap-6 p-5 lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)] lg:gap-10">
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="eyebrow text-brand">Agent</span>
+            {hasVersion ? (
+              <Badge variant="outline">v{config.versionNo} live</Badge>
+            ) : (
+              <Badge variant="outline">no version</Badge>
+            )}
+            {config.hasPendingVersion ? <Badge variant="warning">edit queued</Badge> : null}
+            {privateUntil ? (
+              <Badge variant="secondary">
+                <Lock data-icon="inline-start" /> private until {revealLabel}
+              </Badge>
+            ) : null}
+            {config.ownKey ? (
+              <Badge variant="info">
+                <KeyRound data-icon="inline-start" /> own key
+              </Badge>
+            ) : null}
+          </div>
+          <h2 id="agent-panel-title" className="mt-2 text-xl font-semibold tracking-tight">
+            {config.modelLabel}
+          </h2>
+          <p className="mt-1 text-sm text-muted-foreground">
+            {config.changeSummary
+              ? `Last change: ${config.changeSummary}`
+              : hasVersion
+                ? "Runs every window on this configuration."
+                : "This team has not configured its agent yet. It runs on platform defaults."}
+            {config.createdAt ? ` · saved ${formatET(config.createdAt, "MMM d HH:mm")} ET` : ""}
+          </p>
+
+          <div className="mt-4 border-l-2 border-border pl-3">
+            <div className="eyebrow">System prompt</div>
+            {privateUntil ? (
+              <p className="mt-1.5 text-sm leading-relaxed text-muted-foreground">
+                The owner&apos;s context, skills and tool customizations are private until{" "}
+                {revealLabel}. Every customization becomes public {COOLDOWN_DAYS} days after it is
+                saved, so the league can learn from what worked.
+              </p>
+            ) : (
+              <p
+                className={cn(
+                  "mt-1.5 line-clamp-3 text-sm leading-relaxed",
+                  excerpt ? "text-foreground" : "text-muted-foreground",
+                )}
+              >
+                {excerpt || "No owner context written yet. The agent plays a conventional game."}
+              </p>
+            )}
+          </div>
+
+          <div className="mt-5 flex flex-wrap items-center gap-2">
+            <Button
+              size="lg"
+              variant={canEditAgent ? "default" : "outline"}
+              render={<Link href={href} />}
+            >
+              {canEditAgent ? "Edit agent" : "View agent"}
+            </Button>
+            <Button size="lg" variant="ghost" render={<Link href={`${href}?tab=tools`} />}>
+              Tools
+            </Button>
+            <Button size="lg" variant="ghost" render={<Link href={`${teamBase}/config/versions`} />}>
+              Versions
+            </Button>
+          </div>
+        </div>
+
+        <dl className="grid grid-cols-2 gap-x-6 gap-y-5 border-t border-border pt-5 lg:border-t-0 lg:border-l lg:pt-0 lg:pl-10">
+          <div className="min-w-0">
+            <dt className="text-[11px] text-muted-foreground">Tools</dt>
+            <dd className="mt-1 font-mono text-2xl tabular-nums">{privateUntil ? "—" : totalTools}</dd>
+            <dd className="mt-1 text-[11px] text-muted-foreground">
+              {privateUntil
+                ? `revealed ${revealLabel}`
+                : `${defaultTools}/${TOOL_CATALOG.length} default${
+                    config.customTools.length ? ` · ${config.customTools.length} custom` : ""
+                  }${config.toolsGuided ? ` · ${config.toolsGuided} guided` : ""}`}
+            </dd>
+          </div>
+          <div className="min-w-0">
+            <dt className="text-[11px] text-muted-foreground">Skills</dt>
+            <dd className="mt-1 font-mono text-2xl tabular-nums">
+              {privateUntil ? "—" : config.skillNames.length}
+            </dd>
+            <dd className="mt-1 truncate text-[11px] text-muted-foreground">
+              {privateUntil
+                ? `revealed ${revealLabel}`
+                : config.skillNames.length
+                  ? config.skillNames.join(", ")
+                  : "context only"}
+            </dd>
+          </div>
+          <div className="min-w-0">
+            <dt className="text-[11px] text-muted-foreground">Max steps</dt>
+            <dd className="mt-1 font-mono text-2xl tabular-nums">
+              {config.harness?.maxSteps ?? "—"}
+            </dd>
+            <dd className="mt-1 text-[11px] text-muted-foreground">
+              {config.harness?.tokenBudget
+                ? `${config.harness.tokenBudget.toLocaleString()} tokens / run`
+                : "platform default"}
+            </dd>
+          </div>
+          <div className="min-w-0">
+            <dt className="text-[11px] text-muted-foreground">Context</dt>
+            <dd className="mt-1 font-mono text-2xl tabular-nums">
+              {config.contextChars.toLocaleString()}
+            </dd>
+            <dd className="mt-1 text-[11px] text-muted-foreground">
+              chars{config.harness ? ` · temp ${config.harness.temperature}` : ""}
+            </dd>
+          </div>
+          {config.customTools.length > 0 ? (
+            <div className="col-span-2 min-w-0">
+              <dt className="text-[11px] text-muted-foreground">Custom tools</dt>
+              <dd className="mt-1 flex flex-wrap gap-1.5">
+                {config.customTools.map((name) => (
+                  <span
+                    key={name}
+                    className="rounded-sm border border-brand/30 bg-brand-soft px-1.5 py-0.5 font-mono text-[11px] text-brand"
+                  >
+                    {name}
+                  </span>
+                ))}
+              </dd>
+            </div>
+          ) : null}
+        </dl>
+      </div>
+      <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border px-5 py-2.5 text-xs text-muted-foreground">
+        <span>Customizations become public to the league {COOLDOWN_DAYS} days after they are saved.</span>
+        <Link href={`${base}/traces`} className="eyebrow transition-colors hover:text-foreground">
+          Recent traces →
+        </Link>
+      </div>
+    </section>
   );
 }
 
@@ -254,7 +486,9 @@ function SectionRule({
     <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 border-b border-border pb-2.5">
       <div className="flex flex-wrap items-baseline gap-3">
         <h2 className="eyebrow text-foreground">{title}</h2>
-        {meta ? <span className="text-xs text-muted-foreground">{meta}</span> : null}
+        {meta ? (
+          <span className="text-xs text-muted-foreground">{meta}</span>
+        ) : null}
       </div>
       {action}
     </div>
@@ -269,71 +503,97 @@ function SlotTable({
   totals?: { projected: number; live: number };
 }) {
   return (
-    <Table>
-      <TableHeader>
-        <TableRow>
-          <TableHead className="w-12">Slot</TableHead>
-          <TableHead>Player</TableHead>
-          <TableHead>Opp</TableHead>
-          <TableHead>Kickoff</TableHead>
-          <TableHead numeric>Proj</TableHead>
-          <TableHead numeric>Pts</TableHead>
-        </TableRow>
-      </TableHeader>
-      <TableBody>
-        {rows.map((row, index) => (
-          <TableRow key={`${row.slot}-${row.entry?.playerId ?? index}`}>
-            <TableCell className="font-mono text-[10px] uppercase text-ink-faint">
-              {row.slot}
-            </TableCell>
-            <TableCell>
-              {row.entry ? (
-                <span className="flex flex-wrap items-center gap-1.5">
-                  <TeamLogo team={row.entry.nflTeam} size={18} />
-                  <span className="text-sm text-foreground">{row.entry.fullName}</span>
-                  <span className="font-mono text-[10px] text-ink-faint">
-                    {row.entry.position}
-                    {row.entry.nflTeam ? ` · ${row.entry.nflTeam}` : ""}
-                  </span>
-                  {row.entry.injuryStatus ? (
-                    <Badge variant="destructive">{row.entry.injuryStatus}</Badge>
-                  ) : null}
-                </span>
-              ) : (
-                <span className="text-sm text-ink-faint">— empty —</span>
-              )}
-            </TableCell>
-            <TableCell className="font-mono text-[10px] text-muted-foreground">
-              {row.entry?.opponent ? <OpponentTag opponent={row.entry.opponent} /> : "—"}
-            </TableCell>
-            <TableCell className="font-mono text-[10px] text-muted-foreground">
-              {row.entry?.kickoffAt ? formatET(row.entry.kickoffAt, "EEE HH:mm") : "—"}
-            </TableCell>
-            <TableCell numeric className="font-mono text-xs text-muted-foreground">
-              {row.entry?.projection?.toFixed(1) ?? "—"}
-            </TableCell>
-            <TableCell numeric className="font-mono text-xs text-foreground">
-              {row.entry?.livePoints?.toFixed(1) ?? "—"}
-            </TableCell>
-          </TableRow>
-        ))}
-      </TableBody>
+    <div role="table" aria-label={totals ? "Starting lineup" : "Bench players"}>
+      <div
+        role="row"
+        className="grid grid-cols-[34px_minmax(0,1fr)_42px_48px] items-center gap-2 border-b border-border py-3 text-[11px] text-muted-foreground sm:grid-cols-[42px_minmax(0,1fr)_60px_64px] sm:gap-3"
+      >
+        <span role="columnheader">Slot</span>
+        <span role="columnheader">Player / game</span>
+        <span role="columnheader" className="text-right">
+          Proj
+        </span>
+        <span role="columnheader" className="text-right">
+          Points
+        </span>
+      </div>
+      {rows.map((row, index) => (
+        <div
+          role="row"
+          key={`${row.slot}-${index}`}
+          className="grid grid-cols-[34px_minmax(0,1fr)_42px_48px] items-center gap-2 border-b border-border py-3 sm:grid-cols-[42px_minmax(0,1fr)_60px_64px] sm:gap-3"
+        >
+          <span role="cell">
+            <PositionTag slot={row.slot} />
+          </span>
+          <div role="cell" className="flex min-w-0 items-center gap-2 sm:gap-3">
+            {row.entry ? (
+              <>
+                <PlayerHeadshot
+                  name={row.entry.fullName}
+                  sleeperId={row.entry.sleeperId}
+                  nflTeam={row.entry.nflTeam}
+                  position={row.entry.position}
+                  size={36}
+                />
+                <div className="min-w-0">
+                  <div className="text-xs font-medium leading-snug sm:text-sm">
+                    {row.entry.fullName}
+                  </div>
+                  <div className="mt-1 text-[10px] text-muted-foreground sm:text-xs">
+                    {row.entry.position} · {row.entry.nflTeam ?? "FA"}
+                    {row.entry.injuryStatus ? (
+                      <span className="ml-1 text-danger">
+                        {row.entry.injuryStatus}
+                      </span>
+                    ) : null}
+                  </div>
+                  <div className="mt-0.5 text-[10px] leading-relaxed text-muted-foreground sm:text-xs">
+                    {row.entry.opponent ?? "Opponent TBD"}
+                    {row.entry.kickoffAt
+                      ? ` · ${formatET(row.entry.kickoffAt, "EEE h:mm a")} ET`
+                      : ""}
+                  </div>
+                </div>
+              </>
+            ) : (
+              <span className="text-xs text-muted-foreground">Empty slot</span>
+            )}
+          </div>
+          <span
+            role="cell"
+            className="text-right font-mono text-xs tabular-nums text-muted-foreground"
+          >
+            {row.entry?.projection?.toFixed(1) ?? "—"}
+          </span>
+          <span
+            role="cell"
+            className="text-right font-mono text-sm font-medium tabular-nums"
+          >
+            {row.entry?.livePoints?.toFixed(1) ?? "—"}
+          </span>
+        </div>
+      ))}
       {totals ? (
-        <TableFooter>
-          <TableRow>
-            <TableCell colSpan={4} className="eyebrow">
-              Total
-            </TableCell>
-            <TableCell numeric className="font-mono text-xs text-muted-foreground">
-              {totals.projected.toFixed(1)}
-            </TableCell>
-            <TableCell numeric className="font-mono text-xs text-foreground">
-              {totals.live.toFixed(1)}
-            </TableCell>
-          </TableRow>
-        </TableFooter>
+        <div
+          role="row"
+          className="grid grid-cols-[minmax(0,1fr)_42px_48px] gap-2 bg-muted px-1 py-3 sm:grid-cols-[minmax(0,1fr)_60px_64px] sm:gap-3"
+        >
+          <span role="cell" aria-colspan={2} className="text-xs font-medium">
+            Starter totals
+          </span>
+          <span
+            role="cell"
+            className="text-right font-mono text-xs text-muted-foreground"
+          >
+            {totals.projected.toFixed(1)}
+          </span>
+          <span role="cell" className="text-right font-mono text-sm text-brand">
+            {totals.live.toFixed(1)}
+          </span>
+        </div>
       ) : null}
-    </Table>
+    </div>
   );
 }
 
@@ -341,7 +601,9 @@ function Row({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex items-baseline justify-between gap-4 py-2 first:pt-0 last:pb-0">
       <dt className="eyebrow">{label}</dt>
-      <dd className="text-right font-mono text-xs tabular-nums text-foreground">{value}</dd>
+      <dd className="text-right font-mono text-xs tabular-nums text-foreground">
+        {value}
+      </dd>
     </div>
   );
 }

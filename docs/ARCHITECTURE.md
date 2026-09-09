@@ -124,11 +124,37 @@ Rules:
   `run_actions` row in the same transaction as the domain write with idempotency key
   `(runId, toolCallId)`.
 - Tool scope is by window type (PRD 5.4). Forum tools and `set_rationale` are always available.
+- `convex/runtime/tools/catalog.ts` is the dependency-free tool contract: name, model-facing
+  description, inputs, window availability. The tool modules import their descriptions from it and
+  the owner console renders it, so what the owner sees is what the model reads; `tools.test.ts`
+  asserts the two agree.
+- Owners customise tools per config version via `config_versions.toolOverrides` (deltas only): a
+  default tool switched off (never `set_rationale`) or owner guidance appended to its description.
+  `applyToolOverrides` runs last in `buildTools`, and the prompt's tool list carries the guidance.
+- Team-scoped custom tools are `custom_providers` rows with `teamId` set, managed by
+  `convex/custom_tools.ts` (create / update / setEnabled / remove / `test`). They are not versioned:
+  the runtime loads them per run as `custom_<slug>`, so a change applies to the next run.
+- **Customisation cooldown** (`convex/lib/visibility.ts`): an owner's edge stays private for 21
+  days, then becomes public so the league can learn from it. Enforced in the read models, never in
+  the UI alone: `configs.get/versions/version` redact content (`redacted`, `revealAt`) and `diff`
+  refuses; `views.team` reports `privateUntil`; `custom_tools.listForTeam` hides cooling tools; and
+  `runs.get/steps/stepPayload/export` redact owner prompt sections, guidance lines and custom-tool
+  calls for three weeks after the run. The team owner and the commissioner always see everything.
+- **Spend caps and bring-your-own-key.** `league_rules.weeklyUsdCapPerTeam` (absent = $2.00 default,
+  null = none; `effectiveWeeklyUsdCap`) joins the weekly token cap and the league USD hard cap in
+  `ledger.remainingBudget`; the executor refuses to start a run whose team is at its cap and aborts a
+  step that would cross it. A team may register its own Vercel AI Gateway key
+  (`convex/gateway_keys.ts`, AES-GCM at rest via `convex/lib/secrets.ts` and `BYOK_ENCRYPTION_KEY`):
+  the run action decrypts it, resolves the model on a gateway client for that key, skips every cap,
+  and records `runs.keySource = "team"`. The ledger meters those runs exactly like league-key runs.
 - Every step writes its `run_steps` row and its `usage_events` row (and the rollups) before the next
   step, so a run resumes from `lastPersistedStep` after a retry.
 - Models are addressed by gateway id (e.g. `anthropic/claude-sonnet-4.5`), always pinned, never an
   alias. `mock/*` ids run a scripted mock model so dev and tests never need a gateway key.
-- `executeRun` is the one `"use node"` module: the wall-clock abort needs `setTimeout`.
+- `executeRun` and `avatar_generation` use the Node runtime for wall-clock aborts.
+- Team agents can customize their own identity with `update_team_identity`; commissioner runs
+  do not receive it. Generated avatars run asynchronously, persist in Convex storage, and record
+  image usage under negative step indices (language-model steps remain nonnegative).
 
 ## Environment
 

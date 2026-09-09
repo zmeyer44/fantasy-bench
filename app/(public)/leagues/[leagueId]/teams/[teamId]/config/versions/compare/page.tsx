@@ -36,7 +36,9 @@ export default async function CompareVersionsPage({
   const base = `/leagues/${leagueId}/teams/${teamId}/config/versions`;
   const aId = first(query.a);
   const bId = first(query.b);
-  const known = new Set(view.versions.map((v) => v._id as string));
+  // Only versions past their cooldown can be diffed by this viewer.
+  const versions = view.versions.filter((v) => !v.redacted);
+  const known = new Set(versions.map((v) => v._id as string));
 
   // `configs.diff` re-checks the league; the id pair is validated here so a
   // bookmarked link to another team's version renders the picker, not an error.
@@ -70,7 +72,7 @@ export default async function CompareVersionsPage({
           selectedId={diff ? (aId ?? null) : null}
           otherId={bId && known.has(bId) ? bId : null}
           side="a"
-          versions={view.versions}
+          versions={versions}
         />
         <VersionColumn
           title="Compare (b)"
@@ -78,7 +80,7 @@ export default async function CompareVersionsPage({
           selectedId={diff ? (bId ?? null) : null}
           otherId={aId && known.has(aId) ? aId : null}
           side="b"
-          versions={view.versions}
+          versions={versions}
         />
       </div>
 

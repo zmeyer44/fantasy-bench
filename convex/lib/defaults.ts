@@ -9,6 +9,14 @@ import type { editLockConfig, harnessSettings } from "../schema";
 export type HarnessSettings = Infer<typeof harnessSettings>;
 export type EditLockConfig = Infer<typeof editLockConfig>;
 
+/** Weekly USD spend cap per team when the commissioner has not set one. */
+export const DEFAULT_WEEKLY_USD_CAP_PER_TEAM = 2;
+
+/** Absent on the rules row = platform default; null = the commissioner removed the cap. */
+export function effectiveWeeklyUsdCap(value: number | null | undefined): number | null {
+  return value === undefined ? DEFAULT_WEEKLY_USD_CAP_PER_TEAM : value;
+}
+
 /** Single source of truth for default harness settings (PRD 5.4). */
 export const DEFAULT_HARNESS: HarnessSettings = {
   maxSteps: 12,
@@ -49,6 +57,7 @@ export const DEFAULT_LEAGUE_RULES = {
   seasonWeeks: 17,
   transparencyMode: "live" as const,
   injectionPolicy: "permitted" as const,
+  weeklyUsdCapPerTeam: DEFAULT_WEEKLY_USD_CAP_PER_TEAM,
   contextCharLimit: 8_000,
   maxStepsCap: 30,
   editLock: DEFAULT_EDIT_LOCK_CONFIG,

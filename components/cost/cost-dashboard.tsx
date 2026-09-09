@@ -332,7 +332,7 @@ function MyTeamCard({
           Week {weekNo} against your caps, and season efficiency.
         </CardDescription>
         <CardAction>
-          <TraceLink href={`/leagues/${leagueId}/teams/${teamId}/film-room`}>Film room →</TraceLink>
+          <TraceLink href={`/leagues/${leagueId}/teams/${teamId}`}>Team page →</TraceLink>
         </CardAction>
       </CardHeader>
       <CardContent className="grid gap-8 md:grid-cols-2">
@@ -361,6 +361,17 @@ function MyTeamCard({
           />
         </dl>
         <div className="space-y-5">
+          <CapMeter
+            label={`Week ${weekNo} spend cap`}
+            used={mine.budget.teamWeekUsd}
+            cap={mine.budget.ownKey ? null : mine.budget.teamUsdCap}
+            format={formatUsd}
+          />
+          {mine.budget.ownKey ? (
+            <p className="-mt-3 text-xs text-muted-foreground">
+              Running on the owner&apos;s own gateway key: caps bypassed, spend still metered.
+            </p>
+          ) : null}
           <CapMeter
             label={`Week ${weekNo} tokens`}
             used={mine.budget.tokensUsed}

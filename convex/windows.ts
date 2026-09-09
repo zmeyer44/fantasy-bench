@@ -488,7 +488,7 @@ export const dispatch = internalMutation({
  * that could be heavy is scheduled with `runAfter(0, …)` rather than run
  * inline. Twelve safety autopilots each reassemble a snapshot, so each gets its
  * own transaction (`internal.windows.autopilotForTeam`); waiver processing,
- * trade expiry, trade reviews, draft progression and the film-room metrics are
+ * trade expiry, trade reviews, draft progression and the team-week metrics are
  * likewise their own transactions. They all commit-or-not with this close.
  */
 export const close = internalMutation({

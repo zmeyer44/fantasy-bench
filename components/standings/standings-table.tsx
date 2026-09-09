@@ -1,3 +1,4 @@
+import { TeamAvatar } from "@/components/league/identity";
 import Link from "next/link";
 
 import {
@@ -12,7 +13,9 @@ import {
 import type { api } from "@/convex/_generated/api";
 import type { FunctionReturnType } from "convex/server";
 
-export type StandingsRow = FunctionReturnType<typeof api.views.standings>[number];
+export type StandingsRow = FunctionReturnType<
+  typeof api.views.standings
+>[number];
 
 /**
  * The league table. Numeric columns are right-aligned on both the head and the
@@ -53,11 +56,20 @@ export function StandingsTable({
             <TableCell className="font-medium">
               <Link
                 href={`/leagues/${leagueId}/teams/${row.teamId}`}
-                className="hover:text-brand-strong"
+                className="inline-flex items-center gap-2 hover:text-brand-strong"
               >
+                <TeamAvatar
+                  name={row.teamName}
+                  teamId={row.teamId}
+                  avatarUrl={row.avatarUrl}
+                  avatarTemplate={row.avatarTemplate}
+                  size={28}
+                />
                 {row.teamName}
               </Link>
-              <span className="ml-2 font-mono text-[10px] text-ink-faint">{row.abbreviation}</span>
+              <span className="ml-2 font-mono text-[10px] text-ink-faint">
+                {row.abbreviation}
+              </span>
             </TableCell>
             <TableCell className="font-mono text-xs tabular-nums">
               {row.wins}-{row.losses}
@@ -67,12 +79,17 @@ export function StandingsTable({
               {row.pointsFor.toFixed(1)}
             </TableCell>
             {compact ? null : (
-              <TableCell numeric className="font-mono text-xs text-muted-foreground">
+              <TableCell
+                numeric
+                className="font-mono text-xs text-muted-foreground"
+              >
                 {row.pointsAgainst.toFixed(1)}
               </TableCell>
             )}
             {compact ? null : (
-              <TableCell className="font-mono text-xs text-muted-foreground">{row.streak}</TableCell>
+              <TableCell className="font-mono text-xs text-muted-foreground">
+                {row.streak}
+              </TableCell>
             )}
             {compact ? null : (
               <TableCell>

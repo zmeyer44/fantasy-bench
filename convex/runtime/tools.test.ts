@@ -83,6 +83,10 @@ function contextFor(
       leagueUsdUsed: 0,
       leagueUsdCap: null,
       leagueCapReached: false,
+      teamUsdCap: null,
+      teamUsdUsed: 0,
+      teamUsdRemaining: null,
+      teamCapReached: false,
     },
     customProviders: [],
     state: emptyRunToolState(),
@@ -104,7 +108,7 @@ const READS = [
   "get_forum",
   "get_my_history",
 ];
-const ALWAYS = ["post_to_forum", "comment_on_forum", "vote_on_forum", "set_rationale"];
+const ALWAYS = ["post_to_forum", "comment_on_forum", "vote_on_forum", "set_rationale", "update_team_identity"];
 
 describe("toolsForWindow", () => {
   test("a lineup window gets set_lineup, forum tools and the rationale — nothing else", () => {
@@ -158,6 +162,7 @@ describe("toolsForWindow", () => {
   test("a commissioner window gets no roster tools and no DM access", () => {
     const names = toolsForWindow("commissioner");
     for (const denied of [
+      "update_team_identity",
       "set_lineup",
       "submit_waiver_claims",
       "drop_player",
@@ -410,5 +415,117 @@ describe("helpers", () => {
     expect(extractPath({ a: { b: [{ c: 7 }] } }, "a.b.0.c")).toBe(7);
     expect(extractPath({ a: 1 }, "a.missing")).toBeUndefined();
     expect(extractPath({ a: 1 })).toEqual({ a: 1 });
+  });
+});
+
+// ===========================================================================
+// The tool catalog and per-version overrides
+// ===========================================================================
+
+import {
+  TOOL_BY_NAME,
+  TOOL_CATALOG,
+  applyToolOverrides,
+  guidanceByTool,
+  normalizeToolOverrides,
+  validateToolOverrides,
+} from "./tools/catalog";
+
+/** Zod object schemas expose `.shape`; that is all the sync check needs. */
+function inputKeys(impl: unknown): string[] {
+  const schema = (impl as { inputSchema?: { shape?: Record<string, unknown> } }).inputSchema;
+  return Object.keys(schema?.shape ?? {}).sort();
+}
+
+describe("tool catalog", () => {
+  test("every built tool matches its catalog entry: description, inputs and window scope", async () => {
+    const t = makeTest();
+    const fx = await seedFixture(t);
+    const windows: ToolContext["windowType"][] = ["lineup", "waiver", "trade", "forum", "commissioner"];
+    const seen = new Set<string>();
+
+    for (const windowType of windows) {
+      const tools = buildTools(contextFor(t, fx, windowType)) as Record<string, { description?: string }>;
+      for (const [name, impl] of Object.entries(tools)) {
+        const entry = TOOL_BY_NAME.get(name);
+        expect(entry, `${name} is missing from the catalog`).toBeDefined();
+        expect(impl.description).toBe(entry!.description);
+        expect(inputKeys(impl)).toEqual(entry!.inputs.map((i) => i.name).sort());
+        expect(entry!.windows, `${name} advertised in ${windowType}`).toContain(windowType);
+        seen.add(name);
+      }
+    }
+    const snake = buildTools(contextFor(t, fx, "draft", { draftType: "snake", pickNo: 1 }));
+    const auction = buildTools(contextFor(t, fx, "draft", { draftType: "auction" }));
+    for (const name of [...Object.keys(snake), ...Object.keys(auction)]) {
+      expect(TOOL_BY_NAME.get(name)?.windows).toContain("draft");
+      seen.add(name);
+    }
+    // Nothing in the catalog is dead: every entry is reachable in some window.
+    expect([...seen].sort()).toEqual(TOOL_CATALOG.map((e) => e.name).sort());
+  });
+
+  test("the catalog's window list agrees with toolsForWindow", () => {
+    for (const entry of TOOL_CATALOG) {
+      for (const windowType of ["lineup", "waiver", "trade", "forum", "commissioner"] as const) {
+        expect(
+          toolsForWindow(windowType).includes(entry.name),
+          `${entry.name} in ${windowType}`,
+        ).toBe(entry.windows.includes(windowType));
+      }
+    }
+  });
+});
+
+describe("tool overrides", () => {
+  test("a disabled tool disappears, guidance is appended, set_rationale cannot be switched off", async () => {
+    const t = makeTest();
+    const fx = await seedFixture(t);
+    const ctx = contextFor(t, fx, "lineup");
+    ctx.toolOverrides = [
+      { name: "get_news", enabled: false },
+      { name: "set_rationale", enabled: false },
+      { name: "set_lineup", enabled: true, guidance: "Never start a Questionable player on Thursday." },
+    ];
+    const tools = buildTools(ctx) as Record<string, { description: string }>;
+    expect(Object.keys(tools)).not.toContain("get_news");
+    expect(Object.keys(tools)).toContain("set_rationale");
+    expect(tools.set_lineup.description).toBe(
+      `${TOOL_BY_NAME.get("set_lineup")!.description}\n\nOWNER GUIDANCE (from the human who tunes you): Never start a Questionable player on Thursday.`,
+    );
+    expect(tools.set_rationale.description).toBe(TOOL_BY_NAME.get("set_rationale")!.description);
+    expect(guidanceByTool(Object.keys(tools), ctx.toolOverrides)).toEqual({
+      set_lineup: "Never start a Questionable player on Thursday.",
+    });
+  });
+
+  test("applyToolOverrides is a no-op without overrides and ignores names not in the set", () => {
+    const tools = { a: { description: "A" }, b: { description: "B" } };
+    expect(applyToolOverrides(tools, undefined)).toBe(tools);
+    expect(applyToolOverrides(tools, [{ name: "zzz", enabled: false }])).toEqual(tools);
+  });
+
+  test("normalize drops no-op entries and keeps the last word per tool", () => {
+    expect(
+      normalizeToolOverrides([
+        { name: "get_news", enabled: true, guidance: "   " },
+        { name: "get_forum", enabled: false },
+        { name: "get_forum", enabled: true, guidance: " read the room " },
+      ]),
+    ).toEqual([{ name: "get_forum", enabled: true, guidance: "read the room" }]);
+  });
+
+  test("validate rejects unknown names, disabling set_rationale and oversized guidance", () => {
+    const issues = validateToolOverrides([
+      { name: "nope", enabled: false },
+      { name: "set_rationale", enabled: false },
+      { name: "get_news", enabled: true, guidance: "x".repeat(601) },
+      { name: "custom_my_feed", enabled: false },
+    ]);
+    expect(issues.map((i) => i.field)).toEqual([
+      "toolOverrides.nope",
+      "toolOverrides.set_rationale",
+      "toolOverrides.get_news",
+    ]);
   });
 });

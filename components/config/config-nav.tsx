@@ -9,9 +9,8 @@ import { cn } from "@/components/ui";
 type Tab = { segment: string; label: string; exact?: boolean };
 
 const TABS: Tab[] = [
-  { segment: "config", label: "Editor", exact: true },
+  { segment: "config", label: "Agent", exact: true },
   { segment: "config/versions", label: "Versions" },
-  { segment: "film-room", label: "Film room" },
 ];
 
 /** Sub-navigation for a team's owner-console pages. */
@@ -29,7 +28,7 @@ export function ConfigNav({ leagueId, teamId }: { leagueId: string; teamId: stri
         className="flex shrink-0 items-center gap-1.5 border-b-2 border-transparent px-3 py-2.5 text-sm text-muted-foreground transition-colors hover:text-foreground"
       >
         <ArrowLeft className="size-3.5" aria-hidden />
-        Team
+        Roster
       </Link>
       {TABS.map((tab) => {
         const href = `${base}/${tab.segment}`;

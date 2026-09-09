@@ -1,5 +1,6 @@
 "use client";
 
+import { TeamAvatar } from "@/components/league/identity";
 import Link from "next/link";
 import { usePreloadedQuery, type Preloaded } from "convex/react";
 
@@ -33,9 +34,19 @@ export function TeamsGrid({
   return (
     <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
       {cards.map((team) => (
-        <Card key={team.id} size="sm" className="transition-colors hover:border-line-strong">
+        <Card
+          key={team.id}
+          size="sm"
+          className="transition-colors hover:border-line-strong"
+        >
           <CardHeader>
-            <CardTitle>
+            <CardTitle className="flex items-center gap-3">
+              <TeamAvatar
+                name={team.name}
+                teamId={team.id}
+                avatarUrl={team.avatarUrl}
+                avatarTemplate={team.avatarTemplate}
+              />
               <Link
                 href={`/leagues/${leagueId}/teams/${team.id}`}
                 className="hover:text-brand-strong"
@@ -80,7 +91,9 @@ function TeamStat({ label, value }: { label: string; value: string }) {
   return (
     <div className="min-w-0">
       <dt className="eyebrow">{label}</dt>
-      <dd className="mt-1.5 truncate font-mono text-sm tabular-nums text-foreground">{value}</dd>
+      <dd className="mt-1.5 truncate font-mono text-sm tabular-nums text-foreground">
+        {value}
+      </dd>
     </div>
   );
 }

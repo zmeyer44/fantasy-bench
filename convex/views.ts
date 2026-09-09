@@ -16,6 +16,7 @@ import { v } from "convex/values";
 import type { LineupSlot, SnapshotPlayer } from "../lib/snapshot/types";
 import type { Doc, Id } from "./_generated/dataModel";
 import { query, type QueryCtx } from "./_generated/server";
+import { isPrivateAt, revealAtFor } from "./lib/visibility";
 import { requireLeagueRead } from "./lib/auth";
 import { compareViewRows, rankRows } from "./lib/standings_pure";
 import {
@@ -31,7 +32,7 @@ import {
   snapshotPlayer,
   windowLabelText,
 } from "./lib/views_shared";
-import { latestMetaChunk, latestPayload } from "./snapshot";
+import { readPayload, latestMetaChunk, latestPayload } from "./snapshot";
 import { recentRunsForTeam, type RunListItem } from "./runs";
 import { currentWeekNoFor } from "./weeks";
 import { windowSchedule, type WindowSchedule } from "./windows";
@@ -49,6 +50,8 @@ export type StandingsRow = {
   teamId: string;
   teamName: string;
   abbreviation: string;
+  avatarUrl?: string | null;
+  avatarTemplate?: string;
   ownerUserId: string | null;
   wins: number;
   losses: number;
@@ -66,6 +69,8 @@ export type TeamCard = {
   id: string;
   name: string;
   abbreviation: string;
+  avatarUrl?: string | null;
+  avatarTemplate?: string;
   ownerUserId: string | null;
   ownerName: string | null;
   record: string;
@@ -82,6 +87,8 @@ export type MatchupSide = {
   teamId: string;
   teamName: string;
   abbreviation: string;
+  avatarUrl?: string | null;
+  avatarTemplate?: string;
   /** Official score when final, else the live sum from the snapshot. */
   score: number;
   live: boolean;
@@ -148,6 +155,8 @@ export async function standingsFor(
       teamId: team._id,
       teamName: team.name,
       abbreviation: team.abbreviation,
+      avatarTemplate: team.avatarTemplate,
+      avatarUrl: team.avatarStorageId ? await ctx.storage.getUrl(team.avatarStorageId) : null,
       ownerUserId: team.ownerUserId ?? null,
       wins: standing?.wins ?? 0,
       losses: standing?.losses ?? 0,
@@ -186,6 +195,8 @@ export const teams = query({
         id: row.teamId,
         name: row.teamName,
         abbreviation: row.abbreviation,
+        avatarTemplate: row.avatarTemplate,
+        avatarUrl: row.avatarUrl,
         ownerUserId: row.ownerUserId,
         ownerName: owner?.name ?? null,
         record: recordText(row),
@@ -272,6 +283,8 @@ async function buildMatchupCards(
       teamId,
       teamName: team?.name ?? "Unknown",
       abbreviation: team?.abbreviation ?? "??",
+      avatarTemplate: team?.avatarTemplate,
+      avatarUrl: standing?.avatarUrl,
       score: round2(useLive ? live : official),
       live: useLive,
       record: standing ? recordText(standing) : "0-0",
@@ -315,6 +328,7 @@ export type MatchupSlot = {
   playerName: string | null;
   position: string | null;
   nflTeam: string | null;
+  sleeperId?: string | null;
   opponent: string | null;
   injuryStatus: string | null;
   kickoffAt: string | null;
@@ -323,6 +337,8 @@ export type MatchupSlot = {
 };
 
 export type MatchupTeamView = {
+  avatarUrl?: string | null;
+  avatarTemplate?: string;
   teamId: Id<"teams">;
   teamName: string;
   abbreviation: string;
@@ -384,6 +400,7 @@ async function buildSide(
       playerName: player?.fullName ?? null,
       position: player?.position ?? null,
       nflTeam: player?.nflTeam ?? null,
+      sleeperId: player?.sleeperId ?? null,
       opponent: snap?.opponent ?? null,
       injuryStatus: snap?.injuryStatus ?? player?.injuryStatus ?? null,
       kickoffAt: snap?.kickoffAt ?? null,
@@ -413,6 +430,8 @@ async function buildSide(
     teamId,
     teamName: team?.name ?? "Unknown",
     abbreviation: team?.abbreviation ?? "??",
+    avatarTemplate: team?.avatarTemplate,
+    avatarUrl: team?.avatarStorageId ? await ctx.storage.getUrl(team.avatarStorageId) : null,
     record: standing ? recordText(standing) : "0-0",
     slots,
     projectedTotal: round2(starters.reduce((sum, slot) => sum + (slot.projection ?? 0), 0)),
@@ -424,18 +443,35 @@ async function buildSide(
 }
 
 export const matchup = query({
-  args: { leagueId: v.id("leagues"), weekNo: v.number(), matchupId: v.id("matchups") },
-  handler: async (ctx, { leagueId, weekNo, matchupId }): Promise<MatchupPage | null> => {
+  args: {
+    leagueId: v.id("leagues"),
+    weekNo: v.number(),
+    matchupId: v.id("matchups"),
+  },
+  handler: async (
+    ctx,
+    { leagueId, weekNo, matchupId },
+  ): Promise<MatchupPage | null> => {
     const { league } = await requireLeagueRead(ctx, leagueId);
     const row = await ctx.db.get("matchups", matchupId);
-    if (!row || row.leagueId !== leagueId) return null;
+    if (!row || row.leagueId !== leagueId || row.weekNo !== weekNo) return null;
 
     const rules = await ctx.db
       .query("league_rules")
       .withIndex("by_leagueId", (q) => q.eq("leagueId", leagueId))
       .unique();
     const preset = rules?.scoringPreset ?? "ppr";
-    const snapshot = await latestPayload(ctx, leagueId);
+    const snapshotRow = await ctx.db
+      .query("snapshots")
+      .withIndex("by_leagueId_weekNo_status_takenAt", (q) =>
+        q.eq("leagueId", leagueId).eq("weekNo", weekNo).eq("status", "ready"),
+      )
+      .order("desc")
+      .first();
+    const payload = snapshotRow
+      ? await readPayload(ctx, snapshotRow._id)
+      : null;
+    const snapshot = payload ? { payload } : null;
     const table = await standingsFor(ctx, leagueId, league.season);
 
     return {
@@ -474,6 +510,7 @@ export type RosterEntry = {
   fullName: string;
   position: string;
   nflTeam: string | null;
+  sleeperId?: string | null;
   injuryStatus: string | null;
   byeWeek: number | null;
   acquiredVia: string;
@@ -494,6 +531,11 @@ export type TeamPage = {
     leagueId: Id<"leagues">;
     name: string;
     abbreviation: string;
+    avatarUrl?: string | null;
+    avatarTemplate?: string;
+    avatarStatus?: string;
+    avatarError?: string;
+    identityRunId?: Id<"runs">;
     ownerUserId: Id<"users"> | null;
     ownerName: string | null;
     ownerEmail: string | null;
@@ -525,7 +567,22 @@ export type TeamPage = {
     changeSummary: string | null;
     createdAt: number | null;
     contextChars: number;
+    /**
+     * Epoch ms until which this viewer may not see the version's content
+     * (customisation cooldown); null when everything below is visible.
+     */
+    privateUntil: number | null;
+    /** Opening of the system prompt the owner wrote, for the team page's agent panel. */
+    contextExcerpt: string;
     hasPendingVersion: boolean;
+    skillNames: string[];
+    /** Default tools an owner switched off / annotated on the live version. */
+    toolsDisabled: number;
+    toolsGuided: number;
+    /** Enabled team-scoped custom tools (`custom_providers` rows). */
+    customTools: string[];
+    /** True when the team runs on its owner's own gateway key (bypasses spend caps). */
+    ownKey: boolean;
   };
   recentRuns: RunListItem[];
   cost: { seasonUsd: number; weekUsd: number; seasonTokens: number; runCount: number };
@@ -570,7 +627,12 @@ export const team = query({
   handler: async (ctx, { teamId }): Promise<TeamPage | null> => {
     const teamRow = await ctx.db.get("teams", teamId);
     if (!teamRow) return null;
-    const { league } = await requireLeagueRead(ctx, teamRow.leagueId);
+    const access = await requireLeagueRead(ctx, teamRow.leagueId);
+    const { league } = access;
+    const viewerUserId = access.viewer?.userId ?? null;
+    const canSeePrivate =
+      viewerUserId !== null && (teamRow.ownerUserId === viewerUserId || access.isCommissioner);
+    const now = Date.now();
 
     const rules = await ctx.db
       .query("league_rules")
@@ -605,6 +667,7 @@ export const team = query({
         fullName: player.fullName,
         position: player.position,
         nflTeam: player.nflTeam ?? null,
+        sleeperId: player.sleeperId,
         injuryStatus: snap?.injuryStatus ?? player.injuryStatus ?? null,
         byeWeek: player.byeWeek ?? null,
         acquiredVia: row.acquiredVia,
@@ -658,6 +721,39 @@ export const team = query({
       ? await ctx.db.get("config_versions", config.currentVersionId)
       : null;
 
+    const versionCreatedAt = version ? (version.createdAt ?? version._creationTime) : null;
+    const privateUntil =
+      versionCreatedAt !== null && isPrivateAt(versionCreatedAt, now, canSeePrivate)
+        ? revealAtFor(versionCreatedAt)
+        : null;
+    const hidden = privateUntil !== null;
+
+    const skillNames: string[] = [];
+    for (const skillId of hidden ? [] : (version?.skillIds ?? [])) {
+      const skill = await ctx.db.get("skills", skillId);
+      if (skill) skillNames.push(skill.name);
+    }
+    const overrides = hidden ? [] : (version?.toolOverrides ?? []);
+    // Bounded: a team registers a handful of custom tools at most. Each tool has
+    // its own cooldown clock (they are not versioned).
+    const customTools = (
+      await ctx.db
+        .query("custom_providers")
+        .withIndex("by_teamId", (q) => q.eq("teamId", teamId))
+        .take(50)
+    )
+      .filter(
+        (row) =>
+          row.enabled && !isPrivateAt(row.updatedAt ?? row._creationTime, now, canSeePrivate),
+      )
+      .map((row) => row.name);
+
+    const ownKey =
+      (await ctx.db
+        .query("team_gateway_keys")
+        .withIndex("by_teamId", (q) => q.eq("teamId", teamId))
+        .unique()) !== null;
+
     const owner = teamRow.ownerUserId ? await ctx.db.get("users", teamRow.ownerUserId) : null;
     const cost = await teamCost(ctx, teamId, league.season, weekNo);
     const recentRuns = await recentRunsForTeam(ctx, teamId, RECENT_RUNS);
@@ -669,6 +765,11 @@ export const team = query({
         leagueId: teamRow.leagueId,
         name: teamRow.name,
         abbreviation: teamRow.abbreviation,
+        avatarTemplate: teamRow.avatarTemplate,
+        avatarUrl: teamRow.avatarStorageId ? await ctx.storage.getUrl(teamRow.avatarStorageId) : null,
+        avatarStatus: teamRow.avatarStatus,
+        avatarError: teamRow.avatarError,
+        identityRunId: teamRow.identityRunId,
         ownerUserId: teamRow.ownerUserId ?? null,
         ownerName: owner?.name ?? null,
         ownerEmail: owner?.email ?? null,
@@ -707,11 +808,18 @@ export const team = query({
         versionNo: version?.versionNo ?? null,
         modelId: version?.modelId ?? null,
         modelLabel: modelLabel(version?.modelId),
-        harness: version?.harness ?? null,
-        changeSummary: version?.changeSummary ?? null,
+        harness: hidden ? null : (version?.harness ?? null),
+        changeSummary: hidden ? null : (version?.changeSummary ?? null),
         createdAt: version?._creationTime ?? null,
         contextChars: version?.contextMd.length ?? 0,
+        privateUntil,
+        contextExcerpt: hidden ? "" : (version?.contextMd ?? "").trim().slice(0, 420),
         hasPendingVersion: Boolean(config?.pendingVersionId),
+        skillNames,
+        toolsDisabled: overrides.filter((o) => !o.enabled).length,
+        toolsGuided: overrides.filter((o) => o.enabled && (o.guidance ?? "").trim()).length,
+        customTools,
+        ownKey,
       },
       recentRuns,
       cost,

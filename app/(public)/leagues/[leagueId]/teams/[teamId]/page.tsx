@@ -7,6 +7,7 @@ import { TeamView } from "@/components/league/team-view";
 import { api } from "@/convex/_generated/api";
 import type { Id } from "@/convex/_generated/dataModel";
 import { fetchAuthQuery, preloadAuthQuery } from "@/lib/convex/server";
+import { getViewer, viewerMembership } from "@/lib/convex/viewer";
 
 export async function generateMetadata({
   params,
@@ -23,9 +24,10 @@ export default async function TeamPage({
 }: PageProps<"/leagues/[leagueId]/teams/[teamId]">) {
   const { leagueId, teamId } = await params;
 
-  const preloaded = await readOrNull(() =>
-    preloadAuthQuery(api.views.team, { teamId: teamId as Id<"teams"> }),
-  );
+  const [preloaded, viewer] = await Promise.all([
+    readOrNull(() => preloadAuthQuery(api.views.team, { teamId: teamId as Id<"teams"> })),
+    getViewer(),
+  ]);
   if (!preloaded) notFound();
 
   // The preloaded value is readable on the server, so a team that belongs to a
@@ -33,5 +35,8 @@ export default async function TeamPage({
   const page = preloadedQueryResult(preloaded);
   if (!page || page.team.leagueId !== leagueId) notFound();
 
-  return <TeamView leagueId={leagueId} teamId={teamId} preloaded={preloaded} />;
+  const membership = viewerMembership(viewer, leagueId);
+  const canEditAgent = membership?.teamId === teamId || membership?.role === "commissioner";
+
+  return <TeamView leagueId={leagueId} teamId={teamId} preloaded={preloaded} canEditAgent={canEditAgent} />;
 }

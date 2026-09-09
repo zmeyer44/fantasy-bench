@@ -11,9 +11,11 @@ import type { ToolSet } from "ai";
 
 import type { ToolContext, WindowScope, WindowType } from "../types";
 
+import { applyToolOverrides } from "./catalog";
 import { buildCustomProviderTools } from "./custom";
 import { buildDraftTools } from "./draft";
 import { buildReadTools, COMMISSIONER_EXCLUDED_READ_TOOLS, READ_TOOL_NAMES } from "./read";
+import { buildIdentityTools } from "./identity";
 import { buildWriteTools } from "./write";
 
 export { agentContext, commitAction } from "./context";
@@ -21,6 +23,16 @@ export { emptyRunToolState } from "../types";
 export type { RunToolState, ToolContext, ToolResult } from "../types";
 export { buildCustomProviderTools, providerSlug } from "./custom";
 export { READ_TOOL_NAMES } from "./read";
+export {
+  TOOL_CATALOG,
+  TOOL_BY_NAME,
+  applyToolOverrides,
+  guidanceByTool,
+  normalizeToolOverrides,
+  validateToolOverrides,
+  type ToolCatalogEntry,
+  type ToolOverride,
+} from "./catalog";
 
 /** Forum tools are available in every window — open question 3: "always". */
 export const FORUM_TOOL_NAMES = ["post_to_forum", "comment_on_forum", "vote_on_forum"] as const;
@@ -60,7 +72,7 @@ export function toolsForWindow(
     return [...READ_TOOL_NAMES.filter((n) => !excluded.has(n)), ...ALWAYS_TOOL_NAMES];
   }
 
-  const names: string[] = [...READ_TOOL_NAMES, ...ALWAYS_TOOL_NAMES];
+  const names: string[] = [...READ_TOOL_NAMES, ...ALWAYS_TOOL_NAMES, "update_team_identity"];
   switch (windowType) {
     case "lineup":
       names.push(...LINEUP_TOOL_NAMES);
@@ -85,12 +97,15 @@ export function toolsForWindow(
  *
  * Tools close over `ctx` (see `./context` for why not `toolsContext`). Custom
  * provider tools are appended after scoping: they are read-only and available in
- * every window.
+ * every window. The config version's tool overrides apply last: a disabled tool
+ * is absent from the set (never `set_rationale`), and owner guidance is appended
+ * to the tool's description.
  */
 export function buildTools(ctx: ToolContext): ToolSet {
   const all: Record<string, unknown> = {
     ...buildReadTools(ctx),
     ...buildWriteTools(ctx),
+    ...buildIdentityTools(ctx),
     ...buildDraftTools(ctx),
   };
   const allowed = new Set(toolsForWindow(ctx.windowType, ctx.windowScope, { teamId: ctx.teamId }));
@@ -98,7 +113,10 @@ export function buildTools(ctx: ToolContext): ToolSet {
   for (const [name, impl] of Object.entries(all)) {
     if (allowed.has(name)) scoped[name] = impl;
   }
-  return { ...scoped, ...buildCustomProviderTools(ctx) } as ToolSet;
+  return applyToolOverrides(
+    { ...scoped, ...buildCustomProviderTools(ctx) } as Record<string, { description?: string }>,
+    ctx.toolOverrides,
+  ) as ToolSet;
 }
 
 /** One-line-per-tool summary injected into the base prompt. */

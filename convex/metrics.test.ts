@@ -1,5 +1,6 @@
 /**
- * The film room: lineup efficiency measured against the week's snapshot.
+ * Process metrics: lineup efficiency measured against the week's snapshot when
+ * a window closes.
  *
  * The rule the old service established and this one keeps: the optimal lineup is
  * the best call available *from the snapshot's projections*, then both lineups
@@ -10,7 +11,7 @@ import { convexTest } from "convex-test";
 import { describe, expect, test } from "vitest";
 
 import type { SnapshotPayload } from "../lib/snapshot/types";
-import { api, internal } from "./_generated/api";
+import { internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
 import schema from "./schema";
 
@@ -246,200 +247,6 @@ async function seed(t: T, opts: { snapshot?: boolean } = {}) {
   });
 }
 
-describe("metrics.filmRoom", () => {
-  test("scores on projections while the week has no stat lines", async () => {
-    const t = convexTest(schema, modules);
-    const s = await seed(t);
-    const film = await t.query(api.metrics.filmRoom, { teamId: s.teamId, weekNo: 1 });
-
-    expect(film.efficiencyUnavailableReason).toBeNull();
-    expect(film.efficiency).not.toBeNull();
-    expect(film.efficiency!.basis).toBe("projected");
-    // Started QB (20) + the worse RB (5); the optimal call was QB + the better RB.
-    expect(film.efficiency!.actual).toBe(25);
-    expect(film.efficiency!.optimal).toBe(35);
-    expect(film.efficiency!.efficiency).toBeCloseTo(0.7143, 4);
-    expect(film.efficiency!.pointsLeftOnBench).toBe(10);
-    expect(film.efficiency!.fromMetrics).toBe(false);
-    expect(film.efficiency!.actualSlots.map((slot) => slot.playerName)).toEqual([
-      "Quinn Back",
-      "Benny Bench",
-    ]);
-    expect(film.efficiency!.optimalSlots.map((slot) => slot.playerName)).toEqual([
-      "Quinn Back",
-      "Rick Runner",
-    ]);
-    expect(film.efficiency!.snapshotTakenAt).toBe(TAKEN_AT);
-    expect(film.noteToAgent).toBe("Start your studs.");
-    expect(film.availableWeeks).toEqual([1, 2]);
-  });
-
-  test("switches to actual points once stat lines land", async () => {
-    const t = convexTest(schema, modules);
-    const s = await seed(t);
-    await t.run(async (ctx) => {
-      const stat = (playerId: Id<"players">, points: number) =>
-        ctx.db.insert("player_stats_weekly", {
-          playerId,
-          season: SEASON,
-          week: 1,
-          source: "sleeper",
-          stats: {},
-          fantasyPointsPpr: points,
-          fantasyPointsHalf: points,
-          fantasyPointsStd: points,
-          effectiveAt: NOW,
-        });
-      await stat(s.qb, 18);
-      await stat(s.rbGood, 14);
-      await stat(s.rbBad, 3);
-    });
-
-    const film = await t.query(api.metrics.filmRoom, { teamId: s.teamId, weekNo: 1 });
-    expect(film.efficiency!.basis).toBe("actual");
-    expect(film.efficiency!.actual).toBe(21);
-    expect(film.efficiency!.optimal).toBe(32);
-    expect(film.efficiency!.actualSlots[1].points).toBe(3);
-  });
-
-  test("prefers the stored team_week_metrics headline figures when they exist", async () => {
-    const t = convexTest(schema, modules);
-    const s = await seed(t);
-    await t.run(async (ctx) => {
-      await ctx.db.insert("team_week_metrics", {
-        leagueId: s.leagueId,
-        teamId: s.teamId,
-        season: SEASON,
-        weekNo: 1,
-        actualPoints: 40,
-        optimalPoints: 50,
-        lineupEfficiency: 0.8,
-        pointsLeftOnBench: 10,
-        runCount: 3,
-        fallbackCount: 0,
-        updatedAt: NOW,
-      });
-    });
-
-    const film = await t.query(api.metrics.filmRoom, { teamId: s.teamId, weekNo: 1 });
-    expect(film.efficiency).toMatchObject({
-      actual: 40,
-      optimal: 50,
-      efficiency: 0.8,
-      pointsLeftOnBench: 10,
-      fromMetrics: true,
-    });
-    // The slot-by-slot breakdown still comes from the snapshot.
-    expect(film.efficiency!.actualSlots).toHaveLength(2);
-  });
-
-  test("explains itself when the week has no snapshot", async () => {
-    const t = convexTest(schema, modules);
-    const s = await seed(t, { snapshot: false });
-    const film = await t.query(api.metrics.filmRoom, { teamId: s.teamId, weekNo: 1 });
-    expect(film.efficiency).toBeNull();
-    expect(film.efficiencyUnavailableReason).toMatch(/No snapshot was stored for week 1/);
-  });
-
-  test("defaults to the most recently finished week and carries runs, waivers and spend", async () => {
-    const t = convexTest(schema, modules);
-    const s = await seed(t);
-    await t.run(async (ctx) => {
-      const windowId = await ctx.db.insert("windows", {
-        leagueId: s.leagueId,
-        type: "waiver",
-        label: "waiver",
-        weekNo: 1,
-        roundNo: 1,
-        opensAt: NOW - 10_000,
-        submissionDeadlineAt: NOW - 5_000,
-        closesAt: NOW - 1_000,
-        status: "closed",
-        scope: {},
-        runCount: 1,
-        terminalRunCount: 1,
-      });
-      await ctx.db.insert("runs", {
-        leagueId: s.leagueId,
-        windowId,
-        teamId: s.teamId,
-        modelId: "anthropic/claude-sonnet-4.5",
-        kind: "team",
-        status: "succeeded",
-        windowType: "waiver",
-        windowLabel: "waiver",
-        weekNo: 1,
-        attempt: 1,
-        lastPersistedStep: 0,
-        totalCostUsd: 0.3,
-        totalInputTokens: 10,
-        totalOutputTokens: 5,
-        stepCount: 1,
-        committedActionCount: 1,
-        rejectedActionCount: 0,
-      });
-      await ctx.db.insert("waiver_claims", {
-        leagueId: s.leagueId,
-        teamId: s.teamId,
-        windowId,
-        weekNo: 1,
-        addPlayerId: s.rbGood,
-        dropPlayerId: s.rbBad,
-        bid: 12,
-        priority: 1,
-        status: "won",
-      });
-      await ctx.db.insert("team_week_rollups", {
-        leagueId: s.leagueId,
-        teamId: s.teamId,
-        season: SEASON,
-        weekNo: 1,
-        inputTokens: 100,
-        outputTokens: 50,
-        cachedInputTokens: 0,
-        reasoningTokens: 0,
-        costUsd: 0.3,
-        computedCostUsd: 0.3,
-        gatewayCostUsd: 0,
-        runCount: 1,
-        stepCount: 1,
-        fallbackCount: 0,
-        invalidActionCount: 0,
-        updatedAt: NOW,
-      });
-      await ctx.db.insert("team_results", {
-        leagueId: s.leagueId,
-        teamId: s.teamId,
-        weekNo: 1,
-        pointsFor: 21,
-        pointsAgainst: 18,
-        won: true,
-        lost: false,
-        tied: false,
-      });
-    });
-
-    const film = await t.query(api.metrics.filmRoom, { teamId: s.teamId });
-    expect(film.weekNo).toBe(1); // week 2 has not ended yet
-    expect(film.runs.map((run) => run.windowLabel)).toEqual(["waiver"]);
-    expect(film.waivers[0]).toMatchObject({
-      addPlayerName: "Rick Runner",
-      dropPlayerName: "Benny Bench",
-      bid: 12,
-      status: "won",
-    });
-    expect(film.spend).toMatchObject({ usd: 0.3, tokens: 150, runCount: 1 });
-    expect(film.seasonSpend).toBe(0.3);
-    expect(film.result).toMatchObject({ pointsFor: 21, won: true });
-    expect(film.budget.teamWeekUsd).toBe(0.3);
-  });
-});
-
-// ===========================================================================
-// Phase 4 — the process-metrics writer
-// ===========================================================================
-
-/** A closed lineup window over the seeded snapshot, plus two runs for the team. */
 async function seedWindow(
   t: T,
   s: Awaited<ReturnType<typeof seed>>,
@@ -580,10 +387,6 @@ describe("metrics.computeForWindowClose", () => {
     expect(metrics!.invalidActionRate).toBeCloseTo(0.4, 8);
     expect(metrics!.waiverValue).toBeUndefined();
     expect(metrics!.tradeDelta).toBeUndefined();
-
-    // The film room then prefers the stored headline figures.
-    const film = await t.query(api.metrics.filmRoom, { teamId: s.teamId, weekNo: 1 });
-    expect(film.efficiency).toMatchObject({ actual: 21, optimal: 32, fromMetrics: true });
   });
 
   test("records the run counters but no points before any stat line lands", async () => {
@@ -599,10 +402,6 @@ describe("metrics.computeForWindowClose", () => {
     expect(metrics!.lineupEfficiency).toBeUndefined();
     expect(metrics!.projectionCapture).toBeUndefined();
     expect(metrics!.invalidActionRate).toBeCloseTo(0.4, 8);
-
-    // Without stored points the film room keeps computing the projected view.
-    const film = await t.query(api.metrics.filmRoom, { teamId: s.teamId, weekNo: 1 });
-    expect(film.efficiency).toMatchObject({ basis: "projected", fromMetrics: false });
   });
 
   test("still writes run counters when the window has no snapshot", async () => {

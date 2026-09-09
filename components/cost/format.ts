@@ -20,13 +20,3 @@ export function formatPct(value: number | null, digits = 1): string {
   if (value === null || !Number.isFinite(value)) return "—";
   return `${(value * 100).toFixed(digits)}%`;
 }
-
-/**
- * A signed delta, for the film room's actual-vs-optimal columns. Zero is
- * rendered as an em dash: "no change" is not a number worth reading.
- */
-export function formatSignedPoints(value: number, digits = 1): string {
-  if (!Number.isFinite(value)) return "—";
-  if (Math.abs(value) < 0.05) return "—";
-  return `${value > 0 ? "+" : "−"}${Math.abs(value).toFixed(digits)}`;
-}

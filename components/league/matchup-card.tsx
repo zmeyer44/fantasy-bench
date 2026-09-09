@@ -1,10 +1,13 @@
+import { TeamAvatar } from "@/components/league/identity";
 import Link from "next/link";
 
 import { Badge, cn } from "@/components/ui";
 import type { api } from "@/convex/_generated/api";
 import type { FunctionReturnType } from "convex/server";
 
-export type MatchupCardData = FunctionReturnType<typeof api.views.matchups>[number];
+export type MatchupCardData = FunctionReturnType<
+  typeof api.views.matchups
+>[number];
 
 export function MatchupCard({
   leagueId,
@@ -30,8 +33,16 @@ export function MatchupCard({
           <Badge variant="outline">upcoming</Badge>
         )}
       </div>
-      <Side side={matchup.away} live={live} winning={!homeLeads && matchup.away.score > 0} />
-      <Side side={matchup.home} live={live} winning={homeLeads && matchup.home.score > 0} />
+      <Side
+        side={matchup.away}
+        live={live}
+        winning={!homeLeads && matchup.away.score > 0}
+      />
+      <Side
+        side={matchup.home}
+        live={live}
+        winning={homeLeads && matchup.home.score > 0}
+      />
     </Link>
   );
 }
@@ -46,16 +57,31 @@ function Side({
   winning: boolean;
 }) {
   return (
-    <div className="flex items-baseline justify-between gap-3 py-0.5">
-      <span className="min-w-0 truncate text-sm text-foreground">
-        {side.teamName}
-        <span className="ml-1.5 font-mono text-[10px] text-ink-faint">{side.record}</span>
+    <div className="flex items-center justify-between gap-3 py-1.5">
+      <span className="flex min-w-0 items-center gap-2 text-sm text-foreground">
+        <TeamAvatar
+          name={side.teamName}
+          teamId={side.teamId}
+          avatarUrl={side.avatarUrl}
+          avatarTemplate={side.avatarTemplate}
+          size={28}
+        />
+        <span className="truncate">
+          {side.teamName}
+          <span className="ml-1.5 font-mono text-[10px] text-ink-faint">
+            {side.record}
+          </span>
+        </span>
       </span>
       <span
         className={cn(
           "font-mono text-sm tabular-nums",
           // Lime marks a score that is still moving; settled scores stay grey.
-          live ? "text-brand" : winning ? "font-medium text-foreground" : "text-muted-foreground",
+          live
+            ? "text-brand"
+            : winning
+              ? "font-medium text-foreground"
+              : "text-muted-foreground",
         )}
       >
         {side.score.toFixed(1)}

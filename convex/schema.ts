@@ -133,6 +133,12 @@ export const harnessSettings = v.object({
   deliberateMode: v.boolean(),
 });
 
+export const toolOverride = v.object({
+  name: v.string(),
+  enabled: v.boolean(),
+  guidance: v.optional(v.string()),
+});
+
 export const editLockConfig = v.object({
   unlockDay: v.string(),
   unlockTime: v.string(),
@@ -288,6 +294,12 @@ export default defineSchema({
     fallbackModelId: v.optional(v.string()),
     weeklyTokenCapPerTeam: v.optional(v.number()),
     leagueUsdHardCap: v.optional(v.number()),
+    /**
+     * Weekly USD spend cap per team. Absent = the platform default ($2.00,
+     * `DEFAULT_WEEKLY_USD_CAP_PER_TEAM`); null = no cap. A team running on its
+     * owner's own gateway key bypasses every cap.
+     */
+    weeklyUsdCapPerTeam: v.optional(v.union(v.number(), v.null())),
     contextCharLimit: v.number(),
     maxStepsCap: v.number(),
     editLock: editLockConfig,
@@ -338,6 +350,13 @@ export default defineSchema({
     waiverPriority: v.number(),
     karma: v.number(),
     draftBudgetRemaining: v.number(),
+    avatarTemplate: v.optional(v.string()),
+    avatarStorageId: v.optional(v.id("_storage")),
+    avatarStatus: v.optional(v.union(v.literal("generating"), v.literal("ready"), v.literal("failed"))),
+    avatarRequestKey: v.optional(v.string()),
+    avatarRequestedAt: v.optional(v.number()),
+    avatarError: v.optional(v.string()),
+    identityRunId: v.optional(v.id("runs")),
     /** Postgres `created_at`, preserved by the seed. */
     createdAt: v.optional(v.number()),
   })
@@ -548,6 +567,28 @@ export default defineSchema({
     effectiveAt: v.number(),
   }).index("by_season_week_playerId", ["season", "week", "playerId"]),
 
+  /**
+   * Bring-your-own Vercel AI Gateway key, one per team. The key itself is stored
+   * AES-GCM encrypted (`convex/lib/secrets.ts`) and is decrypted only inside the
+   * run action; every read model exposes `last4` at most. Runs on a team key
+   * bypass the league's spend caps but are metered exactly like the rest.
+   */
+  team_gateway_keys: defineTable({
+    leagueId: v.id("leagues"),
+    teamId: v.id("teams"),
+    ciphertext: v.string(),
+    iv: v.string(),
+    last4: v.string(),
+    addedByUserId: v.id("users"),
+    createdAt: v.number(),
+    /** Last successful verification against the gateway. */
+    verifiedAt: v.optional(v.number()),
+    lastUsedAt: v.optional(v.number()),
+    lastError: v.optional(v.string()),
+  })
+    .index("by_teamId", ["teamId"])
+    .index("by_leagueId", ["leagueId"]),
+
   custom_providers: defineTable({
     leagueId: v.optional(v.id("leagues")),
     teamId: v.optional(v.id("teams")),
@@ -563,6 +604,8 @@ export default defineSchema({
     }),
     enabled: v.boolean(),
     createdByUserId: v.optional(v.id("users")),
+    /** Last definition change; the customisation cooldown counts from it. */
+    updatedAt: v.optional(v.number()),
   })
     .index("by_leagueId", ["leagueId"])
     .index("by_teamId", ["teamId"]),
@@ -634,6 +677,12 @@ export default defineSchema({
     modelId: v.string(),
     harness: harnessSettings,
     skillIds: v.array(v.id("skills")),
+    /**
+     * Per-tool customisation, deltas only: a default tool switched off, or owner
+     * guidance appended to its description. Validated against the tool catalog
+     * (`runtime/tools/catalog.ts`) on save.
+     */
+    toolOverrides: v.optional(v.array(toolOverride)),
     createdByUserId: v.optional(v.id("users")),
     appliedAt: v.optional(v.number()),
     changeSummary: v.optional(v.string()),
@@ -724,6 +773,7 @@ export default defineSchema({
     headline: v.optional(v.string()),
   })
     .index("by_leagueId_takenAt", ["leagueId", "takenAt"])
+    .index("by_leagueId_weekNo_status_takenAt", ["leagueId", "weekNo", "status", "takenAt"])
     .index("by_windowId", ["windowId"]),
 
   snapshot_digests: defineTable({
@@ -792,6 +842,8 @@ export default defineSchema({
     error: v.optional(v.string()),
     fallbackApplied: v.optional(fallbackApplied),
     promptSections: v.optional(v.array(promptSection)),
+    /** Which gateway key paid for this run: the league's or the team owner's own. */
+    keySource: v.optional(v.union(v.literal("league"), v.literal("team"))),
     /** Set when this run was enqueued by onComplete as the fallback-model retry of another run. */
     fallbackOfRunId: v.optional(v.id("runs")),
     /**

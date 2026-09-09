@@ -44,6 +44,7 @@ export type LoadedConfigVersion = {
   contextMd: string;
   harness: Doc<"config_versions">["harness"];
   skills: Array<{ name: string; bodyMd: string; description?: string }>;
+  toolOverrides: Doc<"config_versions">["toolOverrides"];
 };
 
 export type RunContext = {
@@ -58,6 +59,8 @@ export type RunContext = {
   snapshot: SnapshotPayload | null;
   digest: SnapshotDigest;
   customProviders: Doc<"custom_providers">[];
+  /** The team's own gateway key, still encrypted; the action decrypts it. Null = league key. */
+  teamKey: { id: Id<"team_gateway_keys">; ciphertext: string; iv: string; last4: string } | null;
   /**
    * What previous attempts of this run already did, so a resumed attempt can
    * rebuild its in-memory tool state instead of concluding the agent never
@@ -119,6 +122,7 @@ export const runContext = internalQuery({
           contextMd: version.contextMd,
           harness: version.harness,
           skills: await skillsFor(ctx, version),
+          toolOverrides: version.toolOverrides,
         };
       }
     }
@@ -153,6 +157,16 @@ export const runContext = internalQuery({
       (p) => p.enabled && (p.teamId == null || p.teamId === run.teamId),
     );
 
+    const teamKeyRow = run.teamId
+      ? await ctx.db
+          .query("team_gateway_keys")
+          .withIndex("by_teamId", (q) => q.eq("teamId", run.teamId as Id<"teams">))
+          .unique()
+      : null;
+    const teamKey = teamKeyRow
+      ? { id: teamKeyRow._id, ciphertext: teamKeyRow.ciphertext, iv: teamKeyRow.iv, last4: teamKeyRow.last4 }
+      : null;
+
     // Bounded: one run's actions.
     const priorActions = (
       await ctx.db
@@ -172,6 +186,7 @@ export const runContext = internalQuery({
       snapshot,
       digest,
       customProviders,
+      teamKey,
       priorActions,
     };
   },

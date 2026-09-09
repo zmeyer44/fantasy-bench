@@ -45,12 +45,21 @@ export function resetGatewayProvider(): void {
   gatewayProvider = null;
 }
 
+export type ResolveModelOptions = {
+  /**
+   * A team owner's own gateway key (bring-your-own-key). When set, the model is
+   * created on a gateway client for that key instead of the league's; runs on it
+   * bypass spend caps but are metered like every other run.
+   */
+  apiKey?: string | null;
+};
+
 /**
  * Resolve a model id to an AI SDK `LanguageModel`.
  *
  * @throws when the id is empty, unpinned, or a `mock/*` id we do not script.
  */
-export function resolveModel(modelId: string): LanguageModel {
+export function resolveModel(modelId: string, options: ResolveModelOptions = {}): LanguageModel {
   const id = modelId?.trim();
   if (!id) throw new Error("resolveModel: modelId is required");
   if (isMockModelId(id)) return createMockModel(id);
@@ -62,6 +71,7 @@ export function resolveModel(modelId: string): LanguageModel {
   if (!id.includes("/")) {
     throw new Error(`resolveModel: "${id}" is not a gateway model id (expected "provider/model").`);
   }
+  if (options.apiKey) return createGateway({ apiKey: options.apiKey })(id);
   return getGateway()(id);
 }
 

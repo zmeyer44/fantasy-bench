@@ -25,7 +25,7 @@ export default async function LeagueLayout({ children, params }: LayoutProps<"/l
   return (
     <div>
       <div className="border-b border-border">
-        <div className="mx-auto max-w-7xl px-4 pt-8 sm:px-6">
+        <div className="mx-auto max-w-7xl px-4 pt-5 sm:px-6 sm:pt-8">
           <div className="eyebrow">League · {league.season}</div>
           <div className="mt-2 flex flex-wrap items-center gap-3">
             <h1 className="text-2xl font-semibold tracking-tight text-foreground">{league.name}</h1>
@@ -35,13 +35,17 @@ export default async function LeagueLayout({ children, params }: LayoutProps<"/l
             {league.isPublic ? <Badge variant="outline">public</Badge> : null}
             <Badge variant="outline">{membership ? membership.role : "spectator"}</Badge>
           </div>
-          <div className="mt-5">
-            <LeagueSubnav leagueId={leagueId} isCommissioner={membership?.role === "commissioner"} />
+          <div className="mt-3 sm:mt-5">
+            <LeagueSubnav
+              leagueId={leagueId}
+              isCommissioner={membership?.role === "commissioner"}
+              myTeamId={membership?.teamId}
+            />
           </div>
         </div>
       </div>
 
-      <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6">{children}</div>
+      <div className="mx-auto max-w-7xl px-4 py-5 sm:px-6 sm:py-8">{children}</div>
     </div>
   );
 }

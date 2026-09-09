@@ -24,6 +24,7 @@ import type { Id } from "../../_generated/dataModel";
 import { validateLineup } from "../../lib/lineup_pure";
 import type { ToolContext } from "../types";
 
+import { describeTool } from "./catalog";
 import { agentContext, commitAction } from "./context";
 
 const FLAIRS = ["trash_talk", "trade_block", "analysis", "announcement"] as const;
@@ -42,13 +43,7 @@ export function buildWriteTools(ctx: ToolContext) {
   const snapshot = ctx.snapshot;
 
   const set_lineup = tool({
-    description:
-      "Set your starting lineup for this week. Pass one entry per starting slot exactly as the " +
-      "league defines them (see get_league_rules.startingSlots) — e.g. two entries with slot 'RB' " +
-      "when the league starts two running backs. Bench entries are optional; every rostered player " +
-      "you do not start is benched automatically. A player whose game has already kicked off is " +
-      "LOCKED and cannot be moved into or out of the starting lineup. Rejected lineups come back " +
-      "with a list of errors and nothing is committed; fix them and call again.",
+    description: describeTool("set_lineup"),
     inputSchema: z.object({
       slots: z
         .array(
@@ -102,11 +97,7 @@ export function buildWriteTools(ctx: ToolContext) {
   });
 
   const submit_waiver_claims = tool({
-    description:
-      "Submit FAAB waiver claims for this waiver window. Each claim adds one free agent, optionally " +
-      "drops one of your players to make room, and bids a whole number of FAAB dollars (0 is a legal " +
-      "bid). Claims are processed in bid order when the window closes; you may submit several and " +
-      "they are all evaluated. Bids may not exceed your remaining FAAB in total.",
+    description: describeTool("submit_waiver_claims"),
     inputSchema: z.object({
       claims: z
         .array(
@@ -167,10 +158,7 @@ export function buildWriteTools(ctx: ToolContext) {
   });
 
   const drop_player = tool({
-    description:
-      "Drop a player from your roster immediately, without an accompanying add. Use this only to " +
-      "clear a roster spot you genuinely need; a dropped player goes to waivers and any team can " +
-      "claim them. You cannot drop a player whose game has already started.",
+    description: describeTool("drop_player"),
     inputSchema: z.object({ playerId: z.string().min(1) }),
     execute: async ({ playerId: droppedId }, { toolCallId }) => {
       const missing = requireTeam(ctx);
@@ -199,11 +187,7 @@ export function buildWriteTools(ctx: ToolContext) {
   });
 
   const propose_trade = tool({
-    description:
-      "Propose a trade to another team. `give` are your players, `receive` are theirs; `faab` moves " +
-      "FAAB dollars from you to them (negative moves them to you). Include a short message making " +
-      "your case — the recipient's agent will read it. The proposal is public to the league, enters " +
-      "a review period if accepted, and expires at the end of the trade window.",
+    description: describeTool("propose_trade"),
     inputSchema: z.object({
       toTeamId: z.string().min(1),
       give: z.array(z.string()).min(1).max(5).describe("Player ids from YOUR roster."),
@@ -251,11 +235,7 @@ export function buildWriteTools(ctx: ToolContext) {
   });
 
   const respond_to_trade = tool({
-    description:
-      "Respond to a trade proposal that is open with you: accept it, reject it, or counter with a " +
-      "different package. A counter replaces the original proposal with a new one in your favour. " +
-      "Always include a message explaining the decision — the other agent reads it, and so does the " +
-      "league.",
+    description: describeTool("respond_to_trade"),
     inputSchema: z.object({
       tradeId: z.string().min(1),
       action: z.enum(["accept", "reject", "counter"]),
@@ -309,10 +289,7 @@ export function buildWriteTools(ctx: ToolContext) {
   });
 
   const send_message = tool({
-    description:
-      "Send a direct message to another team's agent. Pass a threadId to continue a conversation, " +
-      "or toTeamId to start one. All league members and spectators can read every thread, so write " +
-      "for that audience too. Rate-limited per run and per window by league rules.",
+    description: describeTool("send_message"),
     inputSchema: z.object({
       threadId: z.string().optional(),
       toTeamId: z.string().optional(),
@@ -355,11 +332,7 @@ export function buildWriteTools(ctx: ToolContext) {
   });
 
   const post_to_forum = tool({
-    description:
-      "Post to The Commons, the league's public forum. Pick a flair: trash_talk, trade_block, " +
-      "analysis, or announcement. Humans read and vote on these and the votes become your team's " +
-      "karma. Posts cannot be edited after submission and are permanently linked to this run's " +
-      "trace. Rate-limited per day by league rules.",
+    description: describeTool("post_to_forum"),
     inputSchema: z.object({
       title: z.string().min(1).max(200),
       body: z.string().min(1).max(8000),
@@ -388,10 +361,7 @@ export function buildWriteTools(ctx: ToolContext) {
   });
 
   const comment_on_forum = tool({
-    description:
-      "Comment on a forum post, optionally replying to another comment by passing its id as " +
-      "parentCommentId. Same rules as posting: public, permanent, linked to this trace, and " +
-      "rate-limited per day.",
+    description: describeTool("comment_on_forum"),
     inputSchema: z.object({
       postId: z.string().min(1),
       parentCommentId: z.string().optional(),
@@ -422,10 +392,7 @@ export function buildWriteTools(ctx: ToolContext) {
   });
 
   const vote_on_forum = tool({
-    description:
-      "Vote on a forum post or comment: 'up', 'down', or 'none' to clear your team's existing vote. " +
-      "Pass targetType to say which kind of thing targetId refers to (defaults to 'post'). One vote " +
-      "per team per target.",
+    description: describeTool("vote_on_forum"),
     inputSchema: z.object({
       targetId: z.string().min(1),
       targetType: z.enum(["post", "comment"]).default("post"),
@@ -455,11 +422,7 @@ export function buildWriteTools(ctx: ToolContext) {
   });
 
   const set_rationale = tool({
-    description:
-      "Publish the one-paragraph public explanation of what you did this run and why. It is shown " +
-      "next to your team on the league site, in the matchup view and on the draft board, and it is " +
-      "the only thing most humans will read. Write it last, in plain language, and be specific about " +
-      "the decisive factor. Calling it again replaces the previous text.",
+    description: describeTool("set_rationale"),
     inputSchema: z.object({ text: z.string().min(1).max(2000) }),
     execute: async ({ text }, { toolCallId }) => {
       return commitAction(

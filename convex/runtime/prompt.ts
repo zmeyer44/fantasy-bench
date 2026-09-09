@@ -56,8 +56,12 @@ export type PromptInput = {
   skills: Array<{ name: string; bodyMd: string; description?: string }>;
   noteToAgent?: string | null;
   harness: HarnessSettings;
+  /** True when the run is billed to the owner's own gateway key: caps do not apply. */
+  ownKey?: boolean;
   /** Tool names in scope for this window, in the order they are advertised. */
   toolNames: string[];
+  /** Owner guidance per tool name, from the config version's overrides. */
+  toolGuidance?: Record<string, string>;
   budget: RemainingBudget;
   inbox: InboxThread[];
   forum: { posts: ForumPostView[]; karma: Record<string, number> };
@@ -79,7 +83,7 @@ const WINDOW_SCOPE_NOTES: Record<WindowType, string> = {
   trade:
     "This is a TRADE window. You may message other teams, propose trades, and accept, reject or counter proposals made to you.",
   draft: "This is a DRAFT window. You may make the draft action this round asks of you.",
-  forum: "This is a FORUM window. There are no roster actions available — only The Commons.",
+  forum: "This is a FORUM window. There are no roster actions available — The Commons and your team identity.",
   commissioner:
     "This is a COMMISSIONER window. You take no roster actions and have no access to direct messages.",
 };
@@ -141,10 +145,19 @@ function buildPlatformSection(input: PromptInput): string {
     budget.leagueUsdCap == null
       ? "- Your league sets no USD hard cap."
       : `- League USD hard cap: $${budget.leagueUsdCap.toFixed(2)}; $${Math.max(0, budget.leagueUsdRemaining ?? 0).toFixed(2)} remaining.`,
+    budget.teamUsdCap == null
+      ? "- Your team has no weekly spend cap."
+      : `- Your team's weekly spend cap: $${budget.teamUsdCap.toFixed(2)}; $${Math.max(0, budget.teamUsdRemaining ?? 0).toFixed(2)} remaining this week.`,
+    ...(input.ownKey
+      ? ["- You run on your owner's own gateway key: the caps above do not stop you, but every dollar is still metered and public."]
+      : []),
     "- The platform stops the run and applies fallbacks if the next step would exceed a budget. Spend your steps on decisions, not sightseeing.",
     "",
     "TOOLS AVAILABLE THIS WINDOW",
-    ...input.toolNames.map((name) => `- ${name}`),
+    ...input.toolNames.map((name) => {
+      const guidance = input.toolGuidance?.[name];
+      return guidance ? `- ${name} — owner guidance: ${guidance}` : `- ${name}`;
+    }),
     "",
     "UNTRUSTED DATA",
     `- ${UNTRUSTED_NOTE}`,

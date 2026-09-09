@@ -1970,6 +1970,15 @@ describe("configs.* (was config.*)", () => {
         "config.get.versions[0].teamId",
         "config.get.versions[0].skillIds",
       ),
+      // The customisation cooldown (three weeks, `convex/lib/visibility.ts`).
+      ...additiveColumn(
+        "config.get.current.revealAt",
+        "config.get.current.redacted",
+        "config.get.versions[0].revealAt",
+        "config.get.versions[0].redacted",
+        "config.get.visibility",
+        "config.get.latestPublic",
+      ),
     ]);
 
     expect(actual.team.name).toBe("Regression to the Mean");
@@ -1998,6 +2007,8 @@ describe("configs.* (was config.*)", () => {
           "config.versions.versions[0].leagueId",
           "config.versions.versions[0].teamId",
           "config.versions.versions[0].skillIds",
+          "config.versions.versions[0].revealAt",
+          "config.versions.versions[0].redacted",
         ),
       ],
     );
@@ -2021,6 +2032,8 @@ describe("configs.* (was config.*)", () => {
           "config.version.version.leagueId",
           "config.version.version.teamId",
           "config.version.version.skillIds",
+          "config.version.version.revealAt",
+          "config.version.version.redacted",
         ),
       ],
     );
@@ -2240,6 +2253,11 @@ describe("ledger.* (was cost.*)", () => {
         leagueUsdRemaining: LEAF,
         leagueUsdPct: LEAF,
         overUsdCap: LEAF,
+        teamUsdCap: LEAF,
+        teamUsdRemaining: LEAF,
+        teamUsdPct: LEAF,
+        overTeamUsdCap: LEAF,
+        ownKey: LEAF,
         rollup: { tokensUsed: LEAF, usdUsed: LEAF, runCount: LEAF },
       },
     } as const;
@@ -2473,6 +2491,8 @@ describe("views.* (was views.*)", () => {
       snapshotTakenAt: DATE,
     } as const;
     assertSameKeysExcept(expected, normalize(actual), "views.home", [
+      // DEVIATION: team avatar URLs are additive read-model fields.
+      ...additiveColumn("views.home.matchups[0].away.avatarUrl", "views.home.matchups[0].home.avatarUrl", "views.home.standings[0].avatarUrl"),
       // `windows.terminalRunCount` is a denormalized counter the write paths keep
       // (`docs/CONVEX_CONVENTIONS.md`, "Counters every write path must maintain");
       // the old `WindowView` had only `runCount`, computed by a correlated subquery.
@@ -2496,7 +2516,10 @@ describe("views.* (was views.*)", () => {
 
   test("views.standings", async () => {
     const actual = await asDemo().query(api.views.standings, { leagueId: fx.leagueId });
-    assertSameKeys([STANDINGS_ROW], normalize(actual), "views.standings");
+    assertSameKeysExcept([STANDINGS_ROW], normalize(actual), "views.standings", [
+      // DEVIATION: team avatars and provider IDs for player headshots.
+      ...additiveColumn("views.standings[0].avatarUrl"),
+    ]);
 
     expect(actual).toHaveLength(12);
     expect(actual.map((row) => row.rank)).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]);
@@ -2526,7 +2549,10 @@ describe("views.* (was views.*)", () => {
         configVersionNo: LEAF,
       },
     ] as const;
-    assertSameKeys(expected, normalize(actual), "views.teams");
+    assertSameKeysExcept(expected, normalize(actual), "views.teams", [
+      // DEVIATION: team avatars and provider IDs for player headshots.
+      ...additiveColumn("views.teams[0].avatarUrl"),
+    ]);
 
     expect(actual).toHaveLength(12);
     expect(actual.every((row) => row.record === "0-0")).toBe(true);
@@ -2599,13 +2625,23 @@ describe("views.* (was views.*)", () => {
         changeSummary: LEAF,
         createdAt: DATE,
         contextChars: LEAF,
+        privateUntil: LEAF,
+        ownKey: LEAF,
+        contextExcerpt: LEAF,
         hasPendingVersion: LEAF,
+        skillNames: [LEAF],
+        toolsDisabled: LEAF,
+        toolsGuided: LEAF,
+        customTools: [LEAF],
       },
       recentRuns: [TRACE_LIST_ITEM],
       cost: { seasonUsd: LEAF, weekUsd: LEAF, seasonTokens: LEAF, runCount: LEAF },
       snapshotTakenAt: DATE,
     } as const;
-    assertSameKeys(expected, normalize(actual), "views.team");
+    assertSameKeysExcept(expected, normalize(actual), "views.team", [
+      // DEVIATION: team avatars and provider IDs for player headshots.
+      ...additiveColumn("views.team.lineup[0].entry.sleeperId", "views.team.roster[0].sleeperId", "views.team.team.avatarUrl"),
+    ]);
 
     expect(actual?.team.name).toBe("Regression to the Mean");
     expect(actual?.weekNo).toBe(1);
@@ -2623,7 +2659,10 @@ describe("views.* (was views.*)", () => {
 
   test("views.matchups", async () => {
     const actual = await asDemo().query(api.views.matchups, { leagueId: fx.leagueId, weekNo: 1 });
-    assertSameKeys([MATCHUP_CARD], normalize(actual), "views.matchups");
+    assertSameKeysExcept([MATCHUP_CARD], normalize(actual), "views.matchups", [
+      // DEVIATION: team avatars and provider IDs for player headshots.
+      ...additiveColumn("views.matchups[0].away.avatarUrl", "views.matchups[0].home.avatarUrl"),
+    ]);
     expect(actual).toHaveLength(6);
     expect(actual.every((card) => card.weekNo === 1 && card.isFinal === false)).toBe(true);
   });
@@ -2676,7 +2715,10 @@ describe("views.* (was views.*)", () => {
       home: side,
       away: side,
     } as const;
-    assertSameKeys(expected, normalize(actual), "views.matchup");
+    assertSameKeysExcept(expected, normalize(actual), "views.matchup", [
+      // DEVIATION: team avatars and provider IDs for player headshots.
+      ...additiveColumn("views.matchup.away.avatarUrl", "views.matchup.away.slots[0].sleeperId", "views.matchup.home.avatarUrl", "views.matchup.home.slots[0].sleeperId"),
+    ]);
 
     expect(actual?.weekNo).toBe(1);
     expect(actual?.home.slots.filter((slot) => slot.starting)).toHaveLength(9);
@@ -2768,7 +2810,10 @@ describe("views.* (was views.*)", () => {
       ],
       window: { id: LEAF, opensAt: DATE, closesAt: DATE, status: LEAF },
     } as const;
-    assertSameKeys(expected, normalize(actual), "views.waivers");
+    assertSameKeysExcept(expected, normalize(actual), "views.waivers", [
+      // DEVIATION: team avatars and provider IDs for player headshots.
+      ...additiveColumn("views.waivers.results[0].addNflTeam", "views.waivers.results[0].addSleeperId", "views.waivers.results[0].avatarUrl"),
+    ]);
 
     expect(actual.results).toHaveLength(24);
     expect(actual.results.filter((row) => row.status === "won")).toHaveLength(2);
@@ -2969,6 +3014,8 @@ describe("runs.* (was traces.*)", () => {
       // `runs.lastPersistedStep` is the resume marker the Workpool runner writes
       // (`docs/migration-plan.md` §4); the old schema had no resumable runs.
       ...additiveColumn("traces.get.run.lastPersistedStep"),
+      // The customisation cooldown: null for the demo owner, a date for everyone else.
+      ...additiveColumn("traces.get.privateUntil"),
     ]);
 
     expect(actual.run.status).toBe("succeeded");

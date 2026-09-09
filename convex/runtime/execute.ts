@@ -70,9 +70,10 @@ import { internalAction, type ActionCtx } from "../_generated/server";
 import { DEFAULT_HARNESS } from "../lib/defaults";
 import { estimateNextStepCostUsd, type ResolvedModelPrice } from "../lib/pricing_pure";
 
+import { decryptSecret } from "../lib/secrets";
 import { modelSupportsReasoning, readGatewayCostUsd, resolveModel } from "./model";
 import { buildPrompt, estimateTokens, type PromptWindow } from "./prompt";
-import { buildTools } from "./tools";
+import { buildTools, guidanceByTool, type ToolOverride } from "./tools";
 import {
   emptyRunToolState,
   type ExecuteRunSummary,
@@ -142,6 +143,7 @@ type LoadedConfig = {
   contextMd: string;
   harness: HarnessSettings;
   skills: Array<{ name: string; bodyMd: string; description?: string }>;
+  toolOverrides: ToolOverride[];
 };
 
 /** Rebuild the in-memory tool state from what earlier attempts already committed. */
@@ -308,6 +310,7 @@ export const executeRun = internalAction({
       contextMd: "",
       harness: { ...DEFAULT_HARNESS },
       skills: [],
+      toolOverrides: [],
     };
     if (loaded.pinnedConfig) {
       config = {
@@ -316,6 +319,7 @@ export const executeRun = internalAction({
         contextMd: loaded.pinnedConfig.contextMd,
         harness: { ...DEFAULT_HARNESS, ...loaded.pinnedConfig.harness },
         skills: loaded.pinnedConfig.skills,
+        toolOverrides: loaded.pinnedConfig.toolOverrides ?? [],
       };
     } else if (teamId) {
       const current = await ctx.runQuery(internal.configs.currentForTeam, { teamId });
@@ -330,6 +334,7 @@ export const executeRun = internalAction({
             bodyMd: s.bodyMd,
             ...(s.description ? { description: s.description } : {}),
           })),
+          toolOverrides: current.toolOverrides ?? [],
         };
       }
     }
@@ -357,8 +362,28 @@ export const executeRun = internalAction({
       at: nowFn().getTime(),
     });
 
+    // --- bring-your-own-key ---------------------------------------------------
+    // A team running on its owner's own gateway key bypasses every spend cap;
+    // the ledger meters it all the same. A key that fails to decrypt falls back
+    // to the league key *with* caps rather than silently spending the league's money uncapped.
+    let ownApiKey: string | null = null;
+    if (loaded.teamKey) {
+      try {
+        ownApiKey = await decryptSecret({ ciphertext: loaded.teamKey.ciphertext, iv: loaded.teamKey.iv });
+      } catch (error) {
+        await ctx
+          .runMutation(internal.gateway_keys.markUsed, {
+            keyId: loaded.teamKey.id,
+            error: `could not decrypt key: ${error instanceof Error ? error.message : String(error)}`,
+          })
+          .catch(() => null);
+      }
+    }
+    const bypassCaps = ownApiKey !== null;
+    const keySource: "league" | "team" = bypassCaps ? "team" : "league";
+
     // League USD hard cap: stop before we spend a cent (PRD 5.9).
-    if (budget.leagueCapReached) {
+    if (budget.leagueCapReached && !bypassCaps) {
       await ctx
         .runMutation(internal.ledger.notifyCommissionerOfCap, { leagueId: run.leagueId, weekNo })
         .catch(() => ({ notified: false }));
@@ -368,6 +393,19 @@ export const executeRun = internalAction({
         outcome: "budget_exhausted",
         modelId: primaryModelId,
         error: "league USD hard cap reached",
+        fallbackApplied: { kind: "budget_exhausted", detail },
+        stepCount: run.stepCount,
+      });
+    }
+
+    // Team weekly spend cap (commissioner-set, default $2.00): same treatment.
+    if (budget.teamCapReached && !bypassCaps) {
+      const detail = `team weekly spend cap reached ($${budget.teamUsdUsed.toFixed(4)} of $${(budget.teamUsdCap ?? 0).toFixed(2)} this week)`;
+      return summaryOf({
+        status: "fallback",
+        outcome: "budget_exhausted",
+        modelId: primaryModelId,
+        error: "team weekly spend cap reached",
         fallbackApplied: { kind: "budget_exhausted", detail },
         stepCount: run.stepCount,
       });
@@ -396,11 +434,13 @@ export const executeRun = internalAction({
       currentStepIndex: () => currentStep,
       budget,
       customProviders,
+      toolOverrides: config.toolOverrides,
       state,
     };
 
     const tools: ToolSet = buildTools(toolCtx);
     const toolNames = Object.keys(tools);
+    const toolGuidance = guidanceByTool(toolNames, config.toolOverrides);
 
     const [inbox, forum] = await Promise.all([
       teamId && toolNames.includes("get_inbox")
@@ -438,7 +478,9 @@ export const executeRun = internalAction({
       skills: config.skills,
       noteToAgent: loaded.noteToAgent,
       harness,
+      ownKey: bypassCaps,
       toolNames,
+      toolGuidance,
       budget,
       inbox,
       forum,
@@ -449,8 +491,14 @@ export const executeRun = internalAction({
       modelId: primaryModelId,
       ...(config.configVersionId ? { configVersionId: config.configVersionId } : {}),
       promptSections: prompt.sections as PromptSection[],
+      keySource,
       now: nowFn().getTime(),
     });
+    if (bypassCaps && loaded.teamKey) {
+      await ctx
+        .runMutation(internal.gateway_keys.markUsed, { keyId: loaded.teamKey.id })
+        .catch(() => null);
+    }
 
     // --- the model loop -------------------------------------------------------
     const wallClockMs =
@@ -572,18 +620,28 @@ export const executeRun = internalAction({
         const usedTokens = totalInputTokens + totalOutputTokens;
 
         let reason: string | null = null;
+        // The per-run token budget is the owner's own harness setting and always
+        // applies; the league's caps are skipped on an owner's own key.
         if (usedTokens + projectedTokens > harness.tokenBudget) {
           reason = `next step (~${projectedTokens} tokens) would exceed this run's token budget (${harness.tokenBudget})`;
         } else if (
+          !bypassCaps &&
           budget.teamTokensRemaining != null &&
           usedTokens + projectedTokens > budget.teamTokensRemaining
         ) {
           reason = `next step (~${projectedTokens} tokens) would exceed your team's weekly token cap`;
         } else if (
+          !bypassCaps &&
           budget.leagueUsdRemaining != null &&
           totalCostUsd + projectedCost > budget.leagueUsdRemaining
         ) {
           reason = `next step (~$${projectedCost.toFixed(4)}) would exceed the league's USD hard cap`;
+        } else if (
+          !bypassCaps &&
+          budget.teamUsdRemaining != null &&
+          totalCostUsd + projectedCost > budget.teamUsdRemaining
+        ) {
+          reason = `next step (~$${projectedCost.toFixed(4)}) would exceed your team's weekly spend cap`;
         }
 
         if (reason) {
@@ -606,7 +664,7 @@ export const executeRun = internalAction({
       let stepOffset = persistedCount;
 
       const shared = {
-        model: resolveModel(modelId),
+        model: resolveModel(modelId, { apiKey: ownApiKey }),
         tools,
         temperature: harness.temperature,
         maxRetries: 3,

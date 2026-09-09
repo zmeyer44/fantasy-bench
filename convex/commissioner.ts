@@ -318,6 +318,7 @@ const rulesPatchValidator = v.object({
   fallbackModelId: v.optional(v.union(v.string(), v.null())),
   weeklyTokenCapPerTeam: v.optional(v.union(v.number(), v.null())),
   leagueUsdHardCap: v.optional(v.union(v.number(), v.null())),
+  weeklyUsdCapPerTeam: v.optional(v.union(v.number(), v.null())),
   contextCharLimit: v.optional(v.number()),
   maxStepsCap: v.optional(v.number()),
   editLock: v.optional(editLockConfig),
@@ -336,6 +337,9 @@ const rulesPatchValidator = v.object({
 type RulesPatch = Infer<typeof rulesPatchValidator>;
 type RulesField = keyof RulesPatch;
 
+/** Rules columns where a stored `null` is meaningful (see `effectiveWeeklyUsdCap`). */
+const NULL_IS_A_VALUE: ReadonlySet<RulesField> = new Set<RulesField>(["weeklyUsdCapPerTeam"]);
+
 /**
  * Fields that stay editable after the rules lock (PRD 5.1: "immutable once the
  * draft begins, except for budgets and moderation settings"), plus the model
@@ -346,6 +350,7 @@ export const MUTABLE_AFTER_LOCK: ReadonlySet<RulesField> = new Set<RulesField>([
   // budgets
   "weeklyTokenCapPerTeam",
   "leagueUsdHardCap",
+  "weeklyUsdCapPerTeam",
   // moderation / conduct
   "transparencyMode",
   "injectionPolicy",
@@ -434,6 +439,9 @@ function validateRulesPatch(patch: RulesPatch): void {
   }
   if (patch.leagueUsdHardCap !== undefined && patch.leagueUsdHardCap !== null) {
     requireNumber("leagueUsdHardCap", patch.leagueUsdHardCap, 0, Number.MAX_SAFE_INTEGER);
+  }
+  if (patch.weeklyUsdCapPerTeam !== undefined && patch.weeklyUsdCapPerTeam !== null) {
+    requireNumber("weeklyUsdCapPerTeam", patch.weeklyUsdCapPerTeam, 0, Number.MAX_SAFE_INTEGER);
   }
   if (patch.contextCharLimit !== undefined) {
     requireInt("contextCharLimit", patch.contextCharLimit, 500, 100_000);
@@ -567,8 +575,10 @@ async function applyRulesPatch(
   const changed: string[] = [];
   for (const [field, value] of entries) {
     if (!differs(stored[field], value)) continue;
-    // `null` clears an optional column; `ctx.db.patch` removes a field set to undefined.
-    update[field] = value === null ? undefined : value;
+    // `null` clears an optional column; `ctx.db.patch` removes a field set to
+    // undefined. Fields in NULL_IS_A_VALUE keep the null: for them an absent
+    // column means "platform default" and null means "the commissioner said none".
+    update[field] = value === null && !NULL_IS_A_VALUE.has(field) ? undefined : value;
     changed.push(String(field));
   }
 
@@ -636,6 +646,8 @@ export const setBudgets = mutation({
     leagueId: v.id("leagues"),
     weeklyTokenCapPerTeam: v.optional(v.union(v.number(), v.null())),
     leagueUsdHardCap: v.optional(v.union(v.number(), v.null())),
+    /** null removes the cap; the platform default applies until the commissioner sets one. */
+    weeklyUsdCapPerTeam: v.optional(v.union(v.number(), v.null())),
   },
   returns: rulesDoc,
   handler: async (ctx, { leagueId, ...patch }) => patchRules(ctx, leagueId, patch),

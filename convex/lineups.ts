@@ -301,7 +301,7 @@ export const applySafetyAutopilot = internalMutation({
 
 /**
  * The best legal lineup from a team's roster in a snapshot — what `draft.finalize`
- * writes as everyone's week-1 default, and what the film room compares against.
+ * writes as everyone's week-1 default, and what the window-close metrics compare against.
  */
 export const optimal = internalQuery({
   args: { snapshotId: v.id("snapshots"), teamId: v.id("teams"), now: v.optional(v.number()) },

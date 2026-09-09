@@ -42,6 +42,8 @@ export type SnapshotRecord = {
 export type LineupSlot = { slot: string; playerId: string | null };
 
 export type SnapshotTeam = {
+  avatarTemplate?: string;
+  avatarStatus?: string;
   id: string;
   name: string;
   abbreviation: string;

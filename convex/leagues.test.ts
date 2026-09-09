@@ -161,7 +161,7 @@ describe("leagues.get — shape", () => {
   });
 
   it("gives every team a default agent config on version 1", async () => {
-    const { t, leagueId, teamIds } = await fixture();
+    const { t, commish, leagueId, teamIds } = await fixture();
     const configs = await t.run(async (ctx) =>
       ctx.db
         .query("agent_configs")
@@ -171,7 +171,8 @@ describe("leagues.get — shape", () => {
     expect(configs).toHaveLength(teamIds.length);
     expect(configs.every((config) => config.currentVersionId !== undefined)).toBe(true);
 
-    const version = await t.query(api.configs.get, { leagueId, teamId: teamIds[0] });
+    // The commissioner sees the fresh version in full; the cooldown hides it from others.
+    const version = await commish.session.query(api.configs.get, { leagueId, teamId: teamIds[0] });
     expect(version.current?.versionNo).toBe(1);
     expect(version.current?.changeSummary).toBe("Initial configuration");
   });

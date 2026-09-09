@@ -286,6 +286,78 @@ describe("executeRun — budgets", () => {
   });
 });
 
+describe("executeRun — team spend cap and bring-your-own-key", () => {
+  test("stops before spending when the team's weekly spend cap is already reached", async () => {
+    const t = makeTest();
+    const fx = await seedFixture(t, { weeklyUsdCapPerTeam: 0 });
+    const result = await t.action(internal.runtime.execute.executeRun, {
+      runId: fx.runId,
+      now: NOW,
+    });
+    expect(result.status).toBe("fallback");
+    expect(result.outcome).toBe("budget_exhausted");
+    expect(result.error).toMatch(/team weekly spend cap/);
+    expect(result.fallbackApplied?.detail).toMatch(/\$0\.0000 of \$0\.00/);
+    expect(result.stepCount).toBe(0);
+    expect(await stepsOf(t, fx.runId)).toHaveLength(0);
+  });
+
+  test("the platform default cap is $2.00 when the commissioner set none", async () => {
+    const t = makeTest();
+    const fx = await seedFixture(t);
+    const budget = await t.query(internal.ledger.remainingBudget, {
+      leagueId: fx.leagueId,
+      teamId: fx.teamAId,
+      weekNo: WEEK_NO,
+    });
+    expect(budget.teamUsdCap).toBe(2);
+    expect(budget.teamUsdRemaining).toBe(2);
+    expect(budget.teamCapReached).toBe(false);
+  });
+
+  test("a team on its own gateway key bypasses every cap and is still metered", async () => {
+    const t = makeTest();
+    // League cap already blown and a zero team cap: without a key nothing would run.
+    const fx = await seedFixture(t, {
+      leagueUsdHardCap: 0,
+      weeklyUsdCapPerTeam: 0,
+      weeklyTokenCapPerTeam: 1,
+      teamKey: "vck_test_key_0123456789abcdef",
+    });
+    const result = await t.action(internal.runtime.execute.executeRun, {
+      runId: fx.runId,
+      now: NOW,
+    });
+    expect(result.status).toBe("succeeded");
+    expect(result.outcome).toBe("lineup_set");
+    expect(result.stepCount).toBeGreaterThan(0);
+
+    const run = await runDoc(t, fx.runId);
+    expect(run!.keySource).toBe("team");
+    // Spend is recorded exactly as for a league-key run.
+    expect((await usageOf(t, fx.runId)).length).toBe(result.stepCount);
+    expect(run!.totalInputTokens).toBeGreaterThan(0);
+    const keyRow = await t.run(async (ctx) =>
+      ctx.db
+        .query("team_gateway_keys")
+        .withIndex("by_teamId", (q) => q.eq("teamId", fx.teamAId))
+        .unique(),
+    );
+    expect(keyRow?.lastUsedAt).toBeDefined();
+    // The prompt told the agent so.
+    const platform = run!.promptSections?.find((s) => s.id === "platform")?.text ?? "";
+    expect(platform).toMatch(/own gateway key/);
+    expect(platform).toMatch(/weekly spend cap: \$0\.00/);
+  });
+
+  test("a league-key run records keySource=league", async () => {
+    const t = makeTest();
+    const fx = await seedFixture(t);
+    await t.action(internal.runtime.execute.executeRun, { runId: fx.runId, now: NOW });
+    expect((await runDoc(t, fx.runId))!.keySource).toBe("league");
+  });
+});
+
 describe("executeRun — failure paths", () => {
   test("retries a provider error inside the SDK and then succeeds", async () => {
     const t = makeTest();

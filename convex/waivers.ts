@@ -16,7 +16,8 @@ import { requireLeagueRead } from "./lib/auth";
 import { rosterCapacity } from "./lib/draft_pure";
 import { isLocked } from "./lib/lineup_pure";
 import { payloadForWindow } from "./lineups";
-import { readPayload } from "./snapshot";
+import { readPayload, latestPayload } from "./snapshot";
+import { projectionFor } from "./lib/views_shared";
 
 /** Claims per league week: 14 teams × 10 claims, with headroom. */
 const MAX_CLAIMS_PER_WEEK = 200;
@@ -27,6 +28,10 @@ export type WaiverResultRow = {
   teamId: Id<"teams">;
   teamName: string;
   teamAbbreviation: string;
+  avatarUrl?: string | null;
+  avatarTemplate?: string;
+  addSleeperId?: string;
+  addNflTeam?: string | null;
   addPlayerId: Id<"players">;
   addPlayerName: string;
   addPlayerPosition: string | null;
@@ -104,6 +109,10 @@ export const results = query({
         teamId: claim.teamId,
         teamName: team?.name ?? "Unknown",
         teamAbbreviation: team?.abbreviation ?? "??",
+        avatarUrl: team?.avatarStorageId ? await ctx.storage.getUrl(team.avatarStorageId) : null,
+        avatarTemplate: team?.avatarTemplate,
+        addSleeperId: addPlayer?.sleeperId,
+        addNflTeam: addPlayer?.nflTeam ?? null,
         addPlayerId: claim.addPlayerId,
         addPlayerName: addPlayer?.fullName ?? "Unknown",
         addPlayerPosition: addPlayer?.position ?? null,
@@ -626,5 +635,108 @@ export const process = internalMutation({
     }
 
     return { processed: ordered.length, awarded };
+  },
+});
+
+export type AvailablePlayer = {
+  id: string;
+  fullName: string;
+  sleeperId: string;
+  position: string;
+  nflTeam: string | null;
+  opponent: string | null;
+  kickoffAt: string | null;
+  injuryStatus: string | null;
+  projection: number | null;
+  ownedPct: number | null;
+};
+
+/** Snapshot projections, with current roster ownership checked before showing availability. */
+export const available = query({
+  args: { leagueId: v.id("leagues") },
+  handler: async (
+    ctx,
+    { leagueId },
+  ): Promise<{
+    players: AvailablePlayer[];
+    weekNo: number | null;
+    takenAt: number | null;
+  }> => {
+    await requireLeagueRead(ctx, leagueId);
+    const snapshot = await latestPayload(ctx, leagueId);
+    if (!snapshot) {
+      const candidates = (
+        await Promise.all(
+          (["QB", "RB", "WR", "TE", "K", "DEF"] as const).map((position) =>
+            ctx.db
+              .query("players")
+              .withIndex("by_position_searchRank", (q) =>
+                q.eq("position", position).gt("searchRank", 0),
+              )
+              .take(100),
+          ),
+        )
+      ).flat();
+      const roster = await ctx.db
+        .query("roster_slots")
+        .withIndex("by_leagueId_playerId", (q) => q.eq("leagueId", leagueId))
+        .take(600);
+      const owned = new Set<string>(roster.map((row) => row.playerId));
+      return {
+        players: candidates
+          .filter(
+            (player) =>
+              !owned.has(player._id) &&
+              player.nflTeam &&
+              player.status !== "Inactive" &&
+              player.status !== "Retired",
+          )
+          .sort(
+            (a, b) => (a.searchRank ?? Infinity) - (b.searchRank ?? Infinity),
+          )
+          .map((player) => ({
+            id: player._id,
+            fullName: player.fullName,
+            sleeperId: player.sleeperId,
+            position: player.position,
+            nflTeam: player.nflTeam ?? null,
+            injuryStatus: player.injuryStatus ?? null,
+            projection: null,
+            ownedPct: null,
+            opponent: null,
+            kickoffAt: null,
+          })),
+        weekNo: null,
+        takenAt: null,
+      };
+    }
+    const roster = await ctx.db
+      .query("roster_slots")
+      .withIndex("by_leagueId_playerId", (q) => q.eq("leagueId", leagueId))
+      .take(600);
+    const owned = new Set<string>(roster.map((row) => row.playerId));
+    const players = Object.values(snapshot.payload.players)
+      .filter((player) => !owned.has(player.id))
+      .map((player) => ({
+        id: player.id,
+        fullName: player.fullName,
+        sleeperId: player.sleeperId,
+        position: player.position,
+        nflTeam: player.nflTeam,
+        opponent: player.opponent,
+        kickoffAt: player.kickoffAt,
+        injuryStatus: player.injuryStatus,
+        projection: projectionFor(
+          player.projection,
+          snapshot.payload.rules.scoringPreset,
+        ),
+        ownedPct: player.ownedPct,
+      }))
+      .sort((a, b) => (b.projection ?? -1) - (a.projection ?? -1));
+    return {
+      players,
+      weekNo: snapshot.payload.weekNo,
+      takenAt: snapshot.snapshot.takenAt,
+    };
   },
 });

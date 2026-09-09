@@ -9,7 +9,7 @@
  *
  * The DB-bound half of the old module (`getCurrentLineup`, `commitLineup`,
  * `applySafetyAutopilot`) becomes mutations in the runtime package (Phase 5);
- * this file is what those mutations and `metrics.filmRoom` share.
+ * this file is what those mutations and `metrics.computeForWindowClose` share.
  */
 import type {
   LineupSlot,

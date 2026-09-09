@@ -2,28 +2,17 @@
 
 import Link from "next/link";
 import { usePreloadedQuery, type Preloaded } from "convex/react";
-
-import { OpponentTag, TeamLogo } from "@/components/nfl/team-logo";
-import {
-  Badge,
-  EmptyState,
-  Table,
-  TableBody,
-  TableCell,
-  TableFooter,
-  TableHead,
-  TableHeader,
-  TableRow,
-  cn,
-} from "@/components/ui";
+import { EmptyState, cn } from "@/components/ui";
+import { PlayerHeadshot, PositionTag, TeamAvatar } from "./identity";
 import type { api } from "@/convex/_generated/api";
 import type { FunctionReturnType } from "convex/server";
 import { formatET } from "@/lib/time";
+import { pairMatchupSlots } from "./matchup-slots";
 
 type MatchupPage = NonNullable<FunctionReturnType<typeof api.views.matchup>>;
-type MatchupTeamView = MatchupPage["home"];
+type Side = MatchupPage["home"];
+type Slot = Side["slots"][number];
 
-/** Both lineups, slot by slot, with each agent's rationale — live off `views.matchup`. */
 export function MatchupDetailView({
   leagueId,
   weekNo,
@@ -35,28 +24,120 @@ export function MatchupDetailView({
 }) {
   const page = usePreloadedQuery(preloaded);
   if (!page) return <EmptyState title="Matchup not found" />;
+  return <MatchupContent leagueId={leagueId} weekNo={weekNo} page={page} />;
+}
 
+export function MatchupContent({
+  leagueId,
+  weekNo,
+  page,
+}: {
+  leagueId: string;
+  weekNo: number;
+  page: MatchupPage;
+}) {
+  const hasLive = [...page.away.slots, ...page.home.slots].some(
+    (slot) => slot.points !== null,
+  );
+  const score = (side: Side) =>
+    page.isFinal
+      ? side.officialScore
+      : side.slots.some((slot) => slot.starting && slot.points !== null)
+        ? side.liveTotal
+        : side.officialScore;
+  const awayScore = score(page.away),
+    homeScore = score(page.home);
+  const margin = Math.abs(awayScore - homeScore);
+  const leader = awayScore > homeScore ? page.away : page.home;
   return (
-    <div className="space-y-10">
-      {/* Scoreboard: a ruled strip across the page, not a box. */}
-      <div className="flex flex-wrap items-center justify-between gap-6 border-b border-border pb-5">
-        <Score side={page.away} isFinal={page.isFinal} align="left" />
-        <div className="text-center">
-          <div className="eyebrow">Week {weekNo}</div>
-          <div className="mt-2">
-            {page.isFinal ? (
-              <Badge variant="secondary">final</Badge>
-            ) : (
-              <Badge variant="success">live</Badge>
-            )}
-          </div>
+    <div className="mx-auto max-w-5xl space-y-6">
+      <section
+        aria-label="Matchup scoreboard"
+        className="overflow-hidden rounded-xl border border-border bg-card"
+      >
+        <div className="flex items-center justify-between border-b border-border px-4 py-3 text-xs text-muted-foreground sm:px-6">
+          <span>Week {weekNo} matchup</span>
+          <span className={hasLive && !page.isFinal ? "text-brand" : ""}>
+            {page.isFinal
+              ? "Final"
+              : hasLive
+                ? "Scoring in progress"
+                : "Upcoming"}
+          </span>
         </div>
-        <Score side={page.home} isFinal={page.isFinal} align="right" />
-      </div>
-
-      <div className="grid gap-10 lg:grid-cols-2">
-        <SideLineup leagueId={leagueId} side={page.away} isFinal={page.isFinal} />
-        <SideLineup leagueId={leagueId} side={page.home} isFinal={page.isFinal} />
+        <div className="grid grid-cols-[minmax(0,1fr)_28px_minmax(0,1fr)] items-stretch gap-2 px-3 py-5 sm:gap-5 sm:px-6 sm:py-6">
+          <Score
+            side={page.away}
+            points={awayScore}
+            leagueId={leagueId}
+            leading={awayScore > homeScore}
+          />
+          <span className="self-center text-center font-mono text-xs text-muted-foreground">
+            VS
+          </span>
+          <Score
+            side={page.home}
+            points={homeScore}
+            leagueId={leagueId}
+            leading={homeScore > awayScore}
+            right
+          />
+        </div>
+        <div className="border-t border-border bg-muted px-4 py-2.5 text-center text-xs text-muted-foreground">
+          {margin > 0 ? (
+            <>
+              <span className="font-medium text-foreground">
+                {leader.teamName}
+              </span>{" "}
+              {page.isFinal ? "won by" : "leads by"}{" "}
+              <span className="font-mono text-brand">{margin.toFixed(2)}</span>
+            </>
+          ) : page.isFinal ? (
+            "Matchup tied"
+          ) : hasLive ? (
+            "Matchup is tied"
+          ) : (
+            "Scores update as games are played"
+          )}
+        </div>
+      </section>
+      <Comparison
+        title="Starters"
+        away={page.away.slots.filter((s) => s.starting)}
+        home={page.home.slots.filter((s) => s.starting)}
+      />
+      <Comparison
+        title="Bench"
+        away={page.away.slots.filter((s) => !s.starting)}
+        home={page.home.slots.filter((s) => !s.starting)}
+      />
+      <div className="grid gap-6 sm:grid-cols-2">
+        {[page.away, page.home].map((side) => (
+          <section key={side.teamId} className="border-t border-border pt-4">
+            <h3 className="text-sm font-medium">
+              {side.teamName} · Agent’s take
+            </h3>
+            <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
+              {side.rationale?.excerpt ?? "No lineup rationale published yet."}
+            </p>
+            <div className="mt-3 flex gap-4 text-xs">
+              <Link
+                className="text-brand hover:underline"
+                href={`/leagues/${leagueId}/teams/${side.teamId}`}
+              >
+                Full roster →
+              </Link>
+              {side.rationale ? (
+                <Link
+                  className="text-muted-foreground hover:text-foreground"
+                  href={`/leagues/${leagueId}/traces/${side.rationale.runId}`}
+                >
+                  Decision trace →
+                </Link>
+              ) : null}
+            </div>
+          </section>
+        ))}
       </div>
     </div>
   );
@@ -64,172 +145,202 @@ export function MatchupDetailView({
 
 function Score({
   side,
-  isFinal,
-  align,
+  points,
+  leagueId,
+  leading,
+  right = false,
 }: {
-  side: MatchupTeamView;
-  isFinal: boolean;
-  align: "left" | "right";
+  side: Side;
+  points: number;
+  leagueId: string;
+  leading: boolean;
+  right?: boolean;
 }) {
-  const points = isFinal ? side.officialScore : side.liveTotal || side.officialScore;
   return (
-    <div className={align === "right" ? "text-right" : "text-left"}>
-      <div className="text-sm font-medium text-foreground">{side.teamName}</div>
-      <div className="mt-0.5 font-mono text-[10px] text-ink-faint">
-        {side.record} · proj {side.projectedTotal.toFixed(1)}
-      </div>
+    <div className={cn("flex min-w-0 flex-col", right && "text-right")}>
       <div
         className={cn(
-          "mt-1.5 font-mono text-3xl tracking-tight tabular-nums",
-          isFinal ? "text-foreground" : "text-brand",
+          "mb-3 flex items-center gap-3",
+          right && "flex-row-reverse",
         )}
       >
-        {points.toFixed(1)}
+        <TeamAvatar
+          name={side.teamName}
+          teamId={side.teamId}
+          avatarUrl={side.avatarUrl}
+          avatarTemplate={side.avatarTemplate}
+          size={44}
+        />
+        <span className="font-mono text-xs text-muted-foreground">
+          {side.record}
+        </span>
+      </div>
+      <Link
+        href={`/leagues/${leagueId}/teams/${side.teamId}`}
+        className="block min-h-10 flex-1 text-sm font-semibold leading-tight hover:text-brand sm:min-h-6 sm:text-lg"
+        style={{ overflowWrap: "anywhere" }}
+      >
+        {side.teamName}
+      </Link>
+      <div
+        className={cn(
+          "mt-2 font-mono text-3xl font-semibold tracking-tighter tabular-nums sm:text-5xl",
+          leading && "text-brand",
+        )}
+      >
+        {points.toFixed(2)}
+      </div>
+      <div className="mt-2 text-xs text-muted-foreground">
+        <span className="font-mono">
+          {side.slots.some((slot) => slot.starting && slot.projection !== null)
+            ? side.projectedTotal.toFixed(2)
+            : "—"}
+        </span>{" "}
+        projected
       </div>
     </div>
   );
 }
 
-function SideLineup({
-  leagueId,
-  side,
-  isFinal,
+function Comparison({
+  title,
+  away,
+  home,
 }: {
-  leagueId: string;
-  side: MatchupTeamView;
-  isFinal: boolean;
+  title: string;
+  away: Slot[];
+  home: Slot[];
 }) {
-  const starters = side.slots.filter((slot) => slot.starting);
-  const bench = side.slots.filter((slot) => !slot.starting);
-
+  const pairs = pairMatchupSlots(away, home);
+  if (!pairs.length)
+    return title === "Starters" ? (
+      <EmptyState
+        title="No lineups recorded"
+        description="Your agents’ starting lineups will appear here."
+      />
+    ) : null;
   return (
-    <section>
-      <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 border-b border-border pb-2.5">
-        <div className="flex flex-wrap items-baseline gap-3">
-          <h2 className="text-sm font-medium text-foreground">
-            <Link
-              href={`/leagues/${leagueId}/teams/${side.teamId}`}
-              className="hover:text-brand-strong"
-            >
-              {side.teamName}
-            </Link>
-          </h2>
-          {side.lineupSource ? (
-            <span className="text-xs text-muted-foreground">
-              Lineup set by {side.lineupSource.replace("_", " ")}
-            </span>
-          ) : null}
-        </div>
-        {side.rationale ? (
-          <Link
-            href={`/leagues/${leagueId}/traces/${side.rationale.runId}`}
-            className="eyebrow transition-colors hover:text-foreground"
-          >
-            Trace →
-          </Link>
-        ) : null}
+    <section aria-label={`${title} comparison`}>
+      <div className="mb-3 flex items-baseline justify-between">
+        <h2 className="text-base font-semibold">{title}</h2>
+        <span className="text-xs text-muted-foreground">
+          Points <span className="ml-2">/ projected</span>
+        </span>
       </div>
-
-      {side.rationale?.excerpt ? (
-        <p className="mt-4 border-l-2 border-border pl-3 text-sm leading-relaxed text-muted-foreground">
-          <span className="eyebrow mr-2">{side.rationale.windowLabel}</span>
-          {side.rationale.excerpt}
-        </p>
-      ) : null}
-
-      <SlotRows rows={starters} side={side} isFinal={isFinal} />
-
-      {bench.length > 0 ? (
-        <>
-          <div className="mt-8 border-b border-border pb-2.5">
-            <h3 className="eyebrow text-foreground">Bench</h3>
+      <div className="divide-y divide-border border-y border-border">
+        {pairs.map((pair) => (
+          <div
+            key={pair.key}
+            className="grid grid-cols-[minmax(0,1fr)_36px_minmax(0,1fr)] items-stretch gap-1 sm:gap-3"
+          >
+            <PlayerCell
+              slot={pair.away}
+              leads={(pair.away?.points ?? 0) > (pair.home?.points ?? 0)}
+            />
+            <div className="flex items-center justify-center">
+              <PositionTag slot={pair.label} />
+            </div>
+            <PlayerCell
+              slot={pair.home}
+              leads={(pair.home?.points ?? 0) > (pair.away?.points ?? 0)}
+              right
+            />
           </div>
-          <SlotRows rows={bench} muted />
-        </>
-      ) : null}
+        ))}
+      </div>
     </section>
   );
 }
 
-function SlotRows({
-  rows,
-  side,
-  isFinal,
-  muted = false,
+function PlayerCell({
+  slot,
+  leads,
+  right = false,
 }: {
-  rows: MatchupTeamView["slots"];
-  side?: MatchupTeamView;
-  isFinal?: boolean;
-  muted?: boolean;
+  slot?: Slot;
+  leads: boolean;
+  right?: boolean;
 }) {
-  if (rows.length === 0) {
-    return <p className="mt-4 text-sm text-muted-foreground">No lineup recorded.</p>;
-  }
   return (
-    <Table className={muted ? "opacity-70" : undefined}>
-      <TableHeader>
-        <TableRow>
-          <TableHead className="w-12">Slot</TableHead>
-          <TableHead>Player</TableHead>
-          <TableHead>Kickoff</TableHead>
-          <TableHead numeric>Proj</TableHead>
-          <TableHead numeric>Pts</TableHead>
-        </TableRow>
-      </TableHeader>
-      <TableBody>
-        {rows.map((slot, index) => (
-          <TableRow key={`${slot.slot}-${slot.playerId ?? index}`}>
-            <TableCell className="font-mono text-[10px] uppercase text-ink-faint">
-              {slot.slot}
-            </TableCell>
-            <TableCell>
-              {slot.playerName ? (
-                <span className="flex flex-wrap items-center gap-1.5">
-                  <TeamLogo team={slot.nflTeam} size={18} />
-                  <span className="text-sm text-foreground">{slot.playerName}</span>
-                  <span className="font-mono text-[10px] text-ink-faint">
-                    {slot.position}
-                    {slot.nflTeam ? ` · ${slot.nflTeam}` : ""}
-                  </span>
-                  {slot.opponent ? <OpponentTag opponent={slot.opponent} size={14} /> : null}
-                  {slot.injuryStatus ? (
-                    <Badge variant="destructive">{slot.injuryStatus}</Badge>
-                  ) : null}
-                </span>
-              ) : (
-                <span className="text-sm text-ink-faint">— empty —</span>
+    <div
+      className={cn(
+        "min-w-0 px-1 py-3 sm:grid sm:items-center sm:gap-x-3 sm:px-3",
+        right
+          ? "sm:grid-cols-[60px_minmax(0,1fr)]"
+          : "sm:grid-cols-[minmax(0,1fr)_60px]",
+        leads && "bg-brand-soft/40",
+        right && "text-right",
+      )}
+    >
+      {slot?.playerName ? (
+        <>
+          <div
+            className={cn(
+              "flex items-center gap-2 sm:row-start-1",
+              right ? "flex-row-reverse sm:col-start-2" : "sm:col-start-1",
+            )}
+          >
+            <span className="inline-flex shrink-0">
+              <PlayerHeadshot
+                name={slot.playerName}
+                sleeperId={slot.sleeperId}
+                nflTeam={slot.nflTeam}
+                position={slot.position}
+                size={28}
+              />
+            </span>
+            <div className="min-w-0 flex-1">
+              <div
+                className="text-xs font-medium leading-snug sm:text-sm"
+                style={{ overflowWrap: "anywhere" }}
+              >
+                {slot.playerName}
+              </div>
+              <div className="mt-1 text-[11px] text-muted-foreground">
+                {slot.position} · {slot.nflTeam ?? "FA"}
+                {slot.injuryStatus ? (
+                  <span className="ml-1 text-danger">{slot.injuryStatus}</span>
+                ) : null}
+              </div>
+            </div>
+          </div>
+          <div
+            className={cn(
+              "mt-2 flex items-baseline gap-2 sm:row-span-2 sm:row-start-1 sm:mt-0 sm:flex-col sm:gap-0",
+              right
+                ? "justify-end sm:col-start-1 sm:items-start"
+                : "sm:col-start-2 sm:items-end",
+            )}
+          >
+            <span
+              className={cn(
+                "font-mono text-lg font-medium tabular-nums",
+                leads && "text-brand",
               )}
-            </TableCell>
-            <TableCell className="font-mono text-[10px] text-muted-foreground">
-              {slot.kickoffAt ? formatET(slot.kickoffAt, "EEE HH:mm") : "—"}
-            </TableCell>
-            <TableCell numeric className="font-mono text-xs text-muted-foreground">
-              {slot.projection?.toFixed(1) ?? "—"}
-            </TableCell>
-            <TableCell numeric className="font-mono text-xs text-foreground">
-              {slot.points?.toFixed(1) ?? "—"}
-            </TableCell>
-          </TableRow>
-        ))}
-      </TableBody>
-      {side ? (
-        <TableFooter>
-          <TableRow>
-            <TableCell colSpan={3} className="eyebrow">
-              Total
-            </TableCell>
-            <TableCell numeric className="font-mono text-xs text-muted-foreground">
-              {side.projectedTotal.toFixed(1)}
-            </TableCell>
-            <TableCell
-              numeric
-              className={cn("font-mono text-xs", isFinal ? "text-foreground" : "text-brand")}
             >
-              {side.liveTotal.toFixed(1)}
-            </TableCell>
-          </TableRow>
-        </TableFooter>
-      ) : null}
-    </Table>
+              {slot.points?.toFixed(2) ?? "—"}
+            </span>
+            <span className="font-mono text-[11px] text-muted-foreground">
+              {slot.projection?.toFixed(2) ?? "—"}
+            </span>
+          </div>
+          <div
+            className={cn(
+              "mt-1 text-[10px] leading-relaxed text-muted-foreground sm:row-start-2 sm:text-xs",
+              right ? "sm:col-start-2" : "sm:col-start-1",
+            )}
+          >
+            {slot.opponent ?? "Opponent TBD"}
+            {slot.kickoffAt
+              ? ` · ${formatET(slot.kickoffAt, "EEE h:mm a")} ET`
+              : ""}
+          </div>
+        </>
+      ) : (
+        <div className="flex min-h-24 items-center justify-center text-xs text-muted-foreground">
+          Empty slot
+        </div>
+      )}
+    </div>
   );
 }

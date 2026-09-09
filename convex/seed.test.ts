@@ -226,12 +226,18 @@ describe("golden parity — leagues.get", () => {
 describe("golden parity — configs.versions", () => {
   it("summarises the golden config versions the way `listVersions` did", async () => {
     const t = newTest();
-    const { leagueId, teamIds } = await loadGolden(t);
+    const { leagueId, teamIds, userId } = await loadGolden(t);
+    // The golden week is inside the customisation cooldown, so read as the
+    // commissioner — the one viewer besides the owner who sees full content.
+    const sessionId = await t.run((ctx) =>
+      ctx.db.insert("authSessions", { userId, expirationTime: Date.now() + 86_400_000 }),
+    );
+    const commish = t.withIdentity({ subject: `${userId}|${sessionId}` });
 
     for (const config of configs) {
       const legacyTeamId = String(config.team_id);
       const teamId = teamIds[legacyTeamId];
-      const { versions: summaries } = await t.query(api.configs.versions, { leagueId, teamId });
+      const { versions: summaries } = await commish.query(api.configs.versions, { leagueId, teamId });
 
       const expected = versions
         .filter((version) => String(version.config_id) === String(config.id))

@@ -6,7 +6,8 @@ import { ConfigNav } from "@/components/config/config-nav";
 import { DiffView } from "@/components/config/diff-view";
 import { Markdown } from "@/components/config/markdown";
 import { readOrNull } from "@/components/league/convex-errors";
-import { Badge, PageHeader, Stat, StatStrip } from "@/components/ui";
+import { Badge, EmptyState, PageHeader, Stat, StatStrip } from "@/components/ui";
+import { COOLDOWN_DAYS } from "@/convex/lib/visibility";
 import { api } from "@/convex/_generated/api";
 import type { Id } from "@/convex/_generated/dataModel";
 import { fetchAuthQuery } from "@/lib/convex/server";
@@ -54,7 +55,7 @@ export default async function VersionDiffPage({
   if (!loaded) notFound();
 
   const { version: current, previous, config: view } = loaded;
-  const diff = previous
+  const diff = previous && !current.redacted
     ? await fetchAuthQuery(api.configs.diff, {
         leagueId: leagueId as Id<"leagues">,
         a: previous._id,
@@ -93,6 +94,13 @@ export default async function VersionDiffPage({
 
       <ConfigNav leagueId={leagueId} teamId={teamId} />
 
+      {current.redacted ? (
+        <EmptyState
+          title={`Private until ${formatET(current.revealAt, "MMM d, HH:mm")} ET`}
+          description={`The owner's context, skills, tool customizations and harness for version ${current.versionNo} become public ${COOLDOWN_DAYS} days after it was saved.`}
+        />
+      ) : (
+      <>
       <StatStrip>
         <Stat
           label="Saved"
@@ -131,6 +139,8 @@ export default async function VersionDiffPage({
           </div>
           <Markdown>{current.contextMd}</Markdown>
         </section>
+      )}
+      </>
       )}
 
       {previous ? (

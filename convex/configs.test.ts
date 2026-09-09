@@ -17,6 +17,7 @@ import {
   estimateTokens,
   parseHarness,
 } from "./lib/config_pure";
+import { COOLDOWN_MS } from "./lib/visibility";
 import schema from "./schema";
 import { fromET } from "@/lib/time";
 
@@ -126,6 +127,65 @@ describe("configs.get", () => {
     expect(view.canEdit).toBe(false);
     expect(view.viewerUserId).toBeNull();
     expect(view.lock.lock.unlockDay).toBe("tue");
+    // A version saved moments ago is inside the three-week cooldown for a spectator.
+    expect(view.current?.redacted).toBe(true);
+    expect(view.current?.contextMd).toBe("");
+    expect(view.visibility).toEqual({ canSeePrivate: false, cooldownMs: COOLDOWN_MS });
+    expect(view.latestPublic).toBeNull();
+  });
+
+  it("reveals a version to the league once its cooldown has passed, owners always", async () => {
+    const { t, owner, other, leagueId, teamId } = await writeFixture();
+    const before = await owner.session.query(api.configs.get, { leagueId, teamId });
+    expect(before.current?.redacted).toBe(false);
+    expect(before.current?.contextMd).not.toBe("");
+    expect(before.current?.revealAt).toBe((before.current?.createdAt ?? 0) + COOLDOWN_MS);
+
+    // Another owner in the league sees a redacted current version and nothing public yet.
+    const hidden = await other.session.query(api.configs.get, { leagueId, teamId });
+    expect(hidden.current?.redacted).toBe(true);
+    expect(hidden.current?.skills).toEqual([]);
+    expect(hidden.current?.changeSummary).toBeUndefined();
+    expect(hidden.latestPublic).toBeNull();
+
+    // Backdate the version past the cooldown: it is public to everyone.
+    await t.run(async (ctx) => {
+      const version = (await ctx.db.get("config_versions", hidden.current!._id))!;
+      await ctx.db.patch("config_versions", version._id, {
+        createdAt: Date.now() - COOLDOWN_MS - 60_000,
+      });
+    });
+    const revealed = await other.session.query(api.configs.get, { leagueId, teamId });
+    expect(revealed.current?.redacted).toBe(false);
+    expect(revealed.current?.contextMd).toBe(before.current?.contextMd);
+  });
+
+  it("offers the latest public version while the current one is still private", async () => {
+    at(TUE_10_ET);
+    const { t, owner, other, leagueId, teamId } = await writeFixture();
+    // v1 (seeded) is old enough to be public; v2 is saved now and private.
+    await t.run(async (ctx) => {
+      const rows = await ctx.db.query("config_versions").collect();
+      for (const row of rows) {
+        if (row.teamId === teamId) {
+          await ctx.db.patch("config_versions", row._id, { createdAt: Date.now() - COOLDOWN_MS - 1 });
+        }
+      }
+    });
+    await owner.session.mutation(api.configs.save, {
+      ...BASE,
+      leagueId,
+      teamId,
+      contextMd: "# Secret sauce",
+      changeSummary: "Secret",
+    });
+    const view = await other.session.query(api.configs.get, { leagueId, teamId });
+    expect(view.current?.versionNo).toBe(2);
+    expect(view.current?.redacted).toBe(true);
+    expect(view.current?.contextMd).toBe("");
+    expect(view.latestPublic?.versionNo).toBe(1);
+    expect(view.latestPublic?.redacted).toBe(false);
+    expect(view.latestPublic?.contextMd).toContain("You manage a fantasy football team");
   });
 
   it("is editable by the team owner and by the commissioner", async () => {
@@ -164,8 +224,9 @@ describe("configs.versions", () => {
     const skillId = await makeSkill(t, "Injury aware", "injury-aware");
     await addVersion(t, leagueId, teamId, owner.userId, skillId);
 
-    const { versions } = await t.query(api.configs.versions, { leagueId, teamId });
+    const { versions } = await owner.session.query(api.configs.versions, { leagueId, teamId });
     expect(versions.map((version) => version.versionNo)).toEqual([2, 1]);
+    expect(versions.every((version) => version.redacted === false)).toBe(true);
 
     const [latest, first] = versions;
     expect(latest.createdByName).toBe("Owner");
@@ -180,6 +241,25 @@ describe("configs.versions", () => {
     expect(first.isCurrent).toBe(false);
     expect(first.modelDisplayName).toBe("Claude Sonnet 4.5");
   });
+
+  it("redacts a cooling version's content in the history for everyone else", async () => {
+    const { t, owner, leagueId, teamId } = await fixture();
+    const skillId = await makeSkill(t, "Injury aware", "injury-aware");
+    await addVersion(t, leagueId, teamId, owner.userId, skillId);
+
+    const { versions } = await t.query(api.configs.versions, { leagueId, teamId });
+    const [latest] = versions;
+    expect(latest.redacted).toBe(true);
+    expect(latest.revealAt).toBe(latest.createdAt! + COOLDOWN_MS);
+    expect(latest.contextMd).toBe("");
+    expect(latest.skillIds).toEqual([]);
+    expect(latest.skillCount).toBe(0);
+    expect(latest.changeSummary).toBeUndefined();
+    // Metadata the league may still see: the model, the number, the author, the dates.
+    expect(latest.modelDisplayName).toBe("GPT-5 mini");
+    expect(latest.createdByName).toBe("Owner");
+    expect(latest.isCurrent).toBe(true);
+  });
 });
 
 describe("configs.version + configs.diff", () => {
@@ -188,11 +268,23 @@ describe("configs.version + configs.diff", () => {
     const skillId = await makeSkill(t, "Injury aware", "injury-aware");
     const versionId = await addVersion(t, leagueId, teamId, owner.userId, skillId);
 
-    const { version, previous } = await t.query(api.configs.version, { leagueId, versionId });
+    const { version, previous } = await owner.session.query(api.configs.version, {
+      leagueId,
+      versionId,
+    });
     expect(version.versionNo).toBe(2);
     expect(version.skills.map((skill) => skill.slug)).toEqual(["injury-aware"]);
     expect(previous?.versionNo).toBe(1);
     expect(previous?.skills).toEqual([]);
+
+    // A spectator gets the envelope but not the content, and no diff at all.
+    const spectator = await t.query(api.configs.version, { leagueId, versionId });
+    expect(spectator.version.redacted).toBe(true);
+    expect(spectator.version.contextMd).toBe("");
+    expect(spectator.version.skills).toEqual([]);
+    expect(await errorCode(t.query(api.configs.diff, { leagueId, a: previous!._id, b: versionId }))).toBe(
+      "FORBIDDEN",
+    );
   });
 
   it("diffs context, model, harness and skills", async () => {
@@ -203,7 +295,7 @@ describe("configs.version + configs.diff", () => {
       (version) => version.versionNo === 1,
     )!._id;
 
-    const diff = await t.query(api.configs.diff, { leagueId, a: v1, b: v2 });
+    const diff = await owner.session.query(api.configs.diff, { leagueId, a: v1, b: v2 });
     expect(diff.changed).toBe(true);
     expect(diff.a.versionNo).toBe(1);
     expect(diff.b.versionNo).toBe(2);
@@ -871,5 +963,84 @@ describe("configs.save — skills", () => {
 
     await t.mutation(internal.configs.applyPending, { leagueId });
     expect((await t.query(api.skills.get, { slug: "queued-skill" }))?.usageCount).toBe(1);
+  });
+});
+
+// ===========================================================================
+// configs.save — tool overrides
+// ===========================================================================
+
+describe("configs.save — tool overrides", () => {
+  afterEach(() => vi.useRealTimers());
+
+  it("stores only the deltas from the default contract and serves them to the runtime", async () => {
+    at(TUE_10_ET);
+    const { t, owner, leagueId, teamId } = await writeFixture();
+    const result = await owner.session.mutation(api.configs.save, {
+      ...BASE,
+      leagueId,
+      teamId,
+      toolOverrides: [
+        { name: "get_news", enabled: false },
+        { name: "search_players", enabled: true, guidance: "  Prefer free agents under 40% owned. " },
+        { name: "get_forum", enabled: true, guidance: "" },
+      ],
+    });
+    const version = await t.run((ctx) => ctx.db.get("config_versions", result.versionId));
+    expect(version?.toolOverrides).toEqual([
+      { name: "get_news", enabled: false },
+      { name: "search_players", enabled: true, guidance: "Prefer free agents under 40% owned." },
+    ]);
+    const current = await t.query(internal.configs.currentForTeam, { teamId });
+    expect(current?.toolOverrides).toEqual(version?.toolOverrides);
+
+    const view = await owner.session.query(api.views.team, { teamId });
+    expect(view?.config.privateUntil).toBeNull();
+    expect(view?.config.toolsDisabled).toBe(1);
+    expect(view?.config.toolsGuided).toBe(1);
+
+    // The rest of the league sees counts only after the cooldown.
+    const spectator = await t.query(api.views.team, { teamId });
+    expect(spectator?.config.privateUntil).toBe((version?.createdAt ?? 0) + COOLDOWN_MS);
+    expect(spectator?.config.toolsDisabled).toBe(0);
+    expect(spectator?.config.toolsGuided).toBe(0);
+    expect(spectator?.config.contextExcerpt).toBe("");
+    expect(spectator?.config.harness).toBeNull();
+  });
+
+  it("omits the field entirely when every tool is at its default", async () => {
+    at(TUE_10_ET);
+    const { t, owner, leagueId, teamId } = await writeFixture();
+    const result = await owner.session.mutation(api.configs.save, {
+      ...BASE,
+      leagueId,
+      teamId,
+      toolOverrides: [{ name: "get_news", enabled: true }],
+    });
+    const version = await t.run((ctx) => ctx.db.get("config_versions", result.versionId));
+    expect(version?.toolOverrides).toBeUndefined();
+  });
+
+  it("rejects disabling set_rationale and unknown tool names as BAD_REQUEST issues", async () => {
+    at(TUE_10_ET);
+    const { owner, leagueId, teamId } = await writeFixture();
+    let issues: Array<{ field: string }> = [];
+    try {
+      await owner.session.mutation(api.configs.save, {
+        ...BASE,
+        leagueId,
+        teamId,
+        toolOverrides: [
+          { name: "set_rationale", enabled: false },
+          { name: "teleport", enabled: false },
+        ],
+      });
+    } catch (error) {
+      issues = (error as { data?: { issues?: Array<{ field: string }> } }).data?.issues ?? [];
+    }
+    expect(issues.map((i) => i.field).sort()).toEqual([
+      "toolOverrides.set_rationale",
+      "toolOverrides.teleport",
+    ]);
   });
 });

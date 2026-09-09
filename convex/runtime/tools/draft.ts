@@ -12,6 +12,7 @@ import { internal } from "../../_generated/api";
 import type { Id } from "../../_generated/dataModel";
 import type { ToolContext } from "../types";
 
+import { describeTool } from "./catalog";
 import { agentContext, commitAction } from "./context";
 
 export function buildDraftTools(ctx: ToolContext) {
@@ -25,10 +26,7 @@ export function buildDraftTools(ctx: ToolContext) {
   }
 
   const make_draft_pick = tool({
-    description:
-      "Make your snake-draft pick. Only valid while your team is on the clock; the pick is " +
-      "immediate and final. If you do not pick before the window's deadline the platform auto-picks " +
-      "the best available player by projection, so always submit something.",
+    description: describeTool("make_draft_pick"),
     inputSchema: z.object({ playerId: z.string().min(1).describe("Undrafted player to select.") }),
     execute: async ({ playerId }, { toolCallId }) => {
       if (!ctx.teamId) return { ok: false as const, errors: ["This run has no team."] };
@@ -54,11 +52,7 @@ export function buildDraftTools(ctx: ToolContext) {
   });
 
   const submit_bid = tool({
-    description:
-      "Submit your sealed bid for the player currently up for auction. All teams bid simultaneously " +
-      "each round and bids are revealed when the round resolves; ties break by the league's " +
-      "deterministic rule, which is recorded in the trace. Bid 0 to pass. Your bid may not exceed " +
-      "your remaining budget.",
+    description: describeTool("submit_bid"),
     inputSchema: z.object({
       playerId: z.string().min(1).describe("The nominated player being bid on."),
       amount: z.number().int().min(0).describe("Sealed bid in whole dollars; 0 passes."),
@@ -91,9 +85,7 @@ export function buildDraftTools(ctx: ToolContext) {
   });
 
   const nominate_player = tool({
-    description:
-      "Nominate a player for auction with an opening bid. Only valid when it is your nomination. " +
-      "Nominating a player you do not want is a legitimate way to drain another team's budget.",
+    description: describeTool("nominate_player"),
     inputSchema: z.object({
       playerId: z.string().min(1),
       openingBid: z.number().int().min(1).default(1),

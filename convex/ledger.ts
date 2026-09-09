@@ -31,6 +31,7 @@ import {
   type QueryCtx,
 } from "./_generated/server";
 import { requireCommissioner, requireLeagueRead } from "./lib/auth";
+import { effectiveWeeklyUsdCap } from "./lib/defaults";
 import { appError } from "./lib/errors";
 import {
   catalogPrice,
@@ -138,6 +139,13 @@ export type BudgetStatus = {
   leagueUsdRemaining: number | null;
   leagueUsdPct: number | null;
   overUsdCap: boolean;
+  /** This team's weekly USD cap (commissioner-set, default $2.00; null = none). */
+  teamUsdCap: number | null;
+  teamUsdRemaining: number | null;
+  teamUsdPct: number | null;
+  overTeamUsdCap: boolean;
+  /** True when the team runs on its owner's own gateway key: every cap is bypassed, spend still metered. */
+  ownKey: boolean;
   /** The materialised team-week rollup, when one exists. */
   rollup: { tokensUsed: number; usdUsed: number; runCount: number } | null;
 };
@@ -192,6 +200,13 @@ export async function budgetStatus(
   const tokensUsed = weekRollup ? weekRollup.inputTokens + weekRollup.outputTokens : 0;
   const tokenCap = teamBudget?.tokenCap ?? rules?.weeklyTokenCapPerTeam ?? null;
   const usdCap = leagueBudget?.usdCap ?? rules?.leagueUsdHardCap ?? null;
+  const teamUsdCap = effectiveWeeklyUsdCap(rules?.weeklyUsdCapPerTeam);
+  const teamWeekUsd = weekRollup?.costUsd ?? 0;
+  const ownKey =
+    (await ctx.db
+      .query("team_gateway_keys")
+      .withIndex("by_teamId", (q) => q.eq("teamId", team._id))
+      .unique()) !== null;
 
   return {
     teamId: team._id,
@@ -207,6 +222,11 @@ export async function budgetStatus(
     leagueUsdRemaining: usdCap === null ? null : Math.max(0, usdCap - leagueUsdUsed),
     leagueUsdPct: usdCap && usdCap > 0 ? leagueUsdUsed / usdCap : null,
     overUsdCap: usdCap !== null && leagueUsdUsed >= usdCap,
+    teamUsdCap,
+    teamUsdRemaining: teamUsdCap === null ? null : Math.max(0, teamUsdCap - teamWeekUsd),
+    teamUsdPct: teamUsdCap && teamUsdCap > 0 ? teamWeekUsd / teamUsdCap : null,
+    overTeamUsdCap: teamUsdCap !== null && teamWeekUsd >= teamUsdCap,
+    ownKey,
     rollup: weekRollup
       ? {
           tokensUsed,
@@ -940,6 +960,11 @@ export type RemainingBudget = {
   leagueUsdUsed: number;
   leagueUsdCap: number | null;
   leagueCapReached: boolean;
+  /** The team's weekly USD cap (default $2.00; null = none) and where it stands. */
+  teamUsdCap: number | null;
+  teamUsdUsed: number;
+  teamUsdRemaining: number | null;
+  teamCapReached: boolean;
 };
 
 /**
@@ -986,6 +1011,11 @@ async function remainingBudgetFor(
   // Not clamped at zero: the executor wants to see how far past the cap it went.
   const leagueUsdRemaining = leagueUsdCap === null ? null : round8(leagueUsdCap - leagueUsdUsed);
 
+  // Commissioner runs have no team and therefore no team cap.
+  const teamUsdCap = args.teamId ? effectiveWeeklyUsdCap(rules?.weeklyUsdCapPerTeam) : null;
+  const teamUsdUsed = round8(teamRollup?.costUsd ?? 0);
+  const teamUsdRemaining = teamUsdCap === null ? null : round8(teamUsdCap - teamUsdUsed);
+
   return {
     teamTokensRemaining,
     teamTokensUsed,
@@ -994,6 +1024,10 @@ async function remainingBudgetFor(
     leagueUsdUsed,
     leagueUsdCap,
     leagueCapReached: leagueUsdRemaining !== null && leagueUsdRemaining <= 0,
+    teamUsdCap,
+    teamUsdUsed,
+    teamUsdRemaining,
+    teamCapReached: teamUsdRemaining !== null && teamUsdRemaining <= 0,
   };
 }
 
@@ -1005,6 +1039,10 @@ const remainingBudgetShape = v.object({
   leagueUsdUsed: v.number(),
   leagueUsdCap: v.union(v.number(), v.null()),
   leagueCapReached: v.boolean(),
+  teamUsdCap: v.union(v.number(), v.null()),
+  teamUsdUsed: v.number(),
+  teamUsdRemaining: v.union(v.number(), v.null()),
+  teamCapReached: v.boolean(),
 });
 
 /**

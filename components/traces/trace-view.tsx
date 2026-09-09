@@ -21,6 +21,7 @@ import {
   TableRow,
 } from "@/components/ui";
 import { api } from "@/convex/_generated/api";
+import { COOLDOWN_DAYS } from "@/convex/lib/visibility";
 import type { Id } from "@/convex/_generated/dataModel";
 import { formatET } from "@/lib/time";
 
@@ -181,6 +182,14 @@ export function TraceView({
           </div>
         ) : null}
       </header>
+
+      {detail.privateUntil ? (
+        <p className="border-l-2 border-line-strong pl-3 text-sm text-muted-foreground">
+          The owner&apos;s context, skills, tool guidance and custom-tool calls in this trace are
+          private until {formatET(detail.privateUntil, "MMM d, HH:mm")} ET. Customizations become
+          public {COOLDOWN_DAYS} days after a run.
+        </p>
+      ) : null}
 
       <PromptSections sections={detail.promptSections} source={detail.promptSectionsSource} />
 

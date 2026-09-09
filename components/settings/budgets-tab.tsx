@@ -4,6 +4,7 @@ import { useState } from "react";
 
 import { Field, FieldDescription, FieldGroup, FieldLabel, Input } from "@/components/ui";
 import { api } from "@/convex/_generated/api";
+import { DEFAULT_WEEKLY_USD_CAP_PER_TEAM, effectiveWeeklyUsdCap } from "@/convex/lib/defaults";
 
 import { SettingsSection, useSave } from "./shared";
 import type { SettingsData } from "./types";
@@ -15,6 +16,10 @@ export function BudgetsTab({ data }: { data: SettingsData }) {
   );
   const [usdCap, setUsdCap] = useState(
     data.rules.leagueUsdHardCap === undefined ? "" : String(data.rules.leagueUsdHardCap),
+  );
+  const effectiveTeamCap = effectiveWeeklyUsdCap(data.rules.weeklyUsdCapPerTeam);
+  const [teamUsdCap, setTeamUsdCap] = useState(
+    effectiveTeamCap === null ? "" : String(effectiveTeamCap),
   );
 
   const save = useSave(api.commissioner.setBudgets);
@@ -31,11 +36,29 @@ export function BudgetsTab({ data }: { data: SettingsData }) {
           leagueId: data.league._id,
           weeklyTokenCapPerTeam: tokenCap === "" ? null : Number(tokenCap),
           leagueUsdHardCap: usdCap === "" ? null : Number(usdCap),
+          weeklyUsdCapPerTeam: teamUsdCap === "" ? null : Number(teamUsdCap),
         })
       }
-      footer="When the USD hard cap is reached, remaining runs in the week use fallbacks and the commissioner is notified."
+      footer="When a cap is reached, remaining runs in the week use fallbacks. Owners who add their own gateway key bypass every cap; their spend is still metered and public."
     >
-      <FieldGroup className="gap-4 sm:grid sm:grid-cols-2">
+      <FieldGroup className="gap-4 sm:grid sm:grid-cols-3">
+        <Field>
+          <FieldLabel htmlFor="weekly-usd-cap">Weekly spend cap per team (USD)</FieldLabel>
+          <Input
+            id="weekly-usd-cap"
+            type="number"
+            min={0}
+            step="0.25"
+            placeholder="No cap"
+            className="font-mono"
+            value={teamUsdCap}
+            onChange={(event) => setTeamUsdCap(event.target.value)}
+          />
+          <FieldDescription>
+            Default ${DEFAULT_WEEKLY_USD_CAP_PER_TEAM.toFixed(2)} per team per week. Blank = no cap.
+          </FieldDescription>
+        </Field>
+
         <Field>
           <FieldLabel htmlFor="weekly-token-cap">Weekly token cap per team</FieldLabel>
           <Input

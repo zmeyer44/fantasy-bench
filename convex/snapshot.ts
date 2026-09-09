@@ -235,6 +235,8 @@ export const loadBuildInputs = internalQuery({
         id: team._id,
         name: team.name,
         abbreviation: team.abbreviation,
+        ...(team.avatarTemplate ? { avatarTemplate: team.avatarTemplate } : {}),
+        ...(team.avatarStatus ? { avatarStatus: team.avatarStatus } : {}),
         ownerUserId: team.ownerUserId ?? null,
         faabRemaining: team.faabRemaining,
         waiverPriority: team.waiverPriority,

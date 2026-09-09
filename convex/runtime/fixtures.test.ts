@@ -19,7 +19,11 @@ import { expect, test } from "vitest";
 import type { LineupSlot, SnapshotPayload, SnapshotPlayer } from "../../lib/snapshot/types";
 import { internal } from "../_generated/api";
 import type { Doc, Id } from "../_generated/dataModel";
+import { encryptSecret } from "../lib/secrets";
 import schema from "../schema";
+
+// The runtime tests exercise bring-your-own-key; any 32-byte key will do here.
+process.env.BYOK_ENCRYPTION_KEY ??= "MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=";
 
 /**
  * Every module under `convex/`, keyed the way `convex-test` expects.
@@ -211,6 +215,10 @@ export type FixtureOptions = {
   harness?: Partial<Doc<"config_versions">["harness"]>;
   weeklyTokenCapPerTeam?: number;
   leagueUsdHardCap?: number;
+  /** null = no team cap; undefined = the platform default ($2.00). */
+  weeklyUsdCapPerTeam?: number | null;
+  /** Register an encrypted gateway key for team A (bring-your-own-key). */
+  teamKey?: string;
   runWallclockSeconds?: number;
   runStatus?: Doc<"runs">["status"];
   /** Skip the mock model price row (so the ledger falls back to the catalog). */
@@ -263,6 +271,9 @@ export async function seedFixture(
       ...(options.leagueUsdHardCap === undefined
         ? {}
         : { leagueUsdHardCap: options.leagueUsdHardCap }),
+      ...(options.weeklyUsdCapPerTeam === undefined
+        ? {}
+        : { weeklyUsdCapPerTeam: options.weeklyUsdCapPerTeam }),
       ...(options.runWallclockSeconds === undefined
         ? {}
         : { runWallclockSeconds: options.runWallclockSeconds }),
@@ -284,6 +295,17 @@ export async function seedFixture(
       );
     }
     const [teamAId, teamBId] = teamIds as [Id<"teams">, Id<"teams">, Id<"teams">];
+    if (options.teamKey) {
+      const sealed = await encryptSecret(options.teamKey);
+      await ctx.db.insert("team_gateway_keys", {
+        leagueId,
+        teamId: teamAId,
+        ...sealed,
+        last4: options.teamKey.slice(-4),
+        addedByUserId: userId,
+        createdAt: NOW,
+      });
+    }
 
     if (!options.noModelPrice) {
       await ctx.db.insert("model_prices", {

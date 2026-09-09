@@ -29,7 +29,15 @@ import {
   type QueryCtx,
 } from "./_generated/server";
 import { agentCtxValidator, withAgentAction, type AgentCtx } from "./lib/agent_action";
-import { requireLeagueRead } from "./lib/auth";
+import { requireLeagueRead, type LeagueAccess } from "./lib/auth";
+import {
+  CUSTOM_TOOL_PREFIX,
+  isPrivateAt,
+  redactPromptSections,
+  redactToolCalls,
+  redactToolResults,
+  revealAtFor,
+} from "./lib/visibility";
 import { appError } from "./lib/errors";
 import { round8 } from "./lib/pricing_pure";
 import { paginationResult } from "./lib/validators";
@@ -147,6 +155,11 @@ export type TraceDetail = {
   } | null;
   promptSections: PromptSection[];
   promptSectionsSource: "runtime" | "derived" | "none";
+  /**
+   * Epoch ms until which this viewer sees the owner's prompt material and
+   * custom-tool calls redacted (customisation cooldown); null when visible.
+   */
+  privateUntil: number | null;
   actions: TraceAction[];
   /** Totals off the run document — the per-step figures live on each step. */
   usage: {
@@ -445,7 +458,43 @@ function toStep(step: Doc<"run_steps">): TraceStep {
   };
 }
 
-async function buildDetail(ctx: QueryCtx, run: Doc<"runs">): Promise<TraceDetail> {
+/**
+ * The customisation cooldown as it applies to one run: the team owner and the
+ * commissioner see everything; everyone else sees owner material redacted until
+ * three weeks after the run.
+ */
+export async function runPrivacy(
+  ctx: QueryCtx,
+  run: Doc<"runs">,
+  access: LeagueAccess,
+): Promise<{ privateUntil: number | null }> {
+  const viewerUserId = access.viewer?.userId ?? null;
+  const team = run.teamId ? await ctx.db.get("teams", run.teamId) : null;
+  const canSeePrivate =
+    viewerUserId !== null &&
+    (access.isCommissioner || (team !== null && team.ownerUserId === viewerUserId));
+  const privateUntil = isPrivateAt(run._creationTime, Date.now(), canSeePrivate)
+    ? revealAtFor(run._creationTime)
+    : null;
+  return { privateUntil };
+}
+
+/** A step as this viewer may see it. */
+function stepForViewer(step: Doc<"run_steps">, privateUntil: number | null): TraceStep {
+  const base = toStep(step);
+  if (privateUntil === null) return base;
+  return {
+    ...base,
+    toolCalls: redactToolCalls(base.toolCalls, privateUntil),
+    toolResults: redactToolResults(base.toolResults, privateUntil),
+  };
+}
+
+async function buildDetail(
+  ctx: QueryCtx,
+  run: Doc<"runs">,
+  privateUntil: number | null,
+): Promise<TraceDetail> {
   const league = await ctx.db.get("leagues", run.leagueId);
   const window = await ctx.db.get("windows", run.windowId);
   if (!league || !window) throw appError("NOT_FOUND", "Run not found");
@@ -479,6 +528,7 @@ async function buildDetail(ctx: QueryCtx, run: Doc<"runs">): Promise<TraceDetail
       promptSectionsSource = "derived";
     }
   }
+  if (privateUntil !== null) promptSections = redactPromptSections(promptSections, privateUntil);
 
   return {
     run: {
@@ -510,12 +560,13 @@ async function buildDetail(ctx: QueryCtx, run: Doc<"runs">): Promise<TraceDetail
           id: version._id,
           versionNo: version.versionNo,
           modelId: version.modelId,
-          changeSummary: version.changeSummary ?? null,
+          changeSummary: privateUntil === null ? (version.changeSummary ?? null) : null,
           createdAt: version._creationTime,
         }
       : null,
     promptSections,
     promptSectionsSource,
+    privateUntil,
     actions: actionRows.map((action) => ({
       id: action._id,
       toolCallId: action.toolCallId,
@@ -542,8 +593,9 @@ export const get = query({
   handler: async (ctx, { runId }): Promise<TraceDetail> => {
     const run = await ctx.db.get("runs", runId);
     if (!run) throw appError("NOT_FOUND", "Run not found");
-    await requireLeagueRead(ctx, run.leagueId);
-    return buildDetail(ctx, run);
+    const access = await requireLeagueRead(ctx, run.leagueId);
+    const { privateUntil } = await runPrivacy(ctx, run, access);
+    return buildDetail(ctx, run, privateUntil);
   },
 });
 
@@ -552,12 +604,13 @@ export const steps = query({
   handler: async (ctx, { runId, paginationOpts }) => {
     const run = await ctx.db.get("runs", runId);
     if (!run) throw appError("NOT_FOUND", "Run not found");
-    await requireLeagueRead(ctx, run.leagueId);
+    const access = await requireLeagueRead(ctx, run.leagueId);
+    const { privateUntil } = await runPrivacy(ctx, run, access);
     const page = await ctx.db
       .query("run_steps")
       .withIndex("by_runId_stepIndex", (q) => q.eq("runId", runId))
       .paginate(paginationOpts);
-    return { ...page, page: page.page.map(toStep) };
+    return { ...page, page: page.page.map((step) => stepForViewer(step, privateUntil)) };
   },
 });
 
@@ -624,7 +677,11 @@ export const stepPayload = query({
     if (!payload) throw appError("NOT_FOUND", "Payload not found");
     const run = await ctx.db.get("runs", payload.runId);
     if (!run) throw appError("NOT_FOUND", "Run not found");
-    await requireLeagueRead(ctx, run.leagueId);
+    const access = await requireLeagueRead(ctx, run.leagueId);
+    const { privateUntil } = await runPrivacy(ctx, run, access);
+    if (privateUntil !== null && payload.toolName.startsWith(CUSTOM_TOOL_PREFIX)) {
+      throw appError("FORBIDDEN", "This custom-tool result is private until the owner's cooldown passes.");
+    }
     return {
       id: payload._id,
       runId: payload.runId,
@@ -709,8 +766,13 @@ export type TraceExport = {
   trace: TraceDetail & { steps: TraceStep[] };
 };
 
-async function exportRun(ctx: QueryCtx, run: Doc<"runs">): Promise<TraceDetail & { steps: TraceStep[] }> {
-  const detail = await buildDetail(ctx, run);
+async function exportRun(
+  ctx: QueryCtx,
+  run: Doc<"runs">,
+  access: LeagueAccess,
+): Promise<TraceDetail & { steps: TraceStep[] }> {
+  const { privateUntil } = await runPrivacy(ctx, run, access);
+  const detail = await buildDetail(ctx, run, privateUntil);
   // Bounded: a run has at most `maxStepsCap` steps (≤ 31 in every shipped config).
   const stepRows = await ctx.db
     .query("run_steps")
@@ -724,6 +786,8 @@ async function exportRun(ctx: QueryCtx, run: Doc<"runs">): Promise<TraceDetail &
   const payloadByCall = new Map(payloadRows.map((row) => [row.toolCallId, row.payload]));
 
   const steps = stepRows.map((step) => {
+    // Inline the overflow payloads first, then redact: a private custom-tool
+    // result must not come back through the payload table either.
     const decorated = toStep(step);
     decorated.toolResults = decorated.toolResults.map((result) => {
       if (!result || typeof result !== "object") return result;
@@ -734,7 +798,12 @@ async function exportRun(ctx: QueryCtx, run: Doc<"runs">): Promise<TraceDetail &
       }
       return result;
     });
-    return decorated;
+    if (privateUntil === null) return decorated;
+    return {
+      ...decorated,
+      toolCalls: redactToolCalls(decorated.toolCalls, privateUntil),
+      toolResults: redactToolResults(decorated.toolResults, privateUntil),
+    };
   });
 
   return { ...detail, steps };
@@ -745,12 +814,12 @@ const exportRunQuery = query({
   handler: async (ctx, { runId }): Promise<TraceExport> => {
     const run = await ctx.db.get("runs", runId);
     if (!run) throw appError("NOT_FOUND", "Run not found");
-    await requireLeagueRead(ctx, run.leagueId);
+    const access = await requireLeagueRead(ctx, run.leagueId);
     return {
       version: 1,
       kind: "run",
       exportedAt: new Date(Date.now()).toISOString(),
-      trace: await exportRun(ctx, run),
+      trace: await exportRun(ctx, run, access),
     };
   },
 });
@@ -766,14 +835,14 @@ export const exportTeamPage = query({
   handler: async (ctx, { teamId, paginationOpts }) => {
     const team = await ctx.db.get("teams", teamId);
     if (!team) throw appError("NOT_FOUND", "Team not found");
-    await requireLeagueRead(ctx, team.leagueId);
+    const access = await requireLeagueRead(ctx, team.leagueId);
     const page = await ctx.db
       .query("runs")
       .withIndex("by_teamId", (q) => q.eq("teamId", teamId))
       .order("desc")
       .paginate(paginationOpts);
     const traces: Array<TraceDetail & { steps: TraceStep[] }> = [];
-    for (const run of page.page) traces.push(await exportRun(ctx, run));
+    for (const run of page.page) traces.push(await exportRun(ctx, run, access));
     return {
       ...page,
       version: 1 as const,
@@ -972,6 +1041,7 @@ export const markRunning = internalMutation({
     modelId: v.string(),
     configVersionId: v.optional(v.id("config_versions")),
     promptSections: v.optional(v.array(promptSection)),
+    keySource: v.optional(v.union(v.literal("league"), v.literal("team"))),
     now: v.optional(v.number()),
   },
   returns: v.object({ attempt: v.number(), running: v.boolean() }),
@@ -988,6 +1058,7 @@ export const markRunning = internalMutation({
       attempt,
       ...(args.configVersionId ? { configVersionId: args.configVersionId } : {}),
       ...(args.promptSections ? { promptSections: args.promptSections } : {}),
+      ...(args.keySource ? { keySource: args.keySource } : {}),
     });
     return { attempt, running: true };
   },

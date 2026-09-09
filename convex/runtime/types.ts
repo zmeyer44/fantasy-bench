@@ -13,6 +13,7 @@ import type { Doc, Id } from "../_generated/dataModel";
 import type { ActionCtx } from "../_generated/server";
 import type { RemainingBudget } from "../ledger";
 import type { harnessSettings, promptSection } from "../schema";
+import type { ToolOverride } from "./tools/catalog";
 
 export type HarnessSettings = Infer<typeof harnessSettings>;
 export type PromptSection = Infer<typeof promptSection>;
@@ -86,6 +87,8 @@ export type ToolContext = {
   currentStepIndex: () => number;
   budget: RemainingBudget;
   customProviders: CustomProvider[];
+  /** Per-version tool customisation (disable / owner guidance); absent = defaults. */
+  toolOverrides?: ToolOverride[];
   state: RunToolState;
 };
 

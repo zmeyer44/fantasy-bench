@@ -22,10 +22,11 @@ export default async function WaiversPage({
   if (current === null) notFound();
   const weekNo = Number(raw) || current;
 
-  const preloaded = await readOrNull(() =>
-    preloadAuthQuery(api.waivers.results, { leagueId: id, weekNo }),
-  );
-  if (!preloaded) notFound();
+  const [preloaded, available] = await Promise.all([
+    readOrNull(() => preloadAuthQuery(api.waivers.results, { leagueId: id, weekNo })),
+    readOrNull(() => preloadAuthQuery(api.waivers.available, { leagueId: id })),
+  ]);
+  if (!preloaded || !available) notFound();
 
-  return <WaiversView leagueId={leagueId} weekNo={weekNo} preloaded={preloaded} />;
+  return <WaiversView leagueId={leagueId} weekNo={weekNo} preloaded={preloaded} available={available} showClaims={Boolean(raw)} />;
 }

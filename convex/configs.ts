@@ -1,10 +1,13 @@
 /**
  * Agent config read models (PRD 5.5).
  *
- * Everything here is PUBLIC WITHIN THE LEAGUE: configs, version history, diffs
- * and the lock status are visible to every member and to spectators of a public
- * league, so every query rides `requireLeagueRead`. Do not add ownership checks —
- * `canEdit` reports the write right, it does not gate the read.
+ * Everything here is readable WITHIN THE LEAGUE — every query rides
+ * `requireLeagueRead` — but a version's *content* (context, skills, tool
+ * overrides, harness, change summary) is private to the team owner and the
+ * commissioner for three weeks after it is saved (`convex/lib/visibility.ts`).
+ * The envelope (version number, model, author, dates) is always visible.
+ * `canEdit` reports the write right; `redacted` on a version reports whether the
+ * cooldown hid its content from this viewer.
  *
  * `save` / `setNote` (below) are the only writers. Config versions are IMMUTABLE:
  * a save always appends a row, and the only column ever written afterwards is
@@ -36,18 +39,25 @@ import {
 import { diffVersionRows } from "./lib/config_pure";
 import { appError } from "./lib/errors";
 import { configVersionDoc, skillDoc } from "./lib/validators";
-import { reasoningEffort } from "./schema";
+import { COOLDOWN_MS, isPrivateAt, revealAtFor } from "./lib/visibility";
+import { normalizeToolOverrides, validateToolOverrides } from "./runtime/tools/catalog";
+import { reasoningEffort, toolOverride } from "./schema";
 import { findModel } from "@/lib/models";
 import { isWithinEditWindow } from "@/lib/time";
 
 type Ctx = QueryCtx | MutationCtx;
 
-export type ConfigVersionWithSkills = Doc<"config_versions"> & {
-  harness: HarnessSettings;
-  skills: Doc<"skills">[];
-};
+/** Epoch ms at which a version's content becomes public; `redacted` says whether it still is not. */
+export type Visibility = { revealAt: number; redacted: boolean };
 
-export type ConfigVersionSummary = Doc<"config_versions"> & {
+export type ConfigVersionWithSkills = Doc<"config_versions"> &
+  Visibility & {
+    harness: HarnessSettings;
+    skills: Doc<"skills">[];
+  };
+
+export type ConfigVersionSummary = Doc<"config_versions"> &
+  Visibility & {
   harness: HarnessSettings;
   createdByName: string | null;
   skillCount: number;
@@ -73,14 +83,60 @@ function createdAtOf(version: Doc<"config_versions">): number {
   return version.createdAt ?? version._creationTime;
 }
 
-/** Attached skills in injection order (the order of `skillIds`). Bounded at 12. */
-async function hydrate(ctx: Ctx, version: Doc<"config_versions">): Promise<ConfigVersionWithSkills> {
+/**
+ * The content fields a viewer without private access may not see while the
+ * cooldown runs. Sizes and the model stay; the words, the skills, the tool
+ * customisations, the harness and the change summary go.
+ */
+function redactVersion<T extends Doc<"config_versions">>(version: T): T {
+  return {
+    ...version,
+    contextMd: "",
+    skillIds: [],
+    toolOverrides: undefined,
+    changeSummary: undefined,
+    harness: parseHarness({}),
+  };
+}
+
+/**
+ * Attached skills in injection order (the order of `skillIds`). Bounded at 12.
+ * Redacted for viewers without private access while the version is cooling.
+ */
+async function hydrate(
+  ctx: Ctx,
+  raw: Doc<"config_versions">,
+  view: { nowMs: number; canSeePrivate: boolean },
+): Promise<ConfigVersionWithSkills> {
+  const createdAt = createdAtOf(raw);
+  const redacted = isPrivateAt(createdAt, view.nowMs, view.canSeePrivate);
+  return {
+    ...(await hydrateSkills(ctx, redacted ? redactVersion(raw) : raw)),
+    revealAt: revealAtFor(createdAt),
+    redacted,
+  };
+}
+
+/** The runtime's view: skills resolved, no visibility envelope. */
+async function hydrateSkills(
+  ctx: Ctx,
+  version: Doc<"config_versions">,
+): Promise<Doc<"config_versions"> & { harness: HarnessSettings; skills: Doc<"skills">[] }> {
   const skills: Doc<"skills">[] = [];
   for (const skillId of version.skillIds) {
     const skill = await ctx.db.get("skills", skillId);
     if (skill) skills.push(skill);
   }
   return { ...version, harness: parseHarness(version.harness), skills };
+}
+
+/** Owner or commissioner: the people the cooldown does not apply to. */
+function canSeePrivateFor(
+  access: { viewer: { userId: Id<"users"> } | null; isCommissioner: boolean },
+  team: Doc<"teams">,
+): boolean {
+  const viewerUserId = access.viewer?.userId ?? null;
+  return viewerUserId !== null && (team.ownerUserId === viewerUserId || access.isCommissioner);
 }
 
 async function configOf(ctx: Ctx, teamId: Id<"teams">): Promise<Doc<"agent_configs"> | null> {
@@ -108,6 +164,7 @@ async function listVersions(
   ctx: Ctx,
   config: Doc<"agent_configs">,
   nowMs: number,
+  canSeePrivate: boolean,
 ): Promise<ConfigVersionSummary[]> {
   // Bounded by construction: one config's own version chain, read newest-first.
   const rows = await ctx.db
@@ -120,7 +177,10 @@ async function listVersions(
   const authorNames = new Map<string, string | null>();
 
   const out: ConfigVersionSummary[] = [];
-  for (const version of rows) {
+  for (const raw of rows) {
+    const createdAt = createdAtOf(raw);
+    const redacted = isPrivateAt(createdAt, nowMs, canSeePrivate);
+    const version = redacted ? redactVersion(raw) : raw;
     let createdByName: string | null = null;
     if (version.createdByUserId) {
       if (!authorNames.has(version.createdByUserId)) {
@@ -136,8 +196,10 @@ async function listVersions(
       skillCount: version.skillIds.length,
       isCurrent: config.currentVersionId === version._id,
       isPending: config.pendingVersionId === version._id,
-      changedThisWeek: createdAtOf(version) >= weekStart,
+      changedThisWeek: createdAt >= weekStart,
       modelDisplayName: findModel(version.modelId)?.displayName ?? version.modelId,
+      revealAt: revealAtFor(createdAt),
+      redacted,
     });
   }
   return out;
@@ -155,6 +217,14 @@ export type ConfigGetView = TeamConfigView & {
   lock: EditLockStatus;
   canEdit: boolean;
   viewerUserId: Id<"users"> | null;
+  /** The cooldown as it applies to this viewer. */
+  visibility: { canSeePrivate: boolean; cooldownMs: number };
+  /**
+   * For a viewer who cannot see the current version yet: the newest version
+   * whose cooldown has passed, so the editor can still show *something*. Null
+   * when the current version is visible or nothing is public yet.
+   */
+  latestPublic: ConfigVersionWithSkills | null;
 };
 
 /** Everything the config editor needs, including lock status and viewer rights. */
@@ -179,18 +249,35 @@ export const get = query({
       : null;
 
     const viewerUserId = access.viewer?.userId ?? null;
+    const canSeePrivate = canSeePrivateFor(access, team);
+    const view = { nowMs: now, canSeePrivate };
+    const hydratedCurrent = current ? await hydrate(ctx, current, view) : null;
+
+    let latestPublic: ConfigVersionWithSkills | null = null;
+    if (config && hydratedCurrent?.redacted) {
+      // Bounded: one config's version chain, newest first; stops at the first public one.
+      const rows = await ctx.db
+        .query("config_versions")
+        .withIndex("by_configId_versionNo", (q) => q.eq("configId", config._id))
+        .order("desc")
+        .take(200);
+      const revealed = rows.find((row) => !isPrivateAt(createdAtOf(row), now, false));
+      if (revealed) latestPublic = await hydrate(ctx, revealed, view);
+    }
+
     return {
       team,
       league: access.league,
       rules,
       config,
-      current: current ? await hydrate(ctx, current) : null,
-      pending: pending ? await hydrate(ctx, pending) : null,
-      versions: config ? await listVersions(ctx, config, now) : [],
+      current: hydratedCurrent,
+      pending: pending ? await hydrate(ctx, pending, view) : null,
+      versions: config ? await listVersions(ctx, config, now, canSeePrivate) : [],
       lock: editLockStatusFor(toEditLock(rules?.editLock), now),
-      canEdit:
-        viewerUserId !== null && (team.ownerUserId === viewerUserId || access.isCommissioner),
+      canEdit: canSeePrivate,
       viewerUserId,
+      visibility: { canSeePrivate, cooldownMs: COOLDOWN_MS },
+      latestPublic,
     };
   },
 });
@@ -206,27 +293,35 @@ export const versions = query({
     config: Doc<"agent_configs"> | null;
     versions: ConfigVersionSummary[];
   }> => {
-    await requireLeagueRead(ctx, leagueId);
+    const access = await requireLeagueRead(ctx, leagueId);
     const team = await teamInLeague(ctx, teamId, leagueId);
     const config = await configOf(ctx, teamId);
     return {
       team,
       config,
-      versions: config ? await listVersions(ctx, config, Date.now()) : [],
+      versions: config
+        ? await listVersions(ctx, config, Date.now(), canSeePrivateFor(access, team))
+        : [],
     };
   },
 });
 
-/** One version, hydrated with its skills, plus the version before it. */
+/**
+ * One version, hydrated with its skills, plus the version before it. Both are
+ * redacted for viewers without private access while their cooldown runs.
+ */
 export const version = query({
   args: { leagueId: v.id("leagues"), versionId: v.id("config_versions") },
   handler: async (
     ctx,
     { leagueId, versionId },
   ): Promise<{ version: ConfigVersionWithSkills; previous: ConfigVersionWithSkills | null }> => {
-    await requireLeagueRead(ctx, leagueId);
+    const access = await requireLeagueRead(ctx, leagueId);
     const row = await ctx.db.get("config_versions", versionId);
     if (!row || row.leagueId !== leagueId) throw appError("NOT_FOUND", "Version not found.");
+    const team = await ctx.db.get("teams", row.teamId);
+    if (!team) throw appError("NOT_FOUND", "Version not found.");
+    const view = { nowMs: Date.now(), canSeePrivate: canSeePrivateFor(access, team) };
 
     const priorRows = await ctx.db
       .query("config_versions")
@@ -237,8 +332,8 @@ export const version = query({
       .take(1);
 
     return {
-      version: await hydrate(ctx, row),
-      previous: priorRows[0] ? await hydrate(ctx, priorRows[0]) : null,
+      version: await hydrate(ctx, row, view),
+      previous: priorRows[0] ? await hydrate(ctx, priorRows[0], view) : null,
     };
   },
 });
@@ -256,7 +351,11 @@ function diffable(version: ConfigVersionWithSkills): DiffableVersion {
   };
 }
 
-/** Context diff + structured model/harness/skill diffs. Computed in the query (pure). */
+/**
+ * Context diff + structured model/harness/skill diffs. Computed in the query
+ * (pure). FORBIDDEN while either side is still under its cooldown for this
+ * viewer — a diff against a redacted version would leak it.
+ */
 export const diff = query({
   args: {
     leagueId: v.id("leagues"),
@@ -264,12 +363,22 @@ export const diff = query({
     b: v.id("config_versions"),
   },
   handler: async (ctx, { leagueId, a, b }): Promise<ConfigDiff> => {
-    await requireLeagueRead(ctx, leagueId);
+    const access = await requireLeagueRead(ctx, leagueId);
     const left = await ctx.db.get("config_versions", a);
     const right = await ctx.db.get("config_versions", b);
     if (!left || left.leagueId !== leagueId) throw appError("NOT_FOUND", `Config version ${a} not found`);
     if (!right || right.leagueId !== leagueId) throw appError("NOT_FOUND", `Config version ${b} not found`);
-    return diffVersionRows(diffable(await hydrate(ctx, left)), diffable(await hydrate(ctx, right)));
+    const team = await ctx.db.get("teams", left.teamId);
+    if (!team) throw appError("NOT_FOUND", `Config version ${a} not found`);
+    const view = { nowMs: Date.now(), canSeePrivate: canSeePrivateFor(access, team) };
+    const [before, after] = [await hydrate(ctx, left, view), await hydrate(ctx, right, view)];
+    if (before.redacted || after.redacted) {
+      throw appError(
+        "FORBIDDEN",
+        `Version ${before.redacted ? before.versionNo : after.versionNo} is private until its cooldown passes.`,
+      );
+    }
+    return diffVersionRows(diffable(before), diffable(after));
   },
 });
 
@@ -428,6 +537,8 @@ export const save = mutation({
     modelId: v.string(),
     harness: harnessInput,
     skillIds: v.array(v.id("skills")),
+    /** Deltas from the default tool contract; omitted or empty = every tool at its default. */
+    toolOverrides: v.optional(v.array(toolOverride)),
     changeSummary: v.optional(v.string()),
   },
   returns: v.object({
@@ -479,6 +590,9 @@ export const save = mutation({
       noteWasAppended: note.length > 0,
     });
 
+    const toolOverrides = normalizeToolOverrides(args.toolOverrides ?? []);
+    issues.push(...validateToolOverrides(toolOverrides));
+
     const missing: Id<"skills">[] = [];
     for (const skillId of skillIds) {
       if ((await ctx.db.get("skills", skillId)) === null) missing.push(skillId);
@@ -510,6 +624,7 @@ export const save = mutation({
       modelId: args.modelId,
       harness,
       skillIds,
+      toolOverrides: toolOverrides.length > 0 ? toolOverrides : undefined,
       createdByUserId: access.viewer.userId,
       appliedAt: open ? now : undefined,
       changeSummary: summary ? summary : undefined,
@@ -634,6 +749,6 @@ export const currentForTeam = internalQuery({
     if (!config?.currentVersionId) return null;
     const version = await ctx.db.get("config_versions", config.currentVersionId);
     if (!version) return null;
-    return hydrate(ctx, version);
+    return hydrateSkills(ctx, version);
   },
 });

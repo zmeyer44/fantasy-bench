@@ -12,6 +12,7 @@ import { describe, expect, test } from "vitest";
 
 import { api, internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
+import { COOLDOWN_MS } from "./lib/visibility";
 import schema from "./schema";
 
 const modules = import.meta.glob("./**/*.ts");
@@ -409,6 +410,104 @@ describe("runs.get / steps / stepPayload / export", () => {
     expect(teamExport.kind).toBe("team");
     expect(teamExport.team.name).toBe("Alpha");
     expect(teamExport.page).toHaveLength(1);
+  });
+});
+
+describe("runs.get — customisation cooldown", () => {
+  test("hides owner prompt material and custom-tool calls from the league for three weeks", async () => {
+    const t = convexTest(schema, modules);
+    const s = await seed(t);
+    const runId = await insertRun(t, s);
+    const { payloadId, newsPayloadId } = await t.run(async (ctx) => {
+      await ctx.db.patch("runs", runId, {
+        promptSections: [
+          {
+            id: "platform",
+            title: "Platform base prompt",
+            role: "system",
+            text:
+              "TOOLS AVAILABLE THIS WINDOW\n- get_news\n- set_lineup — owner guidance: floor over ceiling\n- custom_weather_feed\n- set_rationale\n\nUNTRUSTED DATA",
+            chars: 10,
+            tokenEstimate: 3,
+          },
+          { id: "owner_context", title: "Owner context", role: "system", text: "secret sauce", chars: 12, tokenEstimate: 3 },
+          { id: "skills", title: "Attached skills (1)", role: "system", text: "<skill>x</skill>", chars: 16, tokenEstimate: 4 },
+          { id: "snapshot", title: "Snapshot", role: "user", text: "league snapshot", chars: 15, tokenEstimate: 4 },
+        ],
+      });
+      const payloadId = await ctx.db.insert("run_step_payloads", {
+        runId,
+        stepIndex: 0,
+        toolCallId: "call-c",
+        toolName: "custom_weather_feed",
+        payload: { wind: 22 },
+        bytes: 12,
+      });
+      const newsPayloadId = await ctx.db.insert("run_step_payloads", {
+        runId,
+        stepIndex: 0,
+        toolCallId: "call-n",
+        toolName: "get_news",
+        payload: { items: [] },
+        bytes: 12,
+      });
+      await ctx.db.insert("run_steps", {
+        runId,
+        leagueId: s.leagueId,
+        stepIndex: 0,
+        modelId: SONNET,
+        text: "step zero",
+        responseMessages: [],
+        toolCalls: [
+          { toolName: "custom_weather_feed", toolCallId: "call-c", input: { query: "KC" } },
+          { toolName: "get_news", toolCallId: "call-n", input: {} },
+        ],
+        toolResults: [
+          { toolName: "custom_weather_feed", toolCallId: "call-c", output: { wind: 22 } },
+          { toolName: "get_news", toolCallId: "call-n", payloadRef: newsPayloadId },
+        ],
+        usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2, cachedInputTokens: 0, reasoningTokens: 0 },
+        costUsd: 0.01,
+        bytes: 10,
+      });
+      return { payloadId, newsPayloadId };
+    });
+
+    // A spectator of the public league: redacted until three weeks after the run.
+    const detail = await t.query(api.runs.get, { runId });
+    const run = (await t.run((ctx) => ctx.db.get("runs", runId)))!;
+    expect(detail.privateUntil).toBe(run._creationTime + COOLDOWN_MS);
+    const byId = new Map(detail.promptSections.map((section) => [section.id, section.text]));
+    expect(byId.get("owner_context")).toMatch(/^\[private until /);
+    expect(byId.get("skills")).toMatch(/^\[private until /);
+    expect(byId.get("snapshot")).toBe("league snapshot");
+    expect(byId.get("platform")).toBe(
+      "TOOLS AVAILABLE THIS WINDOW\n- get_news\n- set_lineup\n- set_rationale\n\nUNTRUSTED DATA",
+    );
+
+    const steps = await t.query(api.runs.steps, { runId, paginationOpts: { numItems: 5, cursor: null } });
+    const calls = steps.page[0].toolCalls as Array<{ toolName: string; input: unknown }>;
+    expect(calls.map((call) => call.toolName)).toEqual(["custom tool (private)", "get_news"]);
+    expect(calls[0].input).toEqual({ private: expect.stringMatching(/^\[private until /) });
+    const results = steps.page[0].toolResults as Array<{ toolName: string; output?: unknown }>;
+    expect(results[0]).toEqual({
+      toolCallId: "call-c",
+      toolName: "custom tool (private)",
+      output: { private: expect.stringMatching(/^\[private until /) },
+    });
+    await expect(t.query(api.runs.stepPayload, { payloadId })).rejects.toThrow(/private/);
+    expect((await t.query(api.runs.stepPayload, { payloadId: newsPayloadId })).toolName).toBe("get_news");
+
+    const exported = await t.query(api.runs.export, { runId });
+    expect(exported.trace.privateUntil).toBe(run._creationTime + COOLDOWN_MS);
+    expect((exported.trace.steps[0].toolCalls[0] as { toolName: string }).toolName).toBe("custom tool (private)");
+
+    // The commissioner (and the owner) see everything.
+    const commish = t.withIdentity({ subject: `${s.userId}|${s.sessionId}` });
+    const full = await commish.query(api.runs.get, { runId });
+    expect(full.privateUntil).toBeNull();
+    expect(full.promptSections.find((section) => section.id === "owner_context")?.text).toBe("secret sauce");
+    expect((await commish.query(api.runs.stepPayload, { payloadId })).payload).toEqual({ wind: 22 });
   });
 });
 

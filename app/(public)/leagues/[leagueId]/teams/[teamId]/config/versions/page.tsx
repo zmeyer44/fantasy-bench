@@ -1,3 +1,4 @@
+import { Lock } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
@@ -18,6 +19,7 @@ import {
 import { api } from "@/convex/_generated/api";
 import type { Id } from "@/convex/_generated/dataModel";
 import { fetchAuthQuery } from "@/lib/convex/server";
+import { COOLDOWN_DAYS } from "@/convex/lib/visibility";
 import { formatET } from "@/lib/time";
 
 /** Version history for one team's config. Public within the league (PRD 5.5). */
@@ -87,9 +89,9 @@ export default async function VersionsPage({
               </h2>
               <p className="mt-2 text-sm text-muted-foreground">Newest first.</p>
             </div>
-            {view.versions.length > 1 ? (
+            {view.versions.filter((v) => !v.redacted).length > 1 ? (
               <Link
-                href={`${base}/compare?a=${view.versions.at(-1)!._id}&b=${view.versions[0]._id}`}
+                href={`${base}/compare?a=${view.versions.filter((v) => !v.redacted).at(-1)!._id}&b=${view.versions.filter((v) => !v.redacted)[0]._id}`}
                 className="shrink-0 text-sm text-muted-foreground underline decoration-border underline-offset-4 transition-colors hover:text-foreground hover:decoration-brand"
               >
                 Compare first ↔ latest
@@ -138,18 +140,29 @@ export default async function VersionsPage({
                   </TableCell>
                   <TableCell className="font-mono text-xs">{version.modelDisplayName}</TableCell>
                   <TableCell numeric className="font-mono text-xs">
-                    {version.skillCount}
+                    {version.redacted ? "—" : version.skillCount}
                   </TableCell>
                   <TableCell className="max-w-xs truncate text-muted-foreground">
-                    {version.changeSummary ?? "—"}
+                    {version.redacted ? (
+                      <span className="inline-flex items-center gap-1.5">
+                        <Lock className="size-3" aria-hidden />
+                        private until {formatET(version.revealAt, "MMM d")}
+                      </span>
+                    ) : (
+                      (version.changeSummary ?? "—")
+                    )}
                   </TableCell>
                   <TableCell>
-                    <Link
-                      href={`${base}/${version._id}`}
-                      className="text-sm text-muted-foreground underline decoration-border underline-offset-4 transition-colors hover:text-foreground hover:decoration-brand"
-                    >
-                      Diff
-                    </Link>
+                    {version.redacted ? (
+                      <span className="text-sm text-ink-faint">—</span>
+                    ) : (
+                      <Link
+                        href={`${base}/${version._id}`}
+                        className="text-sm text-muted-foreground underline decoration-border underline-offset-4 transition-colors hover:text-foreground hover:decoration-brand"
+                      >
+                        Diff
+                      </Link>
+                    )}
                   </TableCell>
                 </TableRow>
               ))}
@@ -158,7 +171,8 @@ export default async function VersionsPage({
 
           <p className="text-sm text-ink-faint">
             Version rows are never updated except to stamp when they went live. A version saved
-            during the edit lock stays queued until the window reopens.
+            during the edit lock stays queued until the window reopens. Content is private to the
+            owner and commissioner for {COOLDOWN_DAYS} days after each save.
           </p>
         </section>
       )}

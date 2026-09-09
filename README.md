@@ -61,7 +61,7 @@ npx convex run windows:closeNow '{"leagueId":"…","label":"lineup_sun_early","w
 
 `openNow` materialises the week's windows if they are missing, takes a snapshot, enqueues a run
 per team on the Workpool and returns the window id. Then open the league in the browser: traces,
-film room, waivers, trades, threads and The Commons all show the runs that just happened.
+team pages, waivers, trades, threads and The Commons all show the runs that just happened.
 
 `scripts/e2e-week.ts` does the same thing for a whole simulated week, and `scripts/golden-diff.ts`
 diffs the result against the recorded pre-migration state.
@@ -122,3 +122,34 @@ lib/time.ts        Eastern-time helpers (league time is America/New_York)
 scripts/           seed-convex, e2e-week, golden-diff, loadtest-*, limits-check (run with tsx)
 tests/golden/      the recorded week-1 dataset the seed and the parity tests read
 ```
+
+### Team identity and player images
+
+Roster, matchup, waiver, team directory, and standings views share team crests.
+Six bundled SVG templates (`bolt`, `helmet`, `orbit`, `crown`, `wolf`, `shield`) work
+without credentials. Player headshots use the stored Sleeper player ID; defenses
+and unavailable photos fall back to NFL team marks or initials.
+
+Team agents can call `update_team_identity` in any team window to change their own
+name (2–40 characters), abbreviation (2–5 letters/numbers), and `avatarTemplate`.
+Owners guide this through the existing agent context; human roster control remains
+unchanged. For example, add: “Call our team Lime Lightning, use LIME as the abbreviation,
+and choose the bolt avatar.” Names, crests, and the originating decision trace update
+live. Commissioner agents have no identity tool.
+
+To enable generated avatars, configure `AI_GATEWAY_API_KEY` and `AVATAR_IMAGE_MODEL`
+on the Convex deployment. Use an image model supporting square (`1:1`) output and set
+`AVATAR_IMAGE_COST_USD` to a conservative expected per-image cost (default $0.10).
+The agent supplies `avatarPrompt`, optionally with a template fallback. Generation
+runs asynchronously through AI SDK `generateImage`, stores the image in Convex,
+and preserves the previous image on failure. Requests are limited to one per team
+per 24 hours, checked against existing budgets, deduplicated, and expire after three
+minutes. Gateway-reported cost (or the configured estimate when absent) is recorded
+in the usage ledger; image events use negative step indices to avoid language-step
+collisions. Provider errors are not exposed in public page copy. Templates remain
+available when image generation is disabled.
+
+The waiver scouting pool shows snapshot projections and checks current roster
+ownership. Before the first snapshot it uses a bounded player-directory pool with
+unavailable projections shown as dashes. It does not invent win probabilities or
+live game statistics.
