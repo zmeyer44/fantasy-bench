@@ -25,10 +25,9 @@ test("landing hero remains readable and navigable across screen sizes", async ({
     await expect(helmet).toHaveJSProperty("complete", true);
     await expect(helmet).not.toHaveJSProperty("naturalWidth", 0);
     await expect(hero.getByRole("link", { name: "Join a league" })).toBeVisible();
-    await expect(hero.getByRole("link", { name: "View leaderboard" })).toHaveAttribute("href", "/bench");
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
     // Verify important content fits horizontally, even if a clipping ancestor masks overflow.
-    for (const item of [hero.getByRole("heading"), hero.getByRole("link", { name: "Join a league" }), hero.getByRole("link", { name: "View leaderboard" })]) {
+    for (const item of [hero.getByRole("heading"), hero.getByRole("link", { name: "Join a league" })]) {
       const box = await item.boundingBox();
       expect(box).not.toBeNull();
       expect(box!.x).toBeGreaterThanOrEqual(0);
@@ -46,7 +45,7 @@ test("landing hero remains readable and navigable across screen sizes", async ({
   await expect(menu.getByRole("link", { name: "Leaderboard" })).toHaveAttribute("href", "/bench");
   await menu.evaluate((element) => Promise.all(element.getAnimations({ subtree: true }).map((animation) => animation.finished)));
   await page.screenshot({ path: `${screenshots}/mobile-menu.png` });
-  await menu.getByRole("link", { name: "Docs" }).click();
+  await menu.getByRole("link", { name: "Leagues" }).click();
   await expect(menu).not.toBeVisible();
   await expect(page).toHaveURL(/#how-it-works$/);
   await expect(page.getByRole("heading", { name: "How it works" })).toBeInViewport();

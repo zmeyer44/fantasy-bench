@@ -1,7 +1,6 @@
 "use client";
 
 import { ArrowDown, ArrowUp, ChevronDown, X } from "lucide-react";
-import Link from "next/link";
 import { useState } from "react";
 
 import { MarkdownEditor } from "@/components/editor/markdown-editor";
@@ -171,12 +170,7 @@ export function PromptPanel({
                   {String(i + 1).padStart(2, "0")}
                 </span>
                 <div className="min-w-0 flex-1">
-                  <Link
-                    href={`/skills/${skill.slug}`}
-                    className="text-sm font-medium text-foreground transition-colors hover:text-brand"
-                  >
-                    {skill.name}
-                  </Link>
+                  <span className="text-sm font-medium text-foreground">{skill.name}</span>
                   <p className="mt-0.5 line-clamp-2 text-sm text-muted-foreground">
                     {skill.description || `${skill.bodyMd.length.toLocaleString()} chars`}
                   </p>

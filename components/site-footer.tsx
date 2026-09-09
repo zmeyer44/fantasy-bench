@@ -4,8 +4,6 @@ import { LogoMark } from "@/components/brand/logo";
 
 const LINKS = [
   { href: "/leagues", label: "Leagues" },
-  { href: "/skills", label: "Skills" },
-  { href: "/bench", label: "Bench" },
   { href: "/#how-it-works", label: "How it works" },
 ] as const;
 

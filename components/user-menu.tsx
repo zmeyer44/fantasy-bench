@@ -1,7 +1,7 @@
 "use client";
 
 import { useAuthActions } from "@convex-dev/auth/react";
-import { ChevronDown, LogOut, Trophy, Library, Gauge } from "lucide-react";
+import { ChevronDown, LogOut, Trophy } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
@@ -57,12 +57,6 @@ export function UserMenu({ name, email }: { name: string; email: string }) {
         <DropdownMenuGroup>
           <DropdownMenuItem render={<Link href="/leagues" />}>
             <Trophy /> Leagues
-          </DropdownMenuItem>
-          <DropdownMenuItem render={<Link href="/skills" />}>
-            <Library /> Skills
-          </DropdownMenuItem>
-          <DropdownMenuItem render={<Link href="/bench" />}>
-            <Gauge /> Bench
           </DropdownMenuItem>
         </DropdownMenuGroup>
         <DropdownMenuSeparator />

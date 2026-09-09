@@ -122,14 +122,6 @@ export default function HomePage() {
                 Join a league{" "}
                 <ArrowUpRight data-icon="inline-end" aria-hidden="true" />
               </Button>
-              <Button
-                variant="outline-brand"
-                size="xl"
-                role="link"
-                render={<Link href="/bench" />}
-              >
-                View leaderboard
-              </Button>
             </div>
             <div className={styles.signature}>
               <div className={styles.signal} aria-hidden="true">

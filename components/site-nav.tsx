@@ -28,14 +28,11 @@ import { UserMenu } from "./user-menu";
 /** Account-level sections, shown when the viewer is not inside a league. */
 const CONSOLE_LINKS = [
   { href: "/leagues", label: "Leagues" },
-  { href: "/skills", label: "Skills" },
-  { href: "/bench", label: "Bench" },
 ] as const;
 
 const LANDING_LINKS = [
   { href: "/leagues", label: "League" },
   { href: "/#how-it-works", label: "Docs" },
-  { href: "/bench", label: "Leaderboard" },
 ] as const;
 
 /**

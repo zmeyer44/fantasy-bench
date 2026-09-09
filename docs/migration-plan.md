@@ -113,7 +113,7 @@ All 35 pages are RSCs; 12 call Drizzle directly. Rule: first paint via `preloadA
 
 | Page(s) | Preload + live? | Functions |
 |---|---|---|
-| `/leagues` (list), `/skills*`, `/bench` | fetch only | `leagues.listMine`, `skills.list/get`, `ledger.modelPrices` |
+| `/leagues` (list) | fetch only | `leagues.listMine` |
 | `/leagues/[id]` home | preload + live | `views.home` |
 | standings, teams, team page | preload + live | `views.standings`, `views.teams`, `views.team` |
 | config editor, versions, diff, compare | fetch; editor client uses `useQuery` for estimate/lock | `configs.*` |
