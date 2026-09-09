@@ -51,7 +51,7 @@ export function PromptPanel({
   onAttachSkill: () => void;
   /** Full-page composer — skills are markdown documents, not one-line fields. */
   authorSkillHref: string;
-  /** Stash the draft attachments before the page navigates away. */
+  /** Stash the config draft before the page navigates away. */
   onLeaveToAuthor: () => void;
   onSubmit: () => void;
 }) {

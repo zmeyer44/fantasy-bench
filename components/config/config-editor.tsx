@@ -34,8 +34,8 @@ import { PromptPanel } from "./prompt-panel";
 import { AttachSkillDialog, type AttachedSkill } from "./skill-picker";
 import {
   skillStashKey,
-  stashDraftSkills,
-  takeStashedSkills,
+  stashConfigDraft,
+  takeStashedConfigDraft,
 } from "./skill-stash";
 import { Toast, type ToastTone } from "./toast";
 import { toolCounts } from "./tool-model";
@@ -158,15 +158,24 @@ export function ConfigEditor(props: ConfigEditorProps) {
   const draftKey = `context:${leagueId}:${teamId}`;
   const stashKey = skillStashKey(leagueId, teamId);
 
-  // Authoring a skill happens on its own page; the attachments on the draft
+  // Authoring a skill happens on its own page; all unsaved fields
   // come back through the stash. Deferred so the first paint still matches the
   // server — sessionStorage is client-only.
   useEffect(() => {
     const timer = window.setTimeout(() => {
-      setSkills((current) => takeStashedSkills(stashKey, current) ?? current);
+      const restored = takeStashedConfigDraft(stashKey, initial.skills);
+      if (!restored) return;
+      setSkills(restored.skills);
+      if (restored.draft) {
+        setContextMd(restored.draft.contextMd);
+        setModelId(restored.draft.modelId);
+        setHarness(restored.draft.harness);
+        setNote(restored.draft.note);
+        setChangeSummary(restored.draft.changeSummary);
+      }
     }, 0);
     return () => window.clearTimeout(timer);
-  }, [stashKey]);
+  }, [stashKey, initial.skills]);
 
   // What the last save (or first paint) looked like, so the bar goes quiet again after saving.
   const [baseline, setBaseline] = useState(() => ({
@@ -337,7 +346,14 @@ export function ConfigEditor(props: ConfigEditorProps) {
             onSkillsChange={setSkills}
             onAttachSkill={() => setAttachOpen(true)}
             authorSkillHref={`/leagues/${props.leagueId}/teams/${props.teamId}/config/skills/new`}
-            onLeaveToAuthor={() => stashDraftSkills(stashKey, skills)}
+            onLeaveToAuthor={() => stashConfigDraft(stashKey, {
+              contextMd,
+              modelId,
+              harness,
+              skills,
+              note,
+              changeSummary,
+            })}
             onSubmit={() => void submitVersion()}
           />
         </TabsContent>
