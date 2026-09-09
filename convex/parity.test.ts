@@ -3157,6 +3157,8 @@ describe("commissioner.* (was commissioner.*)", () => {
       ...optionalUnset("commissioner.settings.league.joinCode"),
       // The settings page renders team cards from the same read.
       ...additiveColumn("commissioner.settings.teams"),
+      // Catalog entries now say whether the gateway accepts `temperature`.
+      ...additiveColumn("commissioner.settings.catalog[0].supportsTemperature"),
     ]);
 
     // DEVIATION (Phase 2, documented): the old `commissioner.settings` *minted* a

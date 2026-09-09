@@ -43,6 +43,7 @@ import {
   type QueryCtx,
 } from "./_generated/server";
 import { stepUsage } from "./schema";
+import { modelSupportsTemperature } from "@/lib/models";
 
 // ---------------------------------------------------------------------------
 // Config
@@ -86,7 +87,7 @@ export type CommissionerConfig = {
 /** Pinned gateway id; `mock/*` runs the scripted path with no API key. */
 export function commissionerConfig(): CommissionerConfig {
   return {
-    modelId: process.env.COMMISSIONER_MODEL_ID ?? "anthropic/claude-sonnet-4.5",
+    modelId: process.env.COMMISSIONER_MODEL_ID ?? "anthropic/claude-opus-5",
     displayName: "Commissioner",
     contextMd: COMMISSIONER_CONTEXT_MD,
     temperature: 0.4,
@@ -883,7 +884,7 @@ async function runTask(
         model: gateway(modelId),
         system: config.contextMd,
         prompt: args.prompt,
-        temperature: config.temperature,
+        ...(modelSupportsTemperature(modelId) ? { temperature: config.temperature } : {}),
         maxOutputTokens: config.maxOutputTokens,
       });
       text = result.text;

@@ -136,7 +136,7 @@ async function configureLeague(page: Page, leagueId: string, bench: number) {
   await expect(page.getByText("Saved.", { exact: true })).toBeVisible();
 
   await page.getByRole("tab", { name: "Models" }).click();
-  await page.getByLabel("From (deprecated)").selectOption("anthropic/claude-sonnet-4.5");
+  await page.getByLabel("From (deprecated)").selectOption("anthropic/claude-opus-5");
   await page.getByLabel("To (replacement)").selectOption("mock/scripted");
   await page.getByRole("button", { name: "Replace across the league" }).click();
   await expect(page.getByText("Updated 8 team(s).", { exact: true })).toBeVisible({

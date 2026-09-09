@@ -22,8 +22,8 @@ type T = ReturnType<typeof newTest>;
 
 const NOW = Date.now();
 const SEASON = 2026;
-const SONNET = "anthropic/claude-sonnet-4.5";
-const HAIKU = "anthropic/claude-haiku-4.5";
+const SONNET = "anthropic/claude-opus-5";
+const HAIKU = "google/gemini-3.8-flash";
 
 const RULES = {
   scoringPreset: "ppr" as const,
@@ -240,8 +240,8 @@ describe("ledger.leagueDashboard", () => {
     expect(dash.byTeam[1].modelId).toBe(SONNET);
 
     expect(dash.byModel.map((row) => [row.modelId, row.usd, row.displayName])).toEqual([
-      [HAIKU, 4, "Claude Haiku 4.5"],
-      [SONNET, 3, "Claude Sonnet 4.5"],
+      [HAIKU, 4, "Gemini 3.8 Flash"],
+      [SONNET, 3, "Claude Opus 5"],
     ]);
 
     // Trend excludes week 0, and is week-ordered.
@@ -357,14 +357,14 @@ describe("ledger.benchmark / ledger.modelPrices", () => {
     await seed(t);
     const before = await t.query(api.ledger.modelPrices, {});
     const sonnet = before.find((row) => row.modelId === SONNET)!;
-    expect(sonnet.inputPerM).toBe(3);
+    expect(sonnet.inputPerM).toBe(5);
     expect(sonnet.effectiveFrom).toBeNull();
 
     await t.run(async (ctx) => {
       await ctx.db.insert("model_prices", {
         modelId: SONNET,
         provider: "anthropic",
-        displayName: "Claude Sonnet 4.5",
+        displayName: "Claude Opus 5",
         inputPerM: 4,
         outputPerM: 20,
         supportsReasoning: true,
@@ -373,7 +373,7 @@ describe("ledger.benchmark / ledger.modelPrices", () => {
       await ctx.db.insert("model_prices", {
         modelId: SONNET,
         provider: "anthropic",
-        displayName: "Claude Sonnet 4.5",
+        displayName: "Claude Opus 5",
         inputPerM: 99,
         outputPerM: 99,
         supportsReasoning: true,
@@ -609,14 +609,14 @@ describe("ledger.recordStep", () => {
     const t = convexTest(schema, modules);
     const s = await seedRuntime(t);
 
-    // SONNET has no `model_prices` row here: the catalog ($3/$15) is used.
+    // SONNET has no `model_prices` row here: the catalog ($5/$25) is used.
     const catalog = await t.mutation(internal.ledger.recordStep, {
       runId: s.runA2,
       stepIndex: 0,
       modelId: SONNET,
       usage: usage(1_000_000, 0),
     });
-    expect(catalog.computedCostUsd).toBeCloseTo(3, 6);
+    expect(catalog.computedCostUsd).toBeCloseTo(5, 6);
 
     // A model in neither place prices at zero rather than throwing.
     const unknown = await t.mutation(internal.ledger.recordStep, {

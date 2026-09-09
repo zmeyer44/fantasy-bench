@@ -404,7 +404,7 @@ export async function seedFixture(
                   playerId: ids[s.key]! as string,
                 }))
               : [],
-        modelId: index === 0 ? modelId : "anthropic/claude-sonnet-4.5",
+        modelId: index === 0 ? modelId : "anthropic/claude-opus-5",
       })),
       players,
       freeAgentIds: PLAYER_SEEDS.filter((s) => s.free)

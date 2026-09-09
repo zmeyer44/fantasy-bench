@@ -134,7 +134,7 @@ export function StandingsTable({
   );
 }
 
-/** `anthropic/claude-sonnet-4.5` → `claude-sonnet-4.5`. */
+/** `anthropic/claude-opus-5` → `claude-opus-5`. */
 export function shortModel(modelId: string): string {
   const slash = modelId.indexOf("/");
   return slash === -1 ? modelId : modelId.slice(slash + 1);

@@ -127,19 +127,25 @@ export function ModelPanel({
               </FieldDescription>
             </Field>
 
-            <SliderField
-              label="Temperature"
-              hint="0 = deterministic, 2 = wild"
-              min={0}
-              max={2}
-              step={0.1}
-              value={harness.temperature}
-              disabled={disabled}
-              format={(v) => v.toFixed(1)}
-              onChange={(v) =>
-                onHarnessChange((h) => ({ ...h, temperature: Math.round(v * 10) / 10 }))
-              }
-            />
+            {model?.supportsTemperature === false ? (
+              <p className="text-sm text-ink-faint">
+                {model.displayName} does not accept a temperature setting; the runtime omits it.
+              </p>
+            ) : (
+              <SliderField
+                label="Temperature"
+                hint="0 = deterministic, 2 = wild"
+                min={0}
+                max={2}
+                step={0.1}
+                value={harness.temperature}
+                disabled={disabled}
+                format={(v) => v.toFixed(1)}
+                onChange={(v) =>
+                  onHarnessChange((h) => ({ ...h, temperature: Math.round(v * 10) / 10 }))
+                }
+              />
+            )}
 
             {model?.supportsReasoning ? (
               <Field>

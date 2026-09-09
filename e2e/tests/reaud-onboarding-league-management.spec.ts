@@ -91,7 +91,7 @@ test("commissioner league and team edits persist while private role boundaries r
   const startReview = commissionerPage.getByRole("dialog");
   await expect(startReview.getByRole("heading", { name: "Review and start auction draft" })).toBeVisible();
   await expect(startReview.getByText("15 per team · 120 total")).toBeVisible();
-  await expect(startReview.getByText("anthropic/claude-sonnet-4.5 × 8")).toBeVisible();
+  await expect(startReview.getByText("openai/gpt-5.6-terra × 8")).toBeVisible();
   await commissionerPage.screenshot({
     path: `${screenshots}/league-01b-settings-start-review.png`,
     fullPage: true,

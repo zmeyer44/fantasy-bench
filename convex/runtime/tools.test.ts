@@ -403,7 +403,7 @@ describe("helpers", () => {
   });
 
   test("resolveModel refuses an unpinned gateway id and resolves the mocks", () => {
-    expect(isPinnedModelId("anthropic/claude-sonnet-4.5")).toBe(true);
+    expect(isPinnedModelId("anthropic/claude-opus-5")).toBe(true);
     expect(isPinnedModelId("anthropic/claude-sonnet-latest")).toBe(false);
     expect(() => resolveModel("anthropic/claude-sonnet-latest")).toThrow(/unpinned/);
     expect(() => resolveModel("mock/nope")).toThrow(/unknown mock model id/);

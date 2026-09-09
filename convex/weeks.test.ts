@@ -136,7 +136,7 @@ const ROLLOVER_RULES = {
   seasonWeeks: 17,
   transparencyMode: "live" as const,
   injectionPolicy: "permitted" as const,
-  modelAllowlist: ["anthropic/claude-haiku-4.5"],
+  modelAllowlist: ["google/gemini-3.8-flash"],
   contextCharLimit: 8000,
   maxStepsCap: 12,
   editLock: { unlockDay: "tue", unlockTime: "06:00", lockDay: "wed", lockTime: "03:00" },

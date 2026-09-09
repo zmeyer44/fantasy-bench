@@ -19,8 +19,8 @@ const modules = import.meta.glob("./**/*.ts");
 
 const NOW = Date.now();
 const SEASON = 2026;
-const SONNET = "anthropic/claude-sonnet-4.5";
-const HAIKU = "anthropic/claude-haiku-4.5";
+const SONNET = "anthropic/claude-opus-5";
+const HAIKU = "google/gemini-3.8-flash";
 
 const RULES = {
   scoringPreset: "ppr" as const,
@@ -197,7 +197,7 @@ describe("runs.list", () => {
     expect(page.page[0].id).toBe(second);
     expect(page.isDone).toBe(false);
     expect(page.page[0].windowLabelText).toBe("Waiver");
-    expect(page.page[0].modelLabel).toBe("Claude Haiku 4.5");
+    expect(page.page[0].modelLabel).toBe("Gemini 3.8 Flash");
     expect(page.page[0].actionCount).toBe(2);
     expect(page.page[0].durationMs).toBe(30_000);
     expect(page.page[0].teamName).toBe("Bravo");
@@ -553,8 +553,8 @@ describe("runs.modelOptions", () => {
     });
 
     expect(await t.query(api.runs.modelOptions, { leagueId: s.leagueId })).toEqual([
-      { modelId: SONNET, label: "Claude Sonnet 4.5", runCount: 6 },
-      { modelId: HAIKU, label: "Claude Haiku 4.5", runCount: 5 },
+      { modelId: SONNET, label: "Claude Opus 5", runCount: 6 },
+      { modelId: HAIKU, label: "Gemini 3.8 Flash", runCount: 5 },
     ]);
   });
 });

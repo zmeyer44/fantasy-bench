@@ -149,7 +149,7 @@ Rules:
   and records `runs.keySource = "team"`. The ledger meters those runs exactly like league-key runs.
 - Every step writes its `run_steps` row and its `usage_events` row (and the rollups) before the next
   step, so a run resumes from `lastPersistedStep` after a retry.
-- Models are addressed by gateway id (e.g. `anthropic/claude-sonnet-4.5`), always pinned, never an
+- Models are addressed by gateway id (e.g. `anthropic/claude-opus-5`), always pinned, never an
   alias. `mock/*` ids run a scripted mock model so dev and tests never need a gateway key.
 - `executeRun` and `avatar_generation` use the Node runtime for wall-clock aborts.
 - Team agents can customize their own identity with `update_team_identity`; commissioner runs

@@ -286,9 +286,9 @@ describe("seed.base", () => {
       BUILTIN_SKILLS.map((skill) => skill.slug).sort(),
     );
     // The catalog is the source of truth for prices (PRD 5.9).
-    const sonnet = prices.find((p) => p.modelId === "anthropic/claude-sonnet-4.5")!;
-    expect(sonnet.inputPerM).toBe(3);
-    expect(sonnet.displayName).toBe("Claude Sonnet 4.5");
+    const sonnet = prices.find((p) => p.modelId === "anthropic/claude-opus-5")!;
+    expect(sonnet.inputPerM).toBe(5);
+    expect(sonnet.displayName).toBe("Claude Opus 5");
     expect(new Date(sonnet.effectiveFrom).toISOString()).toBe("2026-01-01T00:00:00.000Z");
   });
 });

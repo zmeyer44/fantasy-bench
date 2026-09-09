@@ -16,6 +16,7 @@ import goldenRules from "../tests/golden/postgres-week1/league_rules.json";
 import goldenTeams from "../tests/golden/postgres-week1/teams.json";
 import goldenVersions from "../tests/golden/postgres-week1/config_versions.json";
 import goldenWeeks from "../tests/golden/postgres-week1/weeks.json";
+import { DEFAULT_FALLBACK_MODEL_ID } from "../lib/models";
 
 const modules = import.meta.glob("./**/*.ts");
 
@@ -383,7 +384,7 @@ describe("leagues.create — the skeleton", () => {
       seasonWeeks: 17,
       regularSeasonWeeks: 14,
       playoffStartWeek: 15,
-      fallbackModelId: "anthropic/claude-haiku-4.5",
+      fallbackModelId: "google/gemini-3.8-flash",
     });
 
     expect(view.teams).toHaveLength(10);
@@ -505,7 +506,9 @@ describe("leagues.create — golden-league parity", () => {
     expect(rules.seasonWeeks).toBe(rulesRow.season_weeks);
     expect(rules.transparencyMode).toBe(rulesRow.transparency_mode);
     expect(rules.injectionPolicy).toBe(rulesRow.injection_policy);
-    expect(rules.fallbackModelId).toBe(rulesRow.fallback_model_id);
+    // The catalog default moved after the golden snapshot was taken; the
+    // snapshot pins the old `anthropic/claude-haiku-4.5`.
+    expect(rules.fallbackModelId).toBe(DEFAULT_FALLBACK_MODEL_ID);
     expect(rules.weeklyTokenCapPerTeam ?? null).toBe(
       rulesRow.weekly_token_cap_per_team,
     );

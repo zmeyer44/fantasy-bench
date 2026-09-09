@@ -62,7 +62,7 @@ const RULES = {
   seasonWeeks: 17,
   transparencyMode: "live" as const,
   injectionPolicy: "permitted" as const,
-  modelAllowlist: ["anthropic/claude-haiku-4.5"],
+  modelAllowlist: ["google/gemini-3.8-flash"],
   contextCharLimit: 8000,
   maxStepsCap: 12,
   editLock: { unlockDay: "tue", unlockTime: "06:00", lockDay: "wed", lockTime: "03:00" },
@@ -493,7 +493,7 @@ describe("windows.dispatch", () => {
       expect(run.lastPersistedStep).toBe(-1);
       expect(run.attempt).toBe(1);
       // No agent config, so the league's first allowlisted model.
-      expect(run.modelId).toBe("anthropic/claude-haiku-4.5");
+      expect(run.modelId).toBe("google/gemini-3.8-flash");
       expect(run.configVersionId).toBeUndefined();
     }
     expect((await windowRow(t, windowId))!.runCount).toBe(3);
@@ -513,7 +513,7 @@ describe("windows.dispatch", () => {
         leagueId: s.leagueId,
         teamId: s.teamIds[0],
         versionNo: 1,
-        modelId: "openai/gpt-5",
+        modelId: "openai/gpt-6-astra",
         contextMd: "Be good.",
         skillIds: [],
         harness: {
@@ -534,9 +534,9 @@ describe("windows.dispatch", () => {
 
     const runs = await runsFor(t, windowId);
     const configured = runs.find((r) => r.teamId === s.teamIds[0])!;
-    expect(configured.modelId).toBe("openai/gpt-5");
+    expect(configured.modelId).toBe("openai/gpt-6-astra");
     expect(configured.configVersionId).toBe(versionId);
-    expect(runs.filter((r) => r.modelId === "anthropic/claude-haiku-4.5")).toHaveLength(2);
+    expect(runs.filter((r) => r.modelId === "google/gemini-3.8-flash")).toHaveLength(2);
   });
 
   test("is idempotent — a team that already has a run in the window is skipped", async () => {

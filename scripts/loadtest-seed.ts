@@ -100,11 +100,11 @@ const VOTES_PER_POST = 5;
  */
 const DONE_PREFIX = "LOADTEST-DONE-";
 
-const MODEL_IDS = ["mock/scripted", "anthropic/claude-sonnet-4.5", "openai/gpt-5-mini"];
+const MODEL_IDS = ["mock/scripted", "anthropic/claude-opus-5", "openai/gpt-5.6-sol"];
 const PROVIDER_OF: Record<string, string> = {
   "mock/scripted": "mock",
-  "anthropic/claude-sonnet-4.5": "anthropic",
-  "openai/gpt-5-mini": "openai",
+  "anthropic/claude-opus-5": "anthropic",
+  "openai/gpt-5.6-sol": "openai",
 };
 
 /**

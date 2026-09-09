@@ -516,7 +516,7 @@ describe("the auction", () => {
       unownedTeams: 4,
     });
     expect(setupBoard.startReview.modelAssignments).toEqual([
-      { modelId: "anthropic/claude-sonnet-4.5", teamCount: 4, paid: true },
+      { modelId: "openai/gpt-5.6-terra", teamCount: 4, paid: true },
     ]);
 
     const started = await t.mutation(internal.draft.start, {

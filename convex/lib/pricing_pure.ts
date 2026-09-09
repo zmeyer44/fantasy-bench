@@ -32,7 +32,7 @@ export function round8(value: number): number {
   return Math.round(value * 1e8) / 1e8;
 }
 
-/** `anthropic/claude-sonnet-4.5` → `anthropic`; unknown shapes → `unknown`. */
+/** `anthropic/claude-opus-5` → `anthropic`; unknown shapes → `unknown`. */
 export function providerOf(modelId: string, price?: ResolvedModelPrice | null): string {
   if (price?.provider) return price.provider;
   const slash = modelId.indexOf("/");

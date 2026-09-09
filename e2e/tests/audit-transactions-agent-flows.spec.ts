@@ -141,7 +141,7 @@ test("agents complete draft, waivers, lineups, and trades without human roster c
 
   // Commissioner replacement moves every unowned team's default config to the zero-cost model.
   await page.getByRole("tab", { name: "Models" }).click();
-  await page.getByLabel("From (deprecated)").selectOption("anthropic/claude-sonnet-4.5");
+  await page.getByLabel("From (deprecated)").selectOption("anthropic/claude-opus-5");
   await page.getByLabel("To (replacement)").selectOption("mock/scripted");
   await page.getByRole("button", { name: "Replace across the league" }).click();
   await expect(page.getByText("Updated 8 team(s).", { exact: true })).toBeVisible({

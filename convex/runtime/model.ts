@@ -1,7 +1,7 @@
 /**
  * Model resolution and the price book.
  *
- * Models are addressed by pinned Vercel AI Gateway id (`anthropic/claude-sonnet-4.5`).
+ * Models are addressed by pinned Vercel AI Gateway id (`anthropic/claude-opus-5`).
  * "latest" aliases are rejected outright — PRD 5.1/7 require a pinned version for
  * the whole season so a mid-season provider change is a visible, logged event.
  *

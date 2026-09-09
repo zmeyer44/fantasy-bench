@@ -63,6 +63,7 @@ const catalogEntry = v.object({
   cachedInputPerM: v.union(v.number(), v.null()),
   reasoningPerM: v.union(v.number(), v.null()),
   supportsReasoning: v.boolean(),
+  supportsTemperature: v.boolean(),
 });
 
 const ruleChangeWithUser = v.object({

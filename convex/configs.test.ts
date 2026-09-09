@@ -86,7 +86,7 @@ async function addVersion(
       leagueId,
       versionNo: 2,
       contextMd: "# My agent\n\nStart the best players.\nAlways check injuries.\n",
-      modelId: "openai/gpt-5-mini",
+      modelId: "openai/gpt-5.6-sol",
       harness: { ...DEFAULT_HARNESS_SETTINGS, maxSteps: 20, temperature: 0.7 },
       skillIds: [skillId],
       createdByUserId: authorId,
@@ -234,12 +234,12 @@ describe("configs.versions", () => {
     expect(latest.isCurrent).toBe(true);
     expect(latest.isPending).toBe(false);
     expect(latest.changedThisWeek).toBe(true);
-    expect(latest.modelDisplayName).toBe("GPT-5 mini");
+    expect(latest.modelDisplayName).toBe("GPT-5.6 Sol");
     expect(latest.harness.maxSteps).toBe(20);
 
     expect(first.createdByName).toBeNull();
     expect(first.isCurrent).toBe(false);
-    expect(first.modelDisplayName).toBe("Claude Sonnet 4.5");
+    expect(first.modelDisplayName).toBe("Claude Opus 5");
   });
 
   it("redacts a cooling version's content in the history for everyone else", async () => {
@@ -256,7 +256,7 @@ describe("configs.versions", () => {
     expect(latest.skillCount).toBe(0);
     expect(latest.changeSummary).toBeUndefined();
     // Metadata the league may still see: the model, the number, the author, the dates.
-    expect(latest.modelDisplayName).toBe("GPT-5 mini");
+    expect(latest.modelDisplayName).toBe("GPT-5.6 Sol");
     expect(latest.createdByName).toBe("Owner");
     expect(latest.isCurrent).toBe(true);
   });
@@ -305,8 +305,8 @@ describe("configs.version + configs.diff", () => {
     expect(diff.model).toMatchObject({
       field: "modelId",
       label: "Model",
-      from: "Claude Sonnet 4.5",
-      to: "GPT-5 mini",
+      from: "Claude Opus 5",
+      to: "GPT-5.6 Sol",
       changed: true,
     });
     expect(diff.harness.find((f) => f.field === "maxSteps")).toMatchObject({
@@ -361,7 +361,7 @@ describe("configs.lockStatus + configs.estimate", () => {
       leagueId,
       contextMd,
       skillIds: [skillId, skillId],
-      modelId: "anthropic/claude-sonnet-4.5",
+      modelId: "anthropic/claude-opus-5",
     });
 
     const body = "# Injury aware\n\nBody text for Injury aware.";
@@ -374,10 +374,10 @@ describe("configs.lockStatus + configs.estimate", () => {
     expect(estimate.breakdown.assumedSteps).toBe(ASSUMED_STEPS);
     expect(estimate.breakdown.assumedOutputTokensPerStep).toBe(ASSUMED_OUTPUT_TOKENS_PER_STEP);
     expect(estimate.breakdown.modelKnown).toBe(true);
-    expect(estimate.breakdown.inputPerM).toBe(3);
-    expect(estimate.breakdown.outputPerM).toBe(15);
+    expect(estimate.breakdown.inputPerM).toBe(5);
+    expect(estimate.breakdown.outputPerM).toBe(25);
 
-    const perStep = (expectedTokens * 3) / 1e6 + (ASSUMED_OUTPUT_TOKENS_PER_STEP * 15) / 1e6;
+    const perStep = (expectedTokens * 5) / 1e6 + (ASSUMED_OUTPUT_TOKENS_PER_STEP * 25) / 1e6;
     expect(estimate.estimatedCostPerRunUsd).toBeCloseTo(perStep * ASSUMED_STEPS, 8);
   });
 
@@ -432,7 +432,7 @@ function at(instant: Date) {
 
 const BASE = {
   contextMd: "# My agent\n\nStart the best players.",
-  modelId: "anthropic/claude-sonnet-4.5",
+  modelId: "anthropic/claude-opus-5",
   harness: {
     maxSteps: 12,
     tokenBudget: 60_000,
@@ -562,7 +562,7 @@ describe("configs.save — validation against league rules", () => {
   it("rejects a model that is not on the allowlist", async () => {
     at(TUE_10_ET);
     const { t, owner, leagueId, teamId } = await writeFixture();
-    await setRules(t, leagueId, { modelAllowlist: ["anthropic/claude-haiku-4.5"] });
+    await setRules(t, leagueId, { modelAllowlist: ["google/gemini-3.8-flash"] });
     await expectIssue(
       owner.session.mutation(api.configs.save, { ...BASE, leagueId, teamId }),
       "modelId",
@@ -631,7 +631,7 @@ describe("configs.save — validation against league rules", () => {
     at(TUE_10_ET);
     const { t, owner, leagueId, teamId } = await writeFixture();
     await setRules(t, leagueId, {
-      modelAllowlist: ["mock/scripted", "anthropic/claude-sonnet-4.5"],
+      modelAllowlist: ["mock/scripted", "anthropic/claude-opus-5"],
     });
     await expectIssue(
       owner.session.mutation(api.configs.save, {

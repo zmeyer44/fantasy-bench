@@ -73,6 +73,7 @@ import { estimateNextStepCostUsd, type ResolvedModelPrice } from "../lib/pricing
 
 import { decryptSecret } from "../lib/secrets";
 import { modelSupportsReasoning, readGatewayCostUsd, resolveModel } from "./model";
+import { modelSupportsTemperature } from "../../lib/models";
 import { buildPrompt, estimateTokens, type PromptWindow } from "./prompt";
 import { buildTools, guidanceByTool, type ToolOverride } from "./tools";
 import {
@@ -668,7 +669,7 @@ export const executeRun = internalAction({
       const shared = {
         model: resolveModel(modelId, { apiKey: ownApiKey }),
         tools,
-        temperature: harness.temperature,
+        ...(modelSupportsTemperature(modelId) ? { temperature: harness.temperature } : {}),
         maxRetries: 3,
         abortSignal: controller.signal,
         ...(harness.reasoningEffort && modelSupportsReasoning(modelId)

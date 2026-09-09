@@ -10,7 +10,7 @@
 import { findModel } from "../../lib/models";
 import type { ScoringPreset, SnapshotPlayer } from "../../lib/snapshot/types";
 
-/** `anthropic/claude-sonnet-4.5` → `Claude Sonnet 4.5` (falls back to the raw id). */
+/** `anthropic/claude-opus-5` → `Claude Opus 5` (falls back to the raw id). */
 export function modelLabel(modelId: string | null | undefined): string {
   if (!modelId) return "—";
   return findModel(modelId)?.displayName ?? modelId;
