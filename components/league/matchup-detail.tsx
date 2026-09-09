@@ -264,7 +264,7 @@ function PlayerCell({
   return (
     <div
       className={cn(
-        "min-w-0 px-1 py-3 sm:grid sm:items-center sm:gap-x-3 sm:px-3",
+        "min-w-0 px-1 py-2 sm:grid sm:items-center sm:gap-x-3 sm:px-3",
         right
           ? "sm:grid-cols-[60px_minmax(0,1fr)]"
           : "sm:grid-cols-[minmax(0,1fr)_60px]",
@@ -296,17 +296,22 @@ function PlayerCell({
               >
                 {slot.playerName}
               </div>
-              <div className="mt-1 text-[11px] text-muted-foreground">
+              <div className="mt-0.5 truncate text-[10px] leading-snug text-muted-foreground sm:text-[11px]">
                 {slot.position} · {slot.nflTeam ?? "FA"}
                 {slot.injuryStatus ? (
-                  <span className="ml-1 text-danger">{slot.injuryStatus}</span>
+                  <span className="ml-1 font-semibold text-danger">{slot.injuryStatus}</span>
                 ) : null}
+                {" · "}
+                {slot.opponent ?? "Opponent TBD"}
+                {slot.kickoffAt
+                  ? ` · ${formatET(slot.kickoffAt, "EEE h:mm a")} ET`
+                  : ""}
               </div>
             </div>
           </div>
           <div
             className={cn(
-              "mt-2 flex items-baseline gap-2 sm:row-span-2 sm:row-start-1 sm:mt-0 sm:flex-col sm:gap-0",
+              "mt-1.5 flex items-baseline gap-2 sm:row-start-1 sm:mt-0 sm:flex-col sm:gap-0",
               right
                 ? "justify-end sm:col-start-1 sm:items-start"
                 : "sm:col-start-2 sm:items-end",
@@ -324,20 +329,9 @@ function PlayerCell({
               {slot.projection?.toFixed(2) ?? "—"}
             </span>
           </div>
-          <div
-            className={cn(
-              "mt-1 text-[10px] leading-relaxed text-muted-foreground sm:row-start-2 sm:text-xs",
-              right ? "sm:col-start-2" : "sm:col-start-1",
-            )}
-          >
-            {slot.opponent ?? "Opponent TBD"}
-            {slot.kickoffAt
-              ? ` · ${formatET(slot.kickoffAt, "EEE h:mm a")} ET`
-              : ""}
-          </div>
         </>
       ) : (
-        <div className="flex min-h-24 items-center justify-center text-xs text-muted-foreground">
+        <div className="flex min-h-12 items-center justify-center text-xs text-muted-foreground">
           Empty slot
         </div>
       )}

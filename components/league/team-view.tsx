@@ -507,7 +507,7 @@ function SlotTable({
     <div role="table" aria-label={totals ? "Starting lineup" : "Bench players"}>
       <div
         role="row"
-        className="grid grid-cols-[34px_minmax(0,1fr)_42px_48px] items-center gap-2 border-b border-border py-3 text-[11px] text-muted-foreground sm:grid-cols-[42px_minmax(0,1fr)_60px_64px] sm:gap-3"
+        className="grid grid-cols-[34px_minmax(0,1fr)_42px_48px] items-center gap-2 border-b border-border py-2 text-[11px] text-muted-foreground sm:grid-cols-[42px_minmax(0,1fr)_60px_64px] sm:gap-3"
       >
         <span role="columnheader">Slot</span>
         <span role="columnheader">Player / game</span>
@@ -522,7 +522,7 @@ function SlotTable({
         <div
           role="row"
           key={`${row.slot}-${index}`}
-          className="grid grid-cols-[34px_minmax(0,1fr)_42px_48px] items-center gap-2 border-b border-border py-3 sm:grid-cols-[42px_minmax(0,1fr)_60px_64px] sm:gap-3"
+          className="grid grid-cols-[34px_minmax(0,1fr)_42px_48px] items-center gap-2 border-b border-border py-2 sm:grid-cols-[42px_minmax(0,1fr)_60px_64px] sm:gap-3"
         >
           <span role="cell">
             <PositionTag slot={row.slot} />
@@ -535,21 +535,19 @@ function SlotTable({
                   sleeperId={row.entry.sleeperId}
                   nflTeam={row.entry.nflTeam}
                   position={row.entry.position}
-                  size={36}
+                  size={32}
                 />
                 <div className="min-w-0">
-                  <div className="text-xs font-medium leading-snug sm:text-sm">
+                  <div className="truncate text-xs font-medium leading-snug sm:text-sm">
                     {row.entry.fullName}
-                  </div>
-                  <div className="mt-1 text-[10px] text-muted-foreground sm:text-xs">
-                    {row.entry.position} · {row.entry.nflTeam ?? "FA"}
                     {row.entry.injuryStatus ? (
-                      <span className="ml-1 text-danger">
+                      <span className="ml-1 text-[10px] font-semibold text-danger">
                         {row.entry.injuryStatus}
                       </span>
                     ) : null}
                   </div>
-                  <div className="mt-0.5 text-[10px] leading-relaxed text-muted-foreground sm:text-xs">
+                  <div className="mt-0.5 truncate text-[10px] leading-snug text-muted-foreground sm:text-xs">
+                    {row.entry.position} · {row.entry.nflTeam ?? "FA"} ·{" "}
                     {row.entry.opponent ?? "Opponent TBD"}
                     {row.entry.kickoffAt
                       ? ` · ${formatET(row.entry.kickoffAt, "EEE h:mm a")} ET`
@@ -578,7 +576,7 @@ function SlotTable({
       {totals ? (
         <div
           role="row"
-          className="grid grid-cols-[minmax(0,1fr)_42px_48px] gap-2 bg-muted px-1 py-3 sm:grid-cols-[minmax(0,1fr)_60px_64px] sm:gap-3"
+          className="grid grid-cols-[minmax(0,1fr)_42px_48px] gap-2 bg-muted px-1 py-2.5 sm:grid-cols-[minmax(0,1fr)_60px_64px] sm:gap-3"
         >
           <span role="cell" aria-colspan={2} className="text-xs font-medium">
             Starter totals

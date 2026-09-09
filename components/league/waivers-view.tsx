@@ -4,7 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { usePreloadedQuery, type Preloaded } from "convex/react";
 import { Badge, EmptyState, InfoTip, Input } from "@/components/ui";
-import { PlayerHeadshot, PositionTag, TeamAvatar } from "./identity";
+import { PlayerHeadshot, TeamAvatar } from "./identity";
 import type { api } from "@/convex/_generated/api";
 import { formatET } from "@/lib/time";
 import { cn } from "@/lib/utils";
@@ -168,7 +168,7 @@ export function WaiversView({
               <div role="table" aria-label="Available players">
                 <div
                   role="row"
-                  className="grid grid-cols-[minmax(0,1fr)_50px_52px] gap-2 border-y border-border py-3 text-[11px] text-muted-foreground sm:grid-cols-[minmax(0,1fr)_80px_70px]"
+                  className="grid grid-cols-[minmax(0,1fr)_50px_52px] gap-2 border-y border-border py-2 text-[11px] text-muted-foreground sm:grid-cols-[minmax(0,1fr)_80px_70px]"
                 >
                   <span role="columnheader">Player / game</span>
                   <span role="columnheader" className="text-right">
@@ -182,7 +182,7 @@ export function WaiversView({
                   <div
                     role="row"
                     key={player.id}
-                    className="grid grid-cols-[minmax(0,1fr)_50px_52px] items-center gap-2 border-b border-border py-3 sm:grid-cols-[minmax(0,1fr)_80px_70px]"
+                    className="grid grid-cols-[minmax(0,1fr)_50px_52px] items-center gap-2 border-b border-border py-2 sm:grid-cols-[minmax(0,1fr)_80px_70px]"
                   >
                     <div
                       role="cell"
@@ -193,29 +193,24 @@ export function WaiversView({
                         sleeperId={player.sleeperId}
                         nflTeam={player.nflTeam}
                         position={player.position}
-                        size={36}
+                        size={32}
                       />
                       <div className="min-w-0">
-                        <div className="text-xs font-medium sm:text-sm">
+                        <div className="truncate text-xs font-medium leading-snug sm:text-sm">
                           {player.fullName}
-                        </div>
-                        <div className="mt-1 flex flex-wrap items-center gap-1.5 text-[10px] text-muted-foreground">
-                          <PositionTag slot={player.position} />
-                          <span>
-                            {player.nflTeam ?? "FA"} ·{" "}
-                            {player.opponent ?? "Opponent TBD"}
-                          </span>
                           {player.injuryStatus ? (
-                            <span className="text-danger">
+                            <span className="ml-1 text-[10px] font-semibold text-danger">
                               {player.injuryStatus}
                             </span>
                           ) : null}
                         </div>
-                        {player.kickoffAt ? (
-                          <p className="mt-1 text-[10px] text-muted-foreground">
-                            {formatET(player.kickoffAt, "EEE h:mm a")} ET
-                          </p>
-                        ) : null}
+                        <div className="mt-0.5 truncate text-[10px] leading-snug text-muted-foreground sm:text-xs">
+                          {player.position} · {player.nflTeam ?? "FA"} ·{" "}
+                          {player.opponent ?? "Opponent TBD"}
+                          {player.kickoffAt
+                            ? ` · ${formatET(player.kickoffAt, "EEE h:mm a")} ET`
+                            : ""}
+                        </div>
                       </div>
                     </div>
                     <span
