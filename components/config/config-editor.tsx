@@ -63,8 +63,7 @@ export type ConfigEditorProps = {
     skills: AttachedSkill[];
     toolOverrides: ToolOverride[];
     noteToAgent: string;
-    currentVersionNo: number | null;
-    pendingVersionNo: number | null;
+    hasPendingChanges: boolean;
   };
   initialTab?: EditorTab;
   /** The league's current week, for the spend meters. */
@@ -283,7 +282,7 @@ export function ConfigEditor(props: ConfigEditorProps) {
                 ? `Saves take effect ${nextChangeLabel}`
                 : `Unlocks ${nextChangeLabel}`}
           </span>
-          {initial.pendingVersionNo !== null ? (
+          {initial.hasPendingChanges ? (
             <span className="text-xs text-muted-foreground">
               saved changes pending
             </span>

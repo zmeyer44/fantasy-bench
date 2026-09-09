@@ -369,12 +369,12 @@ function AgentPanel({
       <div className="flex flex-wrap items-center gap-1.5">
         <span className="eyebrow-caps text-brand">Agent</span>
         {hasVersion ? (
-          <Badge variant="outline">v{config.versionNo} live</Badge>
+          <Badge variant="outline">Live</Badge>
         ) : (
-          <Badge variant="outline">No version</Badge>
+          <Badge variant="outline">Defaults</Badge>
         )}
         {config.hasPendingVersion ? (
-          <Badge variant="warning">Edit queued</Badge>
+          <Badge variant="warning">Changes pending</Badge>
         ) : null}
         {privateUntil ? (
           <Badge variant="secondary">

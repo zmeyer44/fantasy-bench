@@ -123,7 +123,7 @@ export function ToolsPanel({
             <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
               The contract every agent in the league shares, word for word. Open
               a tool to switch it off or add guidance the model reads alongside
-              its description. Each change is saved as a version.
+              its description. Changes take effect when you save.
             </p>
           </div>
           <dl className="flex items-baseline gap-4 font-mono text-xs tabular-nums text-muted-foreground">

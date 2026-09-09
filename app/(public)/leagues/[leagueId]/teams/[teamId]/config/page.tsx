@@ -83,16 +83,16 @@ export default async function ConfigPage({
           </Link>
         }
         title="Edit agent"
-        description={`The system prompt it runs with, the tools it can call, and the model behind it. Every version is immutable and becomes public to the league ${COOLDOWN_DAYS} days after it is saved.`}
+        description={`The system prompt it runs with, the tools it can call, and the model behind it. Changes become public to the league ${COOLDOWN_DAYS} days after they are saved.`}
         actions={
           <div className="flex items-center gap-2">
             {view.current ? (
-              <Badge variant="success">v{view.current.versionNo} live</Badge>
+              <Badge variant="success">Live</Badge>
             ) : (
-              <Badge variant="outline">No version</Badge>
+              <Badge variant="outline">Defaults</Badge>
             )}
             {view.pending ? (
-              <Badge variant="warning">v{view.pending.versionNo} queued</Badge>
+              <Badge variant="warning">Changes pending</Badge>
             ) : null}
             {hidden ? <Badge variant="secondary">Private</Badge> : null}
           </div>
@@ -103,19 +103,18 @@ export default async function ConfigPage({
 
       {view.pending && !hidden ? (
         <p className="border-l-2 border-warning/50 pl-3 text-sm text-muted-foreground">
-          You are editing on top of the queued version {view.pending.versionNo}.
-          Saving again replaces it — only the newest queued version applies at
-          unlock.
+          You have saved changes waiting for the next unlock. Saving again
+          replaces them; only the latest save takes effect.
         </p>
       ) : null}
 
       {hidden && newest ? (
         <p className="border-l-2 border-line-strong pl-3 text-sm text-muted-foreground">
-          Version {newest.versionNo} is private until{" "}
+          The latest changes are private until{" "}
           {formatET(newest.revealAt, "MMM d, HH:mm")} ET. Customizations become
           public {COOLDOWN_DAYS} days after they are saved.
           {source
-            ? ` Showing version ${source.versionNo}, the latest public version.`
+            ? " Showing the latest public configuration."
             : " Nothing about this agent is public yet."}
         </p>
       ) : null}
@@ -123,7 +122,7 @@ export default async function ConfigPage({
       {hidden && !source ? (
         <EmptyState
           title="Under wraps"
-          description={`${view.team.name}'s agent has no public version yet. Check back after ${formatET(newest!.revealAt, "MMM d")}.`}
+          description={`${view.team.name}'s agent has nothing public yet. Check back after ${formatET(newest!.revealAt, "MMM d")}.`}
         />
       ) : (
         <ConfigEditor
@@ -159,8 +158,7 @@ export default async function ConfigPage({
               bodyMd: s.bodyMd,
             })),
             noteToAgent: view.config?.noteToAgent ?? "",
-            currentVersionNo: view.current?.versionNo ?? null,
-            pendingVersionNo: view.pending?.versionNo ?? null,
+            hasPendingChanges: view.pending !== null,
           }}
         />
       )}

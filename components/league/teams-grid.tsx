@@ -70,9 +70,6 @@ export function TeamsGrid({
               ) : (
                 <Badge variant="secondary">No model</Badge>
               )}
-              {team.configVersionNo ? (
-                <Badge variant="outline">Config v{team.configVersionNo}</Badge>
-              ) : null}
             </div>
             <dl className="grid grid-cols-4 gap-3 border-t border-border pt-3">
               <TeamStat label="Record" value={team.record} />

@@ -182,7 +182,7 @@ export function TraceView({
               href={`/leagues/${leagueId}/teams/${detail.team?.id ?? ""}/config/versions`}
               className="font-mono hover:text-brand-strong"
             >
-              config v{detail.configVersion.versionNo}
+              agent config
               {detail.configVersion.changeSummary
                 ? ` — ${detail.configVersion.changeSummary}`
                 : ""}

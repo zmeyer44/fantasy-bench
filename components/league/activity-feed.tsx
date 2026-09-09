@@ -460,7 +460,7 @@ function Detail({ leagueId, item }: { leagueId: string; item: ActivityItem }) {
     case "lineup":
       return (
         <p className="mt-1 font-mono text-[10px] text-ink-faint">
-          v{item.version} · {item.starters} starters ·{" "}
+          {item.starters} starters ·{" "}
           <Link
             href={`/leagues/${leagueId}/teams/${item.team.id}`}
             className="hover:text-brand-strong"

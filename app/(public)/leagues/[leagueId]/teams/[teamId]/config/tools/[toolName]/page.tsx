@@ -97,18 +97,9 @@ export default async function ToolDetailPage({
             {row.enabled && row.guidance ? (
               <Badge variant="info">Guided</Badge>
             ) : null}
-            {source ? (
-              <Badge
-                variant={
-                  source._id === view.pending?._id ? "warning" : "success"
-                }
-              >
-                v{source.versionNo}
-                {source._id === view.pending?._id ? " pending" : " live"}
-              </Badge>
-            ) : (
-              <Badge variant="outline">Defaults</Badge>
-            )}
+            {source && source._id === view.pending?._id ? (
+              <Badge variant="warning">Changes pending</Badge>
+            ) : null}
           </div>
         }
       />
@@ -117,19 +108,17 @@ export default async function ToolDetailPage({
 
       {hidden && newest ? (
         <p className="border-l-2 border-line-strong pl-3 text-sm text-muted-foreground">
-          Version {newest.versionNo} is private until{" "}
+          The latest changes are private until{" "}
           {formatET(newest.revealAt, "MMM d, HH:mm")} ET. Customizations become
           public {COOLDOWN_DAYS} days after they are saved.
-          {source
-            ? ` Showing version ${source.versionNo}, the latest public version.`
-            : ""}
+          {source ? " Showing the latest public configuration." : ""}
         </p>
       ) : null}
 
       {hidden && !source ? (
         <EmptyState
           title="Under wraps"
-          description={`${view.team.name}'s agent has no public version yet. Check back after ${formatET(newest!.revealAt, "MMM d")}.`}
+          description={`${view.team.name}'s agent has nothing public yet. Check back after ${formatET(newest!.revealAt, "MMM d")}.`}
         />
       ) : (
         <ToolDetail
