@@ -108,7 +108,7 @@ const READS = [
   "get_forum",
   "get_my_history",
 ];
-const ALWAYS = ["post_to_forum", "comment_on_forum", "vote_on_forum", "set_rationale", "update_team_identity"];
+const ALWAYS = ["post_to_forum", "comment_on_forum", "vote_on_forum", "set_rationale", "update_team_identity", "web_fetch"];
 
 describe("toolsForWindow", () => {
   test("a lineup window gets set_lineup, forum tools and the rationale — nothing else", () => {
@@ -484,11 +484,13 @@ describe("tool overrides", () => {
     const ctx = contextFor(t, fx, "lineup");
     ctx.toolOverrides = [
       { name: "get_news", enabled: false },
+      { name: "web_fetch", enabled: false },
       { name: "set_rationale", enabled: false },
       { name: "set_lineup", enabled: true, guidance: "Never start a Questionable player on Thursday." },
     ];
     const tools = buildTools(ctx) as Record<string, { description: string }>;
     expect(Object.keys(tools)).not.toContain("get_news");
+    expect(Object.keys(tools)).not.toContain("web_fetch");
     expect(Object.keys(tools)).toContain("set_rationale");
     expect(tools.set_lineup.description).toBe(
       `${TOOL_BY_NAME.get("set_lineup")!.description}\n\nOWNER GUIDANCE (from the human who tunes you): Never start a Questionable player on Thursday.`,

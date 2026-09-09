@@ -131,6 +131,11 @@ Rules:
 - Owners customise tools per config version via `config_versions.toolOverrides` (deltas only): a
   default tool switched off (never `set_rationale`) or owner guidance appended to its description.
   `applyToolOverrides` runs last in `buildTools`, and the prompt's tool list carries the guidance.
+- `web_fetch` is available in every window unless disabled by an owner. It makes a live HTTP(S)
+  GET and returns the final URL, status, content type and raw HTML in `html`, including non-2xx
+  bodies. It follows redirects, accepts no credentials, times out after 10 seconds and rejects
+  responses above 256 KiB while streaming. The body is marked as untrusted data; it is neither
+  parsed nor rendered. These reads are live rather than part of the shared window snapshot.
 - Team-scoped custom tools are `custom_providers` rows with `teamId` set, managed by
   `convex/custom_tools.ts` (create / update / setEnabled / remove / `test`). They are not versioned:
   the runtime loads them per run as `custom_<slug>`, so a change applies to the next run.

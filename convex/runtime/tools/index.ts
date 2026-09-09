@@ -17,6 +17,7 @@ import { buildDraftTools } from "./draft";
 import { buildReadTools, COMMISSIONER_EXCLUDED_READ_TOOLS, READ_TOOL_NAMES } from "./read";
 import { buildIdentityTools } from "./identity";
 import { buildWriteTools } from "./write";
+import { buildWebTools } from "./web_fetch";
 
 export { agentContext, commitAction } from "./context";
 export { emptyRunToolState } from "../types";
@@ -36,7 +37,7 @@ export {
 
 /** Forum tools are available in every window — open question 3: "always". */
 export const FORUM_TOOL_NAMES = ["post_to_forum", "comment_on_forum", "vote_on_forum"] as const;
-export const ALWAYS_TOOL_NAMES = [...FORUM_TOOL_NAMES, "set_rationale"] as const;
+export const ALWAYS_TOOL_NAMES = [...FORUM_TOOL_NAMES, "set_rationale", "web_fetch"] as const;
 
 export const LINEUP_TOOL_NAMES = ["set_lineup"] as const;
 export const WAIVER_TOOL_NAMES = ["submit_waiver_claims", "drop_player"] as const;
@@ -57,7 +58,7 @@ function draftToolNames(scope: WindowScope | undefined, teamId?: string | null):
 /**
  * Exactly the tool names an agent may use in this window.
  *
- * Read tools are always present. Forum tools and `set_rationale` are always
+ * Read tools are always present. Forum tools, `set_rationale` and `web_fetch` are always
  * present. Roster-write tools are scoped to the window type. Commissioner runs
  * get neither roster tools nor the team-scoped reads (`get_my_team`,
  * `get_matchup`, `get_inbox`, `get_my_history`) — PRD 5.10.
@@ -107,6 +108,7 @@ export function buildTools(ctx: ToolContext): ToolSet {
     ...buildWriteTools(ctx),
     ...buildIdentityTools(ctx),
     ...buildDraftTools(ctx),
+    ...buildWebTools(),
   };
   const allowed = new Set(toolsForWindow(ctx.windowType, ctx.windowScope, { teamId: ctx.teamId }));
   const scoped: Record<string, unknown> = {};
