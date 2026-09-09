@@ -39,7 +39,7 @@ import {
 import { requireLeagueRead, requireMember } from "./lib/auth";
 import { appError } from "./lib/errors";
 import { isWeeklyLineupLocked } from "./lib/lineup_deadline";
-import { benchSlotLabel, isEligible } from "./lib/lineup_pure";
+import { BENCH_SLOTS, benchSlotLabel, isEligible } from "./lib/lineup_pure";
 import {
   pickProjection,
   remainingWeeksFor,
@@ -70,6 +70,7 @@ import {
 import { tradeStatus, tradeVote } from "./schema";
 import { latestPayload, PROJECTION_SOURCES } from "./snapshot";
 import { currentLineup, insertLineupVersion } from "./lineups";
+import { currentWeekNoFor } from "./weeks";
 
 import type { FairnessDetailV1 } from "./lib/fairness_pure";
 // ---------------------------------------------------------------------------
@@ -1563,16 +1564,24 @@ export const processReviews = internalMutation({
   },
 });
 
-/** Players whose game has already kicked off for the trade's week. */
+/**
+ * Players that cannot leave a lineup in `weekNo`: starters once the weekly lock
+ * has passed, plus anyone whose game has already kicked off.
+ *
+ * `weekNo` is the week current at completion, not `trade.weekNo` (the week the
+ * trade was proposed): a review period that straddles the Tuesday rollover
+ * must lock and reconcile the new week's lineup, not last week's scored one.
+ */
 async function lockedPlayers(
   ctx: QueryCtx,
   trade: Doc<"trades">,
+  weekNo: number,
   playerIds: Id<"players">[],
   now: number,
 ): Promise<Id<"players">[]> {
   if (playerIds.length === 0) return [];
   const locked = new Set<Id<"players">>();
-  if (await isWeeklyLineupLocked(ctx, trade.leagueId, trade.weekNo, now)) {
+  if (await isWeeklyLineupLocked(ctx, trade.leagueId, weekNo, now)) {
     const moved = new Set(playerIds);
     const fromTeamIds = [
       ...new Set(
@@ -1582,12 +1591,12 @@ async function lockedPlayers(
       ),
     ];
     for (const teamId of fromTeamIds) {
-      const lineup = await currentLineup(ctx, teamId, trade.weekNo);
+      const lineup = await currentLineup(ctx, teamId, weekNo);
       for (const slot of lineup?.slots ?? []) {
         if (
           slot.playerId &&
           moved.has(slot.playerId) &&
-          !["BENCH", "BN", "IR"].includes(slot.slot.toUpperCase())
+          !BENCH_SLOTS.has(slot.slot.toUpperCase())
         ) {
           locked.add(slot.playerId);
         }
@@ -1600,7 +1609,7 @@ async function lockedPlayers(
   // Bounded: ≤ 16 NFL games in a week.
   const games = await ctx.db
     .query("nfl_games")
-    .withIndex("by_season_week", (q) => q.eq("season", league.season).eq("week", trade.weekNo))
+    .withIndex("by_season_week", (q) => q.eq("season", league.season).eq("week", weekNo))
     .take(MAX_GAMES);
   const started = new Set<string>();
   for (const game of games) {
@@ -1624,6 +1633,7 @@ type PlayerMove = Doc<"trades">["items"][number] & { playerId: Id<"players"> };
 async function reconcileTransferredLineups(
   ctx: MutationCtx,
   trade: Doc<"trades">,
+  weekNo: number,
   playerMoves: PlayerMove[],
   locked: Id<"players">[],
 ): Promise<number> {
@@ -1633,7 +1643,7 @@ async function reconcileTransferredLineups(
   const rules = await loadSocialRules(ctx, trade.leagueId);
   let repaired = 0;
   for (const teamId of affectedTeamIds) {
-    const previous = await currentLineup(ctx, teamId, trade.weekNo);
+    const previous = await currentLineup(ctx, teamId, weekNo);
     if (!previous) continue;
     const unlockedOutgoing = new Set<Id<"players">>(
       playerMoves
@@ -1659,14 +1669,14 @@ async function reconcileTransferredLineups(
     );
     const used = new Set(
       previous.slots
-        .filter((slot) => !["BENCH", "BN", "IR"].includes(slot.slot.toUpperCase()))
+        .filter((slot) => !BENCH_SLOTS.has(slot.slot.toUpperCase()))
         .map((slot) => slot.playerId)
         .filter((playerId): playerId is Id<"players"> =>
           Boolean(playerId) && !unlockedOutgoing.has(playerId!),
         ),
     );
     const starters = previous.slots
-      .filter((slot) => !["BENCH", "BN", "IR"].includes(slot.slot.toUpperCase()))
+      .filter((slot) => !BENCH_SLOTS.has(slot.slot.toUpperCase()))
       .map((slot) => {
         if (!slot.playerId || !unlockedOutgoing.has(slot.playerId)) return slot;
         const replacement = incoming.find((playerId) => {
@@ -1684,7 +1694,7 @@ async function reconcileTransferredLineups(
     await insertLineupVersion(ctx, {
       teamId,
       leagueId: trade.leagueId,
-      weekNo: trade.weekNo,
+      weekNo,
       slots: [...starters, ...bench],
       source: "autopilot",
     });
@@ -1717,10 +1727,13 @@ export const repairTransferredLineups = internalMutation({
       const locked = await lockedPlayers(
         ctx,
         trade,
+        args.weekNo,
         playerMoves.map((item) => item.playerId),
         args.now,
       );
-      lineupsRepaired += await reconcileTransferredLineups(ctx, trade, playerMoves, locked);
+      lineupsRepaired += await reconcileTransferredLineups(
+        ctx, trade, args.weekNo, playerMoves, locked,
+      );
     }
     return { tradesInspected: inWeek.length, lineupsRepaired };
   },
@@ -1733,6 +1746,10 @@ export const repairTransferredLineups = internalMutation({
  * rather than corrupting a roster. Locked players (their game already kicked
  * off) do **not** block the swap: the players move now and the current week's
  * lineup is deliberately left untouched.
+ *
+ * Lineup work is keyed off the week current at `now`, not `trade.weekNo`: a
+ * review period can cross the Tuesday rollover, and it is the new week's
+ * carryover lineup that has to stop starting players who just left.
  */
 async function completeTrade(
   ctx: MutationCtx,
@@ -1770,9 +1787,11 @@ async function completeTrade(
     return;
   }
 
+  const weekNo = await currentWeekNoFor(ctx, trade.leagueId, now);
   const locked = await lockedPlayers(
     ctx,
     trade,
+    weekNo,
     playerMoves.map((i) => i.playerId),
     now,
   );
@@ -1796,7 +1815,7 @@ async function completeTrade(
       leagueId: trade.leagueId,
       teamId: item.toTeamId,
       type: "trade",
-      weekNo: trade.weekNo,
+      weekNo,
       playerId: item.playerId,
       relatedTeamId: item.fromTeamId,
       tradeId: trade._id,
@@ -1804,7 +1823,7 @@ async function completeTrade(
     });
   }
 
-  await reconcileTransferredLineups(ctx, trade, playerMoves, locked);
+  await reconcileTransferredLineups(ctx, trade, weekNo, playerMoves, locked);
 
   const faabItems = trade.items.filter((item) => !item.playerId && item.faab);
   for (const item of faabItems) {

@@ -68,6 +68,7 @@ import { internal } from "../_generated/api";
 import type { Id } from "../_generated/dataModel";
 import { internalAction, type ActionCtx } from "../_generated/server";
 import { DEFAULT_HARNESS } from "../lib/defaults";
+import { countEmptyStarterWarnings } from "../lib/lineup_pure";
 import { estimateNextStepCostUsd, type ResolvedModelPrice } from "../lib/pricing_pure";
 
 import { decryptSecret } from "../lib/secrets";
@@ -162,10 +163,7 @@ function seedState(
     switch (action.actionType) {
       case "set_lineup":
         state.lineupCommitted = true;
-        state.lineupWarnings = action.lineupWarnings;
-        state.lineupEmptyStarters = action.lineupWarnings.filter((warning) =>
-          /Slot ".+" is empty and will score 0\./.test(warning),
-        ).length;
+        state.lineupEmptyStarters = countEmptyStarterWarnings(action.lineupWarnings);
         break;
       case "submit_waiver_claims":
         state.waiverClaims += 1;

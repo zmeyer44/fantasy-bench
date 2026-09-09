@@ -10,6 +10,7 @@ import { FLAIR_LABEL } from "@/components/forum/post-row";
 import { TraceLink } from "@/components/trades/trace-link";
 import { Badge, Button, EmptyState, Skeleton, cn } from "@/components/ui";
 import { api } from "@/convex/_generated/api";
+import { compareActivity } from "@/convex/lib/activity_pure";
 import type { Id } from "@/convex/_generated/dataModel";
 import type {
   ActivityFilter,
@@ -226,10 +227,6 @@ export function ActivityFeed({
 // ---------------------------------------------------------------------------
 // Rows
 // ---------------------------------------------------------------------------
-
-function compareActivity(a: ActivityItem, b: ActivityItem) {
-  return b.at - a.at || b.order - a.order || (a.id === b.id ? 0 : a.id < b.id ? 1 : -1);
-}
 
 function ActivityRow({
   leagueId,

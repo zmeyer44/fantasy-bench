@@ -26,8 +26,7 @@ export type { RemainingBudget };
 export type RunToolState = {
   rationale: string | null;
   lineupCommitted: boolean;
-  /** Warnings from the latest committed lineup, including empty starters. */
-  lineupWarnings: string[];
+  /** Empty starting slots in the latest committed lineup (`lineup_incomplete`). */
   lineupEmptyStarters: number;
   waiverClaims: number;
   drops: number;
@@ -50,7 +49,6 @@ export function emptyRunToolState(): RunToolState {
   return {
     rationale: null,
     lineupCommitted: false,
-    lineupWarnings: [],
     lineupEmptyStarters: 0,
     waiverClaims: 0,
     drops: 0,

@@ -31,7 +31,7 @@
  * ## What it drives
  *
  * The same three windows `scripts/smoke-e2e.ts` drove against Postgres, in the
- * same order — `lineup_sun_early#1`, `waiver#1`, `trade_a#1` — each
+ * same order — `lineup_weekly#1`, `waiver#1`, `trade_a#1` — each
  * `windows:openNow` -> wait for every run terminal -> `windows:closeNow`, then
  * `commissioner_agent:runWeekly` for week 1. Those internal mutations/actions are
  * reached through `npx convex run` because `ConvexHttpClient` cannot call
@@ -74,7 +74,7 @@ const TIMEOUT_MS = Number(arg("timeout") ?? 15 * 60_000);
 const STATE_FILE = arg("state") ?? path.join(ROOT, ".cache", "e2e-week.json");
 /** The windows the old harness drove, in the old harness's order. */
 const DRIVE: Array<{ label: string; roundNo: number }> = [
-  { label: "lineup_sun_early", roundNo: 1 },
+  { label: "lineup_weekly", roundNo: 1 },
   { label: "waiver", roundNo: 1 },
   { label: "trade_a", roundNo: 1 },
 ];

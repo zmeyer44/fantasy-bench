@@ -1,19 +1,31 @@
 "use client";
 
 import { useAuthActions } from "@convex-dev/auth/react";
+import { useConvexAuth } from "convex/react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import { Button, Field, FieldDescription, FieldLabel, Input } from "@/components/ui";
 import { authErrorCode } from "@/lib/auth-errors";
 import { authHref, normalizeReturnPath } from "@/lib/auth-return";
 
+/** Eight digits; mirrors `RESET_CODE_LENGTH` in `convex/auth.ts`. */
+const CODE_LENGTH = 8;
+
 export function PasswordResetForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { signIn } = useAuthActions();
+  const { isLoading, isAuthenticated } = useConvexAuth();
   const next = normalizeReturnPath(searchParams.get("next"));
+
+  // Requesting a reset code answers with `tokens: null`, which the auth client
+  // treats as a sign-out. Account recovery is for people who are locked out, so
+  // a signed-in visitor goes back to where they were instead.
+  useEffect(() => {
+    if (!isLoading && isAuthenticated) router.replace(next);
+  }, [isLoading, isAuthenticated, next, router]);
   const [email, setEmail] = useState("");
   const [code, setCode] = useState("");
   const [newPassword, setNewPassword] = useState("");
@@ -75,7 +87,7 @@ export function PasswordResetForm() {
         </h1>
         <p className="mt-1.5 text-sm text-muted-foreground">
           {requested
-            ? "Enter the six-digit code from your email and choose a new password."
+            ? "Enter the eight-digit code from your email and choose a new password."
             : "We will email a short-lived verification code to the address on your account."}
         </p>
       </div>
@@ -105,11 +117,11 @@ export function PasswordResetForm() {
                 inputMode="numeric"
                 autoComplete="one-time-code"
                 required
-                minLength={6}
-                maxLength={6}
-                pattern="[0-9]{6}"
+                minLength={CODE_LENGTH}
+                maxLength={CODE_LENGTH}
+                pattern={`[0-9]{${CODE_LENGTH}}`}
                 value={code}
-                onChange={(event) => setCode(event.target.value.replace(/\D/g, "").slice(0, 6))}
+                onChange={(event) => setCode(event.target.value.replace(/\D/g, "").slice(0, CODE_LENGTH))}
               />
             </Field>
             <Field>

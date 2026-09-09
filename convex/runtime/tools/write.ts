@@ -21,7 +21,7 @@ import { z } from "zod";
 import type { LineupSlot } from "../../../lib/snapshot/types";
 import { internal } from "../../_generated/api";
 import type { Id } from "../../_generated/dataModel";
-import { validateLineup } from "../../lib/lineup_pure";
+import { countEmptyStarterWarnings, validateLineup } from "../../lib/lineup_pure";
 import type { ToolContext } from "../types";
 
 import { describeTool } from "./catalog";
@@ -84,10 +84,7 @@ export function buildWriteTools(ctx: ToolContext) {
           });
           if (!committed.ok) return committed;
           ctx.state.lineupCommitted = true;
-          ctx.state.lineupWarnings = validation.warnings;
-          ctx.state.lineupEmptyStarters = validation.warnings.filter((warning) =>
-            /Slot ".+" is empty and will score 0\./.test(warning),
-          ).length;
+          ctx.state.lineupEmptyStarters = countEmptyStarterWarnings(validation.warnings);
           return {
             ok: true as const,
             lineupId: committed.lineupId,

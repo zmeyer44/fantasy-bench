@@ -217,7 +217,7 @@ test("fixed snake draft keeps live ownership and produces usable lineups through
   const waiver = await openWindow(leagueId, "waiver", 1, 1);
   await waitForWindowRuns(leagueId, 1, waiver.windowId);
   await convexRun("windows:closeNow", { windowId: waiver.windowId });
-  const lineup = await openWindow(leagueId, "lineup_sun_early", 1, 1);
+  const lineup = await openWindow(leagueId, "lineup_weekly", 1, 1);
   await waitForWindowRuns(leagueId, 1, lineup.windowId);
   await convexRun("windows:closeNow", { windowId: lineup.windowId });
 

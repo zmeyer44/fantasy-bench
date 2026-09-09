@@ -15,7 +15,7 @@ import { agentCtxValidator, fail, withAgentAction } from "./lib/agent_action";
 import { requireLeagueRead } from "./lib/auth";
 import { rosterCapacity } from "./lib/draft_pure";
 import { isWeeklyLineupLocked } from "./lib/lineup_deadline";
-import { isLocked } from "./lib/lineup_pure";
+import { BENCH_SLOTS, isLocked } from "./lib/lineup_pure";
 import { currentLineup, payloadForWindow } from "./lineups";
 import { readPayload, latestPayload } from "./snapshot";
 import { projectionFor } from "./lib/views_shared";
@@ -316,7 +316,7 @@ export const submit = internalMutation({
         const lineup = weeklyLocked ? await currentLineup(ctx, teamId, weekNo) : null;
         const protectedStarters = new Set(
           (lineup?.slots ?? [])
-            .filter((slot) => !["BENCH", "BN", "IR"].includes(slot.slot.toUpperCase()))
+            .filter((slot) => !BENCH_SLOTS.has(slot.slot.toUpperCase()))
             .map((slot) => slot.playerId)
             .filter((playerId): playerId is Id<"players"> => Boolean(playerId)),
         );
@@ -466,7 +466,7 @@ export const drop = internalMutation({
           const isStarter = (lineup?.slots ?? []).some(
             (entry) =>
               entry.playerId === playerId &&
-              !["BENCH", "BN", "IR"].includes(entry.slot.toUpperCase()),
+              !BENCH_SLOTS.has(entry.slot.toUpperCase()),
           );
           if (isStarter) {
             return fail("That player is in the lineup locked Wednesday at 7:00 PM ET.");
@@ -554,7 +554,7 @@ export const process = internalMutation({
           team._id,
           new Set(
             (lineup?.slots ?? [])
-              .filter((slot) => !["BENCH", "BN", "IR"].includes(slot.slot.toUpperCase()))
+              .filter((slot) => !BENCH_SLOTS.has(slot.slot.toUpperCase()))
               .map((slot) => slot.playerId)
               .filter((playerId): playerId is Id<"players"> => Boolean(playerId)),
           ),

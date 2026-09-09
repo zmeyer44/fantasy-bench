@@ -765,7 +765,7 @@ export const migrateWeeklyDeadline = internalMutation({
 /**
  * Open a window immediately, whatever its clock says.
  *
- * `npx convex run windows:openNow '{"leagueId":"…","label":"lineup_sun_early","weekNo":1}'`
+ * `npx convex run windows:openNow '{"leagueId":"…","label":"lineup_weekly","weekNo":1}'`
  * is the smoke-test entry point that replaced `scripts/smoke-e2e.ts`'s tick.
  */
 export const openNow = internalMutation({

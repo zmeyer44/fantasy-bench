@@ -27,7 +27,7 @@ import {
   type QueryCtx,
 } from "./_generated/server";
 import { agentCtxValidator, fail, withAgentAction, type AgentCtx } from "./lib/agent_action";
-import { computeOptimalLineup, planSafetyAutopilot, validateLineup } from "./lib/lineup_pure";
+import { BENCH_SLOTS, computeOptimalLineup, planSafetyAutopilot, validateLineup } from "./lib/lineup_pure";
 import { lineupSlot, lineupSource } from "./schema";
 import { isWeeklyLineupLocked } from "./lib/lineup_deadline";
 import { readPayload } from "./snapshot";
@@ -288,7 +288,7 @@ export const applySafetyAutopilot = internalMutation({
       // A trade may settle between close and this background fallback. Its
       // locked historical starters still belong to this week's scoring lineup.
       for (const slot of base) {
-        if (slot.playerId && !["BENCH", "BN", "IR", "TAXI"].includes(slot.slot.toUpperCase())) {
+        if (slot.playerId && !BENCH_SLOTS.has(slot.slot.toUpperCase())) {
           rosterPlayerIds.add(slot.playerId);
         }
       }

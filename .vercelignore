@@ -1,0 +1,10 @@
+.env*
+node_modules/
+.next/
+.git/
+.cache/
+e2e/screenshots/
+test-results/
+playwright-report/
+coverage/
+*.tsbuildinfo

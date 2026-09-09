@@ -27,6 +27,17 @@ export type LineupValidation =
 /** Slot labels that are not part of the starting lineup. */
 export const BENCH_SLOTS = new Set(["BENCH", "BN", "IR", "TAXI"]);
 
+const EMPTY_STARTER_WARNING = /^Slot ".+" is empty and will score 0\.$/;
+
+function emptyStarterWarning(slot: string): string {
+  return `Slot "${slot}" is empty and will score 0.`;
+}
+
+/** How many of `validateLineup`'s warnings are empty starting slots. */
+export function countEmptyStarterWarnings(warnings: readonly string[]): number {
+  return warnings.filter((warning) => EMPTY_STARTER_WARNING.test(warning)).length;
+}
+
 /** Injury designations that mean "this player will not score this week". */
 const UNAVAILABLE_STATUSES = new Set([
   "out",
@@ -232,7 +243,7 @@ export function validateLineup(args: {
   for (const entry of slots) {
     const isBench = BENCH_SLOTS.has(entry.slot.toUpperCase());
     if (!entry.playerId) {
-      if (!isBench) warnings.push(`Slot "${entry.slot}" is empty and will score 0.`);
+      if (!isBench) warnings.push(emptyStarterWarning(entry.slot));
       continue;
     }
     if (seen.has(entry.playerId)) {

@@ -55,8 +55,8 @@ Windows open and close on their own — every window row carries its own `ctx.sc
 `convex/crons.ts` holds the only genuine polls (ingest and live scoring). To drive one by hand:
 
 ```bash
-npx convex run windows:openNow '{"leagueId":"…","label":"lineup_sun_early","weekNo":1}'
-npx convex run windows:closeNow '{"leagueId":"…","label":"lineup_sun_early","weekNo":1}'
+npx convex run windows:openNow '{"leagueId":"…","label":"lineup_weekly","weekNo":1}'
+npx convex run windows:closeNow '{"leagueId":"…","label":"lineup_weekly","weekNo":1}'
 ```
 
 `openNow` materialises the week's windows if they are missing, takes a snapshot, enqueues a run

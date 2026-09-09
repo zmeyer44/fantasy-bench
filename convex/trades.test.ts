@@ -907,6 +907,86 @@ describe("trades.respond", () => {
     }
   });
 
+  test("a review that crosses the week rollover reconciles the new week's lineup", async () => {
+    const t = convexTest(schema, modules);
+    const s = await seedTrading(t);
+    // Tuesday 06:00 ET anchors; the Wednesday 19:00 ET lock of week 2 is still ahead.
+    const week1StartsAt = Date.UTC(2025, 8, 9, 10);
+    const week2StartsAt = Date.UTC(2025, 8, 16, 10);
+    const afterRollover = week2StartsAt + 60 * 60_000;
+    const { qbA, qbB } = await t.run(async (ctx) => {
+      for (const [weekNo, startsAt] of [[1, week1StartsAt], [2, week2StartsAt]] as const) {
+        await ctx.db.insert("weeks", {
+          leagueId: s.leagueId, weekNo, startsAt, endsAt: startsAt + 7 * 86_400_000,
+          isPlayoff: false, status: weekNo === 1 ? "complete" : "active",
+        });
+      }
+      const makeQb = (name: string, sleeperId: string) => ctx.db.insert("players", {
+        sleeperId, fullName: name, position: "QB", nflTeam: "SF",
+        fantasyPositions: ["QB"], externalIds: {}, updatedAt: Date.now(),
+      });
+      const qbA = await makeQb("Rollover Alpha", "ro-qb-a");
+      const qbB = await makeQb("Rollover Bravo", "ro-qb-b");
+      for (const [teamId, playerId] of [[s.teamA, qbA], [s.teamB, qbB]] as const) {
+        await ctx.db.insert("roster_slots", {
+          leagueId: s.leagueId, teamId, playerId, acquiredAt: Date.now(), acquiredVia: "draft",
+        });
+        // Week 1 was scored with this starter; week 2 carried the lineup over.
+        for (const weekNo of [1, 2]) {
+          await ctx.db.insert("lineups", {
+            leagueId: s.leagueId, teamId, weekNo, version: 1,
+            slots: [{ slot: "QB", playerId }], source: "agent",
+          });
+        }
+      }
+      return { qbA, qbB };
+    });
+    await setProjection(t, qbA, 10, "QB");
+    await setProjection(t, qbB, 10, "QB");
+
+    const proposed = await t.mutation(internal.trades.propose, {
+      leagueId: s.leagueId, proposerTeamId: s.teamA, toTeamId: s.teamB,
+      give: [qbA], receive: [qbB], agentCtx: ctxFor(s, "rollover-propose"),
+    });
+    expect(proposed.ok).toBe(true);
+    if (!proposed.ok) return;
+    const accepted = await t.mutation(internal.trades.respond, {
+      leagueId: s.leagueId, teamId: s.teamB, tradeId: proposed.tradeId, action: "accept",
+      agentCtx: ctxFor(s, "rollover-accept"),
+    });
+    expect(accepted.ok).toBe(true);
+    // Pin the review period to the fixture's clock: it ends after the rollover.
+    await t.run((ctx) => ctx.db.patch("trades", proposed.tradeId, { reviewEndsAt: afterRollover }));
+    await t.mutation(internal.trades.processReviews, { leagueId: s.leagueId, now: afterRollover });
+
+    const after = await t.run(async (ctx) => {
+      const lineup = (teamId: Id<"teams">, weekNo: number) => ctx.db
+        .query("lineups")
+        .withIndex("by_teamId_weekNo_version", (q) => q.eq("teamId", teamId).eq("weekNo", weekNo))
+        .order("desc")
+        .first();
+      return {
+        trade: await ctx.db.get("trades", proposed.tradeId),
+        transactions: await ctx.db
+          .query("transactions")
+          .withIndex("by_tradeId", (q) => q.eq("tradeId", proposed.tradeId))
+          .collect(),
+        week1: [await lineup(s.teamA, 1), await lineup(s.teamB, 1)],
+        week2: [await lineup(s.teamA, 2), await lineup(s.teamB, 2)],
+      };
+    });
+    expect(after.trade?.status).toBe("completed");
+    expect(after.trade?.weekNo).toBe(1);
+    // Feed rows land in the week the trade actually settled.
+    expect(after.transactions.map((row) => row.weekNo)).toEqual([2, 2]);
+    expect(after.transactions.every((row) => row.details?.locked === false)).toBe(true);
+    // Week 1's scored lineup is history; week 2's carryover starts the incoming player.
+    expect(after.week1.map((row) => row?.version)).toEqual([1, 1]);
+    expect(after.week2[0]?.slots[0]?.playerId).toBe(qbB);
+    expect(after.week2[1]?.slots[0]?.playerId).toBe(qbA);
+    expect(after.week2.every((row) => row?.source === "autopilot")).toBe(true);
+  });
+
   test("settles FAAB on completion", async () => {
     const t = convexTest(schema, modules);
     const s = await seedTrading(t);

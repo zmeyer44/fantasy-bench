@@ -104,9 +104,9 @@ test("resume full draft through waivers, lineup, and scripted trade limits", asy
 
   // The next lineup window must keep every required slot filled after add/drop processing.
   const refreshedWindows = await convexRun<WindowView[]>("windows:forWeek", { leagueId: fixture.leagueId, weekNo: 1 });
-  const completedLineup = refreshedWindows.find((window) => window.label === "lineup_sun_early" && window.status === "closed");
+  const completedLineup = refreshedWindows.find((window) => window.label === "lineup_weekly" && window.status === "closed");
   if (!completedLineup) {
-    const lineupId = await open("lineup_sun_early");
+    const lineupId = await open("lineup_weekly");
     await convexRun("windows:closeNow", { windowId: lineupId });
   }
   for (const team of board.teams) {

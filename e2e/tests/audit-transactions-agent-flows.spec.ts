@@ -194,7 +194,7 @@ test("agents complete draft, waivers, lineups, and trades without human roster c
   await screenshot(page, "08-roster-after-draft");
 
   // A lineup window must turn the drafted roster into an agent-authored starter and bench view.
-  const lineup = await openWindow(leagueId!, "lineup_tnf", 1);
+  const lineup = await openWindow(leagueId!, "lineup_weekly", 1);
   await waitForWindowRuns(leagueId!, 1, lineup.windowId);
   await convexRun("windows:closeNow", { windowId: lineup.windowId });
   await page.reload();
@@ -227,12 +227,14 @@ test("agents complete draft, waivers, lineups, and trades without human roster c
   await screenshot(page, "12-roster-after-agent-add-drop");
 
   // A later lineup window proves the post-waiver roster can still be set through the agent tool.
-  const postWaiverLineup = await openWindow(leagueId!, "lineup_sun_early", 1);
-  await waitForWindowRuns(leagueId!, 1, postWaiverLineup.windowId);
+  // There is one weekly lineup window per week and dispatch skips teams that
+  // already ran in it, so the second lineup pass is week 2's window.
+  const postWaiverLineup = await openWindow(leagueId!, "lineup_weekly", 2);
+  await waitForWindowRuns(leagueId!, 2, postWaiverLineup.windowId);
   await convexRun("windows:closeNow", { windowId: postWaiverLineup.windowId });
   await page.reload();
   await expect(page.getByText(/Set by agent/)).toBeVisible({ timeout: 45_000 });
-  await expect(page.getByText(/sun early/i).first()).toBeVisible();
+  await expect(page.getByText(/weekly/i).first()).toBeVisible();
   await expect(page.getByText("Empty slot", { exact: true })).toHaveCount(0);
   await screenshot(page, "13-post-waiver-lineup");
 

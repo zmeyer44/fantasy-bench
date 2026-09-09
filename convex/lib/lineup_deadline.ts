@@ -1,14 +1,20 @@
 import type { Id } from "../_generated/dataModel";
 import type { QueryCtx } from "../_generated/server";
-import { fromETParts, toETParts } from "./templates";
+import { etInstant, templateByLabel, weekdayIndex } from "./templates";
 
-/** Wednesday 19:00 Eastern in the league week, including DST transitions. */
+/**
+ * The weekly lineup lock is the close of the `lineup_weekly` template (Wednesday
+ * 19:00 Eastern by default), computed on the ET calendar so DST does not move
+ * it. Reading the template keeps this and `resolveWindowsForWeek` in step.
+ *
+ * The anchor's calendar date is used, not its instant: existing seasons may
+ * have stored a 05:00 Tuesday anchor after a UTC-based DST rollover.
+ */
 export function weeklyLineupDeadline(weekStartsAt: number): number {
-  const anchor = toETParts(weekStartsAt);
-  // Existing seasons may have stored a 05:00 Tuesday anchor after a UTC-based
-  // DST rollover. Use the week row's calendar date, not a previous 06:00 instant.
-  const daysUntilWednesday = (3 - anchor.weekday + 7) % 7;
-  return fromETParts({ year: anchor.year, month: anchor.month, day: anchor.day + daysUntilWednesday, hour: 19 });
+  const template = templateByLabel("lineup_weekly");
+  if (!template) throw new Error("lineup_weekly window template is missing");
+  const daysFromTuesday = (weekdayIndex(template.closesDay) - weekdayIndex("tue") + 7) % 7;
+  return etInstant(weekStartsAt, daysFromTuesday, template.closesTime);
 }
 
 export async function lineupDeadlineFor(

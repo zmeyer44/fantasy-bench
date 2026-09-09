@@ -34,10 +34,13 @@ const STEP_PAGE_SIZE = 10;
 /** Usage ledger rows on the first paint; the table has its own "load more". */
 const USAGE_PAGE_SIZE = 30;
 
+/**
+ * First non-empty line of an error, minus a trailing stack frame
+ * (`… at fn (file:1:2)` / `… at file:1:2`). Prose "at" is left alone.
+ */
 function diagnosticSummary(value: string) {
-  const firstLine = value.split("\n", 1)[0] ?? value;
-  const stackStart = firstLine.indexOf(" at ");
-  return (stackStart >= 0 ? firstLine.slice(0, stackStart) : firstLine).trim();
+  const firstLine = value.split("\n").find((line) => line.trim().length > 0) ?? "";
+  return firstLine.replace(/\s+at\s+(?:\S+\s+\()?[^\s()]+:\d+:\d+\)?.*$/, "").trim();
 }
 
 /**
@@ -77,11 +80,16 @@ export function TraceView({
 
   const { run } = detail;
   const loaded = steps.results;
-  const fallbackSummary = run.fallback?.detail
-    ? run.error && run.fallback.detail.includes(diagnosticSummary(run.error))
-      ? "Primary model failed."
-      : diagnosticSummary(run.fallback.detail)
-    : "";
+  // The kind says why the fallback ran; only a model swap is a primary failure.
+  const fallbackSummary = !run.fallback
+    ? ""
+    : run.fallback.kind === "fallback_model"
+      ? run.error
+        ? `Primary model failed: ${diagnosticSummary(run.error)}`
+        : "Primary model failed."
+      : run.fallback.detail
+        ? diagnosticSummary(run.fallback.detail)
+        : "";
 
   return (
     <div className="space-y-8">

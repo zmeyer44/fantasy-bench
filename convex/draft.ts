@@ -1112,8 +1112,10 @@ async function createNextLot(
  * build the regular-season schedule, and open the season.
  *
  * Idempotent: `generateSchedule` skips weeks that already have matchups, and a
- * second `finalize` simply appends another identical `draft_default` lineup
- * version, which the scorer reads the same way.
+ * second `finalize` leaves the lineups alone once the league is in season —
+ * the week-1 defaults are only written while the league is still `drafting`,
+ * so a re-run after the weekly lock can never overwrite agent-set lineups
+ * (`lineups.commit` would reject them anyway).
  */
 export const finalize = internalMutation({
   args: { leagueId: v.id("leagues"), snapshotId: v.optional(v.id("snapshots")) },
@@ -1132,7 +1134,7 @@ export const finalize = internalMutation({
     const teams = await orderedTeams(ctx, args.leagueId);
 
     let lineupCount = 0;
-    if (snapshot) {
+    if (snapshot && league.status !== "in_season" && league.status !== "complete") {
       for (const team of teams) {
         const slots = computeOptimalLineup({ snapshot, teamId: team._id });
         if (slots.length === 0) continue;

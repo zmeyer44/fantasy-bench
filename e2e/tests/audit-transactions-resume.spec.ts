@@ -77,10 +77,10 @@ test.skip("legacy pre-fix checkpoint: post-waiver lineup and trade observations"
   await screenshot(page, "12-roster-after-agent-add-drop");
 
   // Observe the next agent-authored lineup after waiver drops alter the roster.
-  const lineupWindowId = await openAndWait(fixture.leagueId, "lineup_sun_early");
+  const lineupWindowId = await openAndWait(fixture.leagueId, "lineup_weekly");
   await convexRun("windows:closeNow", { windowId: lineupWindowId });
   await page.reload();
-  await expect(page.getByText(/lineup sun early/i).first()).toBeVisible({ timeout: 45_000 });
+  await expect(page.getByText(/lineup weekly/i).first()).toBeVisible({ timeout: 45_000 });
   await expect(page.getByText("Empty slot", { exact: true })).toBeVisible();
   await screenshot(page, "13-post-waiver-lineup");
 

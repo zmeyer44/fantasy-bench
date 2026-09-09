@@ -32,7 +32,7 @@ import { APICallError } from "@ai-sdk/provider";
 import type { LanguageModel } from "ai";
 
 import type { Position } from "../../lib/snapshot/types";
-import { eligiblePositions } from "../lib/lineup_pure";
+import { BENCH_SLOTS, eligiblePositions } from "../lib/lineup_pure";
 
 export const MOCK_MODEL_IDS = [
   "mock/scripted",
@@ -196,13 +196,14 @@ function startingCoverage(
   superflex: boolean,
 ): number {
   const starters = Object.entries(slots).flatMap(([slot, count]) =>
-    ["BENCH", "BN", "IR"].includes(slot.toUpperCase())
+    BENCH_SLOTS.has(slot.toUpperCase())
       ? []
       : Array.from({ length: count }, () => slot),
   );
 
+  // BigInt mask: a 32-bit `1 << i` wraps at 33+ roster spots.
   const memo = new Map<string, number>();
-  function assign(slotIndex: number, usedMask: number): number {
+  function assign(slotIndex: number, usedMask: bigint): number {
     if (slotIndex >= starters.length) return 0;
     const key = `${slotIndex}:${usedMask}`;
     const cached = memo.get(key);
@@ -210,15 +211,15 @@ function startingCoverage(
     let best = assign(slotIndex + 1, usedMask);
     const eligible = eligiblePositions(starters[slotIndex]!, { superflex }) ?? [];
     for (let playerIndex = 0; playerIndex < roster.length; playerIndex += 1) {
-      const bit = 1 << playerIndex;
-      if ((usedMask & bit) !== 0 || !eligible.includes(roster[playerIndex]!.position)) continue;
+      const bit = BigInt(1) << BigInt(playerIndex);
+      if ((usedMask & bit) !== BigInt(0) || !eligible.includes(roster[playerIndex]!.position)) continue;
       best = Math.max(best, 1 + assign(slotIndex + 1, usedMask | bit));
     }
     memo.set(key, best);
     return best;
   }
 
-  return assign(0, 0);
+  return assign(0, BigInt(0));
 }
 
 export function chooseWaiverClaims(

@@ -20,10 +20,20 @@ import { internal } from "./_generated/api";
 import type { DataModel } from "./_generated/dataModel";
 import { resetRequestDecision } from "./password_reset";
 
-function sixDigitCode(): string {
+/**
+ * Eight digits, not six: `@convex-dev/auth` looks a submitted code up by the
+ * global hash of the bare code (`authVerificationCodes.code`, `.unique()`),
+ * so two outstanding codes that collide break verification for both users.
+ * Eight digits keeps that one-in-a-hundred-million per pair inside a 15-minute
+ * window while still being typeable from an email.
+ */
+export const RESET_CODE_LENGTH = 8;
+
+function resetCode(): string {
   const values = new Uint32Array(1);
   crypto.getRandomValues(values);
-  return String(100_000 + (values[0]! % 900_000));
+  const span = 9 * 10 ** (RESET_CODE_LENGTH - 1);
+  return String(10 ** (RESET_CODE_LENGTH - 1) + (values[0]! % span));
 }
 
 function requireResetEmailConfiguration() {
@@ -60,7 +70,7 @@ const resetEmail = {
   name: "Fantasy Bench password reset",
   from: process.env.AUTH_EMAIL_FROM ?? "Fantasy Bench <password-reset@invalid.local>",
   maxAge: 15 * 60,
-  generateVerificationToken: async () => sixDigitCode(),
+  generateVerificationToken: async () => resetCode(),
 };
 
 const basePassword = Password<DataModel>({

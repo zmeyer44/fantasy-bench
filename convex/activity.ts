@@ -21,6 +21,7 @@ import type { FieldPaths, FilterBuilder, GenericTableInfo } from "convex/server"
 
 import type { Doc, Id } from "./_generated/dataModel";
 import { query, type QueryCtx } from "./_generated/server";
+import { compareActivity, type ActivityCursor } from "./lib/activity_pure";
 import { requireLeagueRead, viewerTeamIds } from "./lib/auth";
 import { isThreadRevealed, isUnresolvedTradeStatus } from "./lib/social_pure";
 import { isStartingSlot } from "./lib/views_shared";
@@ -30,7 +31,8 @@ const DEFAULT_LIMIT = 40;
 const MAX_LIMIT = 100;
 
 const activityCursor = v.object({ at: v.number(), order: v.number(), id: v.string() });
-export type ActivityCursor = { at: number; order: number; id: string };
+
+export type { ActivityCursor };
 
 export const activityFilter = v.union(
   v.literal("all"),
@@ -490,10 +492,6 @@ function olderThan<T extends GenericTableInfo>(
     : source < cursorSource;
   const sameTime = q.or(q.lt<Value>(q.field("_creationTime"), before.order), q.and(q.eq<Value>(q.field("_creationTime"), before.order), sameOrder));
   return q.or(q.lt<Value>(q.field(field), before.at), q.and(q.eq<Value>(q.field(field), before.at), sameTime));
-}
-
-function compareActivity(a: ActivityCursor, b: ActivityCursor) {
-  return b.at - a.at || b.order - a.order || (a.id === b.id ? 0 : a.id < b.id ? 1 : -1);
 }
 
 async function displayChange(ctx: QueryCtx, change: Doc<"league_rule_changes">) {
