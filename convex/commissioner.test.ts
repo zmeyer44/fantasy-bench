@@ -3,11 +3,12 @@
  * team in the same league gets FORBIDDEN, matching `commissionerProcedure`.
  */
 import { convexTest } from "convex-test";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { api, internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
 import schema from "./schema";
+import { fromET } from "@/lib/time";
 
 const modules = import.meta.glob("./**/*.ts");
 
@@ -376,6 +377,11 @@ describe("commissioner mutations — authorization", () => {
             teamId: teamIds[2],
             name: "X Y",
           }),
+      ],
+      [
+        "applyPendingConfigs",
+        () => t.mutation(api.commissioner.applyPendingConfigs, { leagueId }),
+        () => owner.session.mutation(api.commissioner.applyPendingConfigs, { leagueId }),
       ],
       [
         "replaceDeprecatedModel",
@@ -977,5 +983,114 @@ describe("commissioner.assignOwner membership", () => {
         .collect(),
     );
     expect(rows).toHaveLength(1);
+  });
+});
+
+// ===========================================================================
+// commissioner.applyPendingConfigs — the manual global save
+// ===========================================================================
+
+/** Friday 2026-09-11 10:00 ET — outside the default edit window (Tue 06:00 → Wed 03:00). */
+const FRI_10_ET = fromET({ year: 2026, month: 9, day: 11, hour: 10 });
+
+const CONFIG_BASE = {
+  contextMd: "# My agent\n\nStart the best players.",
+  modelId: "openai/gpt-5.6-terra",
+  harness: {
+    maxSteps: 12,
+    tokenBudget: 60_000,
+    temperature: 0.3,
+    reasoningEffort: null,
+    deliberateMode: false,
+  },
+  skillIds: [] as Id<"skills">[],
+};
+
+async function configRow(t: T, teamId: Id<"teams">) {
+  return t.run(async (ctx) =>
+    ctx.db
+      .query("agent_configs")
+      .withIndex("by_teamId", (q) => q.eq("teamId", teamId))
+      .unique(),
+  );
+}
+
+describe("commissioner.applyPendingConfigs", () => {
+  afterEach(() => vi.useRealTimers());
+
+  it("promotes every queued version now, logs it, and is idempotent", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(FRI_10_ET);
+    const { t, commish, owner, leagueId, teamIds } = await fixture();
+    const other = await actor(t, "Owner Two", "owner2@fantasybench.dev");
+    await other.session.mutation(api.leagues.join, { leagueId });
+
+    const a = await owner.session.mutation(api.configs.save, {
+      ...CONFIG_BASE,
+      leagueId,
+      teamId: teamIds[0],
+    });
+    const b = await other.session.mutation(api.configs.save, {
+      ...CONFIG_BASE,
+      leagueId,
+      teamId: teamIds[1],
+      contextMd: "# Other agent",
+    });
+    expect(a.queued).toBe(true);
+    expect(b.queued).toBe(true);
+
+    const before = await commish.session.query(api.commissioner.settings, { leagueId });
+    expect(before.teams.filter((team) => team.pendingVersionNo !== null).map((team) => team.id)).toEqual(
+      expect.arrayContaining([teamIds[0], teamIds[1]]),
+    );
+
+    const result = await commish.session.mutation(api.commissioner.applyPendingConfigs, { leagueId });
+    expect(result.teamsApplied.map((team) => team.teamId).sort()).toEqual(
+      [teamIds[0], teamIds[1]].sort(),
+    );
+    expect(
+      Object.fromEntries(result.teamsApplied.map((team) => [team.teamId, team.versionNo])),
+    ).toEqual({ [teamIds[0]]: a.versionNo, [teamIds[1]]: b.versionNo });
+
+    for (const [teamId, versionId] of [
+      [teamIds[0], a.versionId],
+      [teamIds[1], b.versionId],
+    ] as const) {
+      const config = await configRow(t, teamId);
+      expect(config?.currentVersionId).toBe(versionId);
+      expect(config?.pendingVersionId).toBeUndefined();
+      const row = await t.run(async (ctx) => ctx.db.get("config_versions", versionId));
+      expect(row?.appliedAt).not.toBeUndefined();
+    }
+
+    // The runtime sees the promoted version immediately.
+    const live = await t.query(internal.configs.currentForTeam, { teamId: teamIds[1] });
+    expect(live?.contextMd).toBe("# Other agent");
+
+    const after = await commish.session.query(api.commissioner.settings, { leagueId });
+    expect(after.teams.every((team) => team.pendingVersionNo === null)).toBe(true);
+    const log = after.changes.find((change) => change.field === "configs.applyPending");
+    expect(log?.userId).toBe(commish.userId);
+    expect(log?.note).toContain("2 team(s)");
+    expect(log?.toValue).toHaveLength(2);
+
+    // Nothing left to apply: no team moves, but the action is still logged.
+    const again = await commish.session.mutation(api.commissioner.applyPendingConfigs, { leagueId });
+    expect(again.teamsApplied).toEqual([]);
+    const settings = await commish.session.query(api.commissioner.settings, { leagueId });
+    expect(settings.changes.filter((change) => change.field === "configs.applyPending")).toHaveLength(2);
+  });
+
+  it("leaves teams without a queued version untouched", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(FRI_10_ET);
+    const { t, commish, owner, leagueId, teamIds } = await fixture();
+
+    await owner.session.mutation(api.configs.save, { ...CONFIG_BASE, leagueId, teamId: teamIds[0] });
+    const untouched = await configRow(t, teamIds[1]);
+
+    const result = await commish.session.mutation(api.commissioner.applyPendingConfigs, { leagueId });
+    expect(result.teamsApplied.map((team) => team.teamId)).toEqual([teamIds[0]]);
+    expect(await configRow(t, teamIds[1])).toEqual(untouched);
   });
 });

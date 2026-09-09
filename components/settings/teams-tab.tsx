@@ -130,6 +130,11 @@ function TeamRow({
             <>
               {team.modelId}
               {team.configVersionNo ? ` · v${team.configVersionNo}` : ""}
+              {team.pendingVersionNo ? (
+                <Badge variant="warning" className="ml-2">
+                  v{team.pendingVersionNo} queued
+                </Badge>
+              ) : null}
             </>
           ) : (
             "—"

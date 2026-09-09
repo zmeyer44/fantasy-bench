@@ -240,3 +240,15 @@ export function modelRequiresOwnKey(modelId: string): boolean {
 export function modelSupportsTemperature(modelId: string): boolean {
   return findModel(modelId)?.supportsTemperature ?? true;
 }
+
+/** Effort settings supported by both the model and the app's harness schema. */
+export function modelReasoningEfforts(modelId: string): readonly ("low" | "medium" | "high")[] {
+  if (!findModel(modelId)?.supportsReasoning) return [];
+  // Gateway advertises low/high/max for GLM; max is outside our harness schema.
+  if (modelId === "zai/glm-5.3") return ["low", "high"];
+  return ["low", "medium", "high"];
+}
+
+export function modelSupportsReasoningEffort(modelId: string, effort: string): boolean {
+  return modelReasoningEfforts(modelId).some((supported) => supported === effort);
+}

@@ -19,6 +19,7 @@ import {
 } from "@/components/ui";
 import { api } from "@/convex/_generated/api";
 
+import { GlobalSaveSection } from "./global-save";
 import { SettingsSection, useSave } from "./shared";
 import {
   WEEKDAY_OPTIONS,
@@ -49,7 +50,7 @@ export function WindowsTab({ data }: { data: SettingsData }) {
     <div className="space-y-10">
       <SettingsSection
         title="Config edit lock"
-        description="Owners may edit their agent between these two Eastern moments each week. Edits saved during the lock are queued and apply at the next unlock."
+        description="Owners may edit their agent between these two Eastern moments each week. Edits saved during the lock are queued and apply at the next unlock, or sooner with a global save."
         saving={saveLock.isPending}
         error={saveLock.error}
         saved={saveLock.saved}
@@ -127,6 +128,8 @@ export function WindowsTab({ data }: { data: SettingsData }) {
           </Field>
         </FieldGroup>
       </SettingsSection>
+
+      <GlobalSaveSection data={data} />
 
       <SettingsSection
         title="Weekly lineup deadline"

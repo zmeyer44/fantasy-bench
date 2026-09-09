@@ -809,50 +809,72 @@ export const setNote = mutation({
   },
 });
 
+/** One team whose queued version just became current. */
+export type PromotedVersion = {
+  teamId: Id<"teams">;
+  versionId: Id<"config_versions">;
+  versionNo: number;
+};
+
+/**
+ * Promote every queued version in a league to current. Shared by the scheduled
+ * edit-window unlock (`applyPending`) and the commissioner's manual global save
+ * (`commissioner.applyPendingConfigs`), so both paths stamp `appliedAt`, move
+ * skill usage and clear the queue identically. Idempotent: teams with no
+ * pending version are left alone.
+ */
+export async function promotePendingVersions(
+  ctx: MutationCtx,
+  leagueId: Id<"leagues">,
+): Promise<PromotedVersion[]> {
+  // Bounded by construction: one agent_configs row per team, ≤ 14 per league.
+  const configs = await ctx.db
+    .query("agent_configs")
+    .withIndex("by_leagueId", (q) => q.eq("leagueId", leagueId))
+    .collect();
+
+  const now = Date.now();
+  const promoted: PromotedVersion[] = [];
+
+  for (const config of configs) {
+    const pendingId = config.pendingVersionId;
+    if (!pendingId) continue;
+    const pending = await ctx.db.get("config_versions", pendingId);
+    if (!pending) {
+      await ctx.db.patch("agent_configs", config._id, {
+        pendingVersionId: undefined,
+        updatedAt: now,
+      });
+      continue;
+    }
+
+    // The one write a config version ever receives after insert, stamped once.
+    if (pending.appliedAt === undefined) {
+      await ctx.db.patch("config_versions", pendingId, { appliedAt: now });
+    }
+    await shiftSkillUsage(ctx, await currentSkillIds(ctx, config), pending.skillIds);
+    await ctx.db.patch("agent_configs", config._id, {
+      currentVersionId: pendingId,
+      pendingVersionId: undefined,
+      updatedAt: now,
+    });
+    promoted.push({ teamId: config.teamId, versionId: pendingId, versionNo: pending.versionNo });
+  }
+
+  return promoted;
+}
+
 /**
  * Promote every queued version in a league to current — the edit-window unlock
- * job (Phase 5 schedules it; `weeks.unlockJobId`). Idempotent: teams with no
- * pending version are left alone. Returns the number of teams promoted.
+ * job (Phase 5 schedules it; `weeks.unlockJobId`). Returns the number of teams
+ * promoted.
  */
 export const applyPending = internalMutation({
   args: { leagueId: v.id("leagues") },
   returns: v.number(),
   handler: async (ctx, { leagueId }) => {
-    // Bounded by construction: one agent_configs row per team, ≤ 14 per league.
-    const configs = await ctx.db
-      .query("agent_configs")
-      .withIndex("by_leagueId", (q) => q.eq("leagueId", leagueId))
-      .collect();
-
-    const now = Date.now();
-    let promoted = 0;
-
-    for (const config of configs) {
-      const pendingId = config.pendingVersionId;
-      if (!pendingId) continue;
-      const pending = await ctx.db.get("config_versions", pendingId);
-      if (!pending) {
-        await ctx.db.patch("agent_configs", config._id, {
-          pendingVersionId: undefined,
-          updatedAt: now,
-        });
-        continue;
-      }
-
-      // The one write a config version ever receives after insert, stamped once.
-      if (pending.appliedAt === undefined) {
-        await ctx.db.patch("config_versions", pendingId, { appliedAt: now });
-      }
-      await shiftSkillUsage(ctx, await currentSkillIds(ctx, config), pending.skillIds);
-      await ctx.db.patch("agent_configs", config._id, {
-        currentVersionId: pendingId,
-        pendingVersionId: undefined,
-        updatedAt: now,
-      });
-      promoted += 1;
-    }
-
-    return promoted;
+    const promoted = await promotePendingVersions(ctx, leagueId);
+    return promoted.length;
   },
 });
 

@@ -29,6 +29,7 @@ import { requireCommissioner } from "./lib/auth";
 import { appError } from "./lib/errors";
 import { findByEmail } from "./users";
 import { mintJoinCode } from "./leagues";
+import { promotePendingVersions } from "./configs";
 import { leagueDoc, paginationResult, ruleChangeDoc, rulesDoc, teamDoc } from "./lib/validators";
 import {
   draftType,
@@ -166,6 +167,8 @@ const settingsTeam = v.object({
   ownerEmail: v.union(v.string(), v.null()),
   modelId: v.union(v.string(), v.null()),
   configVersionNo: v.union(v.number(), v.null()),
+  /** The version queued behind the edit lock, if any — what a global save would apply. */
+  pendingVersionNo: v.union(v.number(), v.null()),
   waiverPriority: v.number(),
 });
 
@@ -198,6 +201,9 @@ async function settingsTeams(
     const version = config?.currentVersionId
       ? await ctx.db.get("config_versions", config.currentVersionId)
       : null;
+    const pending = config?.pendingVersionId
+      ? await ctx.db.get("config_versions", config.pendingVersionId)
+      : null;
     rows.push({
       id: team._id,
       name: team.name,
@@ -207,6 +213,7 @@ async function settingsTeams(
       ownerEmail: owner?.email ?? null,
       modelId: version?.modelId ?? null,
       configVersionNo: version?.versionNo ?? null,
+      pendingVersionNo: pending?.versionNo ?? null,
       waiverPriority: team.waiverPriority,
     });
   }
@@ -1171,5 +1178,59 @@ export const replaceDeprecatedModel = mutation({
     });
 
     return { fromModelId, toModelId, teamsUpdated, allowlistUpdated };
+  },
+});
+
+/**
+ * The commissioner's global save (PRD 5.5 edit lock, manual override).
+ *
+ * Every owner's queued config version — a save made while the edit lock was
+ * closed, parked on `agent_configs.pendingVersionId` — becomes current right
+ * now instead of at the next scheduled unlock. It runs the same promotion the
+ * unlock job runs (`configs.promotePendingVersions`), so `appliedAt`, skill
+ * usage counts and the queue are handled identically; the scheduled unlock
+ * later finds nothing to do. Teams with no queued version are untouched, and
+ * the action is logged league-wide even when it promotes nobody.
+ */
+export const applyPendingConfigs = mutation({
+  args: { leagueId: v.id("leagues") },
+  returns: v.object({
+    teamsApplied: v.array(
+      v.object({
+        teamId: v.id("teams"),
+        teamName: v.string(),
+        versionNo: v.number(),
+      }),
+    ),
+  }),
+  handler: async (ctx, { leagueId }) => {
+    const access = await requireCommissioner(ctx, leagueId);
+
+    const promoted = await promotePendingVersions(ctx, leagueId);
+
+    const teamsApplied: Array<{ teamId: Id<"teams">; teamName: string; versionNo: number }> = [];
+    for (const entry of promoted) {
+      const team = await ctx.db.get("teams", entry.teamId);
+      teamsApplied.push({
+        teamId: entry.teamId,
+        teamName: team?.name ?? "Unknown",
+        versionNo: entry.versionNo,
+      });
+    }
+    teamsApplied.sort((a, b) => a.teamName.localeCompare(b.teamName));
+
+    await logRuleChange(ctx, {
+      leagueId,
+      userId: access.viewer.userId,
+      field: "configs.applyPending",
+      from: null,
+      to: teamsApplied.map((team) => `${team.teamName} v${team.versionNo}`),
+      note:
+        teamsApplied.length === 0
+          ? "global save: no queued changes"
+          : `global save: applied queued changes for ${teamsApplied.length} team(s)`,
+    });
+
+    return { teamsApplied };
   },
 });

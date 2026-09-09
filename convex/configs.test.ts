@@ -678,6 +678,28 @@ describe("configs.save — validation against league rules", () => {
     expect(version?.harness.reasoningEffort).toBe("high");
   });
 
+  it("rejects GLM medium reasoning while saving its supported efforts", async () => {
+    at(TUE_10_ET);
+    const { t, owner, leagueId, teamId } = await writeFixture();
+    await setRules(t, leagueId, { modelAllowlist: ["zai/glm-5.3"] });
+    await expectIssue(
+      owner.session.mutation(api.configs.save, {
+        ...BASE, leagueId, teamId, modelId: "zai/glm-5.3",
+        harness: { ...BASE.harness, reasoningEffort: "medium" },
+      }),
+      "harness.reasoningEffort",
+      /does not support reasoning effort "medium"/,
+    );
+    for (const reasoningEffort of ["low", "high", null] as const) {
+      const saved = await owner.session.mutation(api.configs.save, {
+        ...BASE, leagueId, teamId, modelId: "zai/glm-5.3",
+        harness: { ...BASE.harness, reasoningEffort },
+      });
+      const version = await t.run((ctx) => ctx.db.get("config_versions", saved.versionId));
+      expect(version?.harness.reasoningEffort).toBe(reasoningEffort);
+    }
+  });
+
   it("rejects unknown skill ids and more than twelve attachments", async () => {
     at(TUE_10_ET);
     const { t, owner, leagueId, teamId } = await writeFixture();

@@ -10,20 +10,18 @@ export const metadata: Metadata = { title: "Leagues" };
 export default async function LeaguesPage({
   searchParams,
 }: {
-  searchParams: Promise<{ join?: string | string[] }>;
+  searchParams: Promise<{ join?: string | string[]; create?: string | string[] }>;
 }) {
   // `leagues.listMine` itself requires a session; the redirect keeps the page
   // from rendering an error for a signed-out visitor.
-  await requireViewer("/leagues");
-  const [preloaded, query] = await Promise.all([
-    preloadAuthQuery(api.leagues.listMine, {}),
-    searchParams,
-  ]);
+  const query = await searchParams;
+  const intent = query.join === "1" ? "?join=1" : query.create === "1" ? "?create=1" : "";
+  await requireViewer(`/leagues${intent}`);
+  const preloaded = await preloadAuthQuery(api.leagues.listMine, {});
 
   return (
     <LeaguesConsole
       preloaded={preloaded}
-      initialModal={query.join ? "join" : null}
     />
   );
 }

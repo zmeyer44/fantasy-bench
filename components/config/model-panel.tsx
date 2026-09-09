@@ -23,7 +23,7 @@ import type { HarnessSettings } from "@/convex/lib/config_pure";
 import type { PromptEstimate } from "@/convex/lib/config_pure";
 import { api } from "@/convex/_generated/api";
 import type { Id } from "@/convex/_generated/dataModel";
-import { MODEL_CATALOG, findModel } from "@/lib/models";
+import { MODEL_CATALOG, findModel, modelReasoningEfforts, modelSupportsReasoningEffort } from "@/lib/models";
 
 import { SpendPanel } from "./spend-panel";
 
@@ -98,7 +98,13 @@ export function ModelPanel({
             aria-label="Model"
             options={options}
             onValueChange={(next) => {
-              if (next) onModelChange(next);
+              if (!next) return;
+              onModelChange(next);
+              onHarnessChange((h) => ({
+                ...h,
+                reasoningEffort: h.reasoningEffort && modelSupportsReasoningEffort(next, h.reasoningEffort)
+                  ? h.reasoningEffort : null,
+              }));
             }}
           />
 
@@ -224,10 +230,12 @@ export function ModelPanel({
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent align="start" alignItemWithTrigger={false}>
-                    <SelectItem value="off">Off</SelectItem>
-                    <SelectItem value="low">Low</SelectItem>
-                    <SelectItem value="medium">Medium</SelectItem>
-                    <SelectItem value="high">High</SelectItem>
+                    <SelectItem value="off">Model default</SelectItem>
+                    {modelReasoningEfforts(modelId).map((effort) => (
+                      <SelectItem key={effort} value={effort}>
+                        {effort[0].toUpperCase() + effort.slice(1)}
+                      </SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               </Field>

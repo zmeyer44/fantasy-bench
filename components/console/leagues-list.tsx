@@ -3,7 +3,7 @@
 import { usePreloadedQuery, type Preloaded } from "convex/react";
 import { ArrowUpRight, Plus, Ticket } from "lucide-react";
 import Link from "next/link";
-import { useState } from "react";
+import { useSearchParams } from "next/navigation";
 
 import { CreateLeagueDialog } from "@/components/create-league-form";
 import { JoinLeagueDialog } from "@/components/league/join-code-form";
@@ -23,20 +23,26 @@ type Modal = "join" | "create" | null;
  */
 export function LeaguesConsole({
   preloaded,
-  initialModal = null,
 }: {
   preloaded: Preloaded<typeof api.leagues.listMine>;
-  /** The site nav's "Join a league" lands on `/leagues?join=1`; open that modal on arrival. */
-  initialModal?: Modal;
 }) {
   const leagues = usePreloadedQuery(preloaded);
-  const [modal, setModal] = useState<Modal>(initialModal);
+  const searchParams = useSearchParams();
+  const modal: Modal = searchParams.get("join") === "1"
+    ? "join"
+    : searchParams.get("create") === "1" ? "create" : null;
+
+  function setModal(next: Modal) {
+    const url = new URL(window.location.href);
+    url.searchParams.delete("join");
+    url.searchParams.delete("create");
+    if (next) url.searchParams.set(next, "1");
+    // Next.js synchronizes native history updates with useSearchParams.
+    history.replaceState(null, "", `${url.pathname}${url.search}${url.hash}`);
+  }
 
   function close() {
     setModal(null);
-    // Drop `?join=1` so a reload or back-navigation does not reopen the modal.
-    if (window.location.search)
-      history.replaceState(null, "", window.location.pathname);
   }
 
   const actions = (

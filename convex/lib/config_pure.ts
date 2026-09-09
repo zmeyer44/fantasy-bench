@@ -9,7 +9,7 @@
  */
 import { structuredPatch } from "diff";
 
-import { findModel, modelRequiresOwnKey } from "../../lib/models";
+import { findModel, modelRequiresOwnKey, modelSupportsReasoningEffort } from "../../lib/models";
 import {
   DEFAULT_EDIT_LOCK,
   WEEKDAYS,
@@ -546,10 +546,10 @@ export function validateAgainstRules(ctx: ValidationContext): ConfigIssue[] {
     });
   }
 
-  if (reasoningEffort && !modelSupportsReasoning(ctx.modelId)) {
+  if (reasoningEffort && !modelSupportsReasoningEffort(ctx.modelId, reasoningEffort)) {
     issues.push({
       field: "harness.reasoningEffort",
-      message: `${ctx.modelId} does not support reasoning effort`,
+      message: `${ctx.modelId} does not support reasoning effort "${reasoningEffort}"`,
     });
   }
 

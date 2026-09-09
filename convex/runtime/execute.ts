@@ -72,8 +72,8 @@ import { countEmptyStarterWarnings } from "../lib/lineup_pure";
 import { estimateNextStepCostUsd, type ResolvedModelPrice } from "../lib/pricing_pure";
 
 import { decryptSecret } from "../lib/secrets";
-import { modelSupportsReasoning, readGatewayCostUsd, resolveModel } from "./model";
-import { modelRequiresOwnKey, modelSupportsTemperature } from "../../lib/models";
+import { readGatewayCostUsd, resolveModel } from "./model";
+import { modelRequiresOwnKey, modelSupportsTemperature, modelSupportsReasoningEffort } from "../../lib/models";
 import { buildPrompt, estimateTokens, type PromptWindow } from "./prompt";
 import { buildTools, guidanceByTool, type ToolOverride } from "./tools";
 import {
@@ -682,7 +682,7 @@ export const executeRun = internalAction({
         ...(modelSupportsTemperature(modelId) ? { temperature: harness.temperature } : {}),
         maxRetries: 3,
         abortSignal: controller.signal,
-        ...(harness.reasoningEffort && modelSupportsReasoning(modelId)
+        ...(harness.reasoningEffort && modelSupportsReasoningEffort(modelId, harness.reasoningEffort)
           ? { reasoning: harness.reasoningEffort }
           : {}),
         onStepEnd: makeOnStepEnd(modelId, () => stepOffset),
